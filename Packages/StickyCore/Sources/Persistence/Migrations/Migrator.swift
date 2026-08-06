@@ -65,6 +65,10 @@ public struct StickyMigrator: Sendable {
             try migrator.migrate(dbPool)
             // Post-migration integrity check. If it fails, restore backup.
             try await integrityCheck(dbPool)
+            // Success: the backup's only purpose was crash recovery during
+            // migration. Consume it so a later launch never restores the
+            // pre-migration state over a healthy database.
+            removeBackup()
         } catch {
             // Interrupted-migration recovery: restore the backup.
             try? restoreBackup()
@@ -75,14 +79,35 @@ public struct StickyMigrator: Sendable {
     /// Returns the current schema version (the identifier of the latest
     /// applied migration). Used by the widget to detect unsupported schemas
     /// and fall back to privacy-safe placeholders (research.md R6).
-    public func currentSchemaVersion(_ dbPool: DatabasePool) async throws -> String? {
-        try await dbPool.read { db in
-            // GRDB tracks applied migrations in `grdb_migrations.identifier`.
-            let applied: [String] = try String.fetchAll(
-                db,
-                sql: "SELECT identifier FROM grdb_migrations ORDER BY identifier DESC LIMIT 1"
-            )
+    ///
+    /// Returns `nil` when no migration has been applied (fresh or unmigrated
+    /// database, or a database the widget cannot read) — the caller's
+    /// fallback path.
+    public func currentSchemaVersion(_ dbPool: DatabasePool) async -> String? {
+        await Self.currentSchemaVersion(dbPool, migrator: migrator)
+    }
+
+    /// Static form used by widgets: opens no store of its own, only reads
+    /// the latest applied migration identifier from `grdb_migrations`.
+    /// Returns `nil` (never throws) when the table is missing or unreadable
+    /// — the widget falls back to privacy-safe placeholders (research.md R6).
+    public static func currentSchemaVersion(
+        _ dbPool: DatabasePool,
+        migrator: DatabaseMigrator = InitialSchema.migrator()
+    ) async -> String? {
+        do {
+            let applied: [String] = try await dbPool.read { db in
+                try String.fetchAll(
+                    db,
+                    sql: "SELECT identifier FROM grdb_migrations ORDER BY identifier DESC LIMIT 1"
+                )
+            }
             return applied.first
+        } catch {
+            // Missing/unreadable grdb_migrations: treat as unmigrated. The
+            // widget must never crash on schema mismatch (plan §Local
+            // storage; constitution X).
+            return nil
         }
     }
 
@@ -127,6 +152,16 @@ public struct StickyMigrator: Sendable {
         } catch {
             throw StickyError.persistence(.recoveryFailed)
         }
+    }
+
+    /// Removes the backup file (and WAL/shm sidecars). Called after a
+    /// successful migration so no stale backup can ever overwrite a healthy
+    /// database.
+    public func removeBackup() {
+        let fm = FileManager.default
+        try? fm.removeItem(atPath: backupPath)
+        try? fm.removeItem(atPath: backupPath + "-wal")
+        try? fm.removeItem(atPath: backupPath + "-shm")
     }
 
     /// Restores the database file from `backupPath` after a failed migration.

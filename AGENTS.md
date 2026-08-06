@@ -26,18 +26,36 @@ Before writing any code that touches a library, framework, or Apple API (GRDB, S
 
 ## Build & test (from quickstart.md — the validation guide)
 
+> **CRITICAL — Xcode-beta discovery (2026-08-07):** the dev machine DOES have
+> a full Xcode install at `/Applications/Xcode-beta.app` (Xcode 27.0,
+> build 27A5228h; Swift 6.4; macOS 27 beta; `Testing.framework` present).
+> But `xcode-select -p` points at `/Library/Developer/CommandLineTools`, so a
+> bare `swift`/`swift test`/`xcodebuild` resolves to the CLT toolchain — which
+> is **missing `Testing.framework`**, causing every Swift Testing bundle to
+> fail with `dlopen … Testing.framework … no such file`. The previous claim
+> "this machine has only CLT" was stale. Fix by prefixing every build/test
+> command with `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer`
+> (no `sudo xcode-select` needed — keeps the system default on CLT for other
+> tools). Verified: with that prefix, `swift test` runs all suites green.
+
 ```bash
-xcodebuild build -project StickyNotes.xcodeproj -scheme StickyNotes -configuration Debug CODE_SIGNING_ALLOWED=NO
-xcodebuild test -project StickyNotes.xcodeproj -scheme StickyNotes -destination 'platform=macOS'
+# StickyCore package (Swift Testing works only under Xcode-beta):
+DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer swift test --package-path Packages/StickyCore
+
+# App / Widget targets (now buildable on this machine via Xcode-beta):
+DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild build -project StickyNotes.xcodeproj -scheme StickyNotes -configuration Debug CODE_SIGNING_ALLOWED=NO
+DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild test -project StickyNotes.xcodeproj -scheme StickyNotes -destination 'platform=macOS'
 ```
 
 - `CODE_SIGNING_ALLOWED=NO` for local debug builds.
-- Test suites: `Packages/StickyCore/Tests/{PersistenceTests,EditorCoreTests,SyncCoreTests}` (+ migration fixtures `Fixtures/schema_vN.sqlite`).
+- Test suites: `Packages/StickyCore/Tests/{DomainTests,PersistenceTests,EditorCoreTests,AssetStoreTests,SecurityCoreTests,SyncCoreTests,SystemBridgeTests}` (+ migration fixtures `Fixtures/schema_vN.sqlite`). All run via the `DEVELOPER_DIR=…` prefix above.
 - Credentialed WebDAV/S3 sync tests are opt-in via CI secrets (`STICKY_WEBDAV_TEST_*`, `STICKY_S3_TEST_*`) and must be skipped when absent — never commit real credentials.
 - Naming inconsistency between docs: `tasks.md` T001 says workspace + app target `App`; `quickstart.md` uses `StickyNotes.xcodeproj` / scheme `StickyNotes`. Reconcile before Phase 1 work.
 - Placeholder App Group: `group.local.stickynotes.placeholder` in both app and WidgetExtension entitlements.
 
 ## Environment gotchas
 
-- This dev machine has only Command Line Tools (no full Xcode): Swift 6.4, macOS 27.0. App/Widget targets and XCUITest **cannot** build here. Intended toolchain: Xcode 26.x, Swift 6.3, Swift 6 language mode, strict concurrency. Record any actual toolchain in `Documentation/toolchain.md` (task T008) — do not silently change the deployment target or language mode.
+- **Local toolchain (verified 2026-08-07):** `/Applications/Xcode-beta.app` — Xcode 27.0 (27A5228h), Swift 6.4, macOS 27 beta. `Testing.framework` is available under `…/Platforms/MacOSX.platform/Developer/Library/Frameworks/`. Always invoke build/test with `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer` (system default still points at CLT, which lacks `Testing.framework`).
+- **Intended CI toolchain:** Xcode 26.x, Swift 6.3, Swift 6 language mode, strict concurrency, macOS 26 deployment target. The local Xcode 27 beta is NEWER than CI — code that compiles locally may need to stay within the macOS 26 API surface. Record the actual toolchain in `Documentation/toolchain.md` (task T008); do not silently change the deployment target or language mode.
+- Intended architecture: modular monolith — app target + WidgetExtension + one local Swift package `StickyCore` (7 modules). GRDB SQLite (WAL, FTS5) in the App Group container is the source of truth; Keychain for credentials/secrets; sync is an additive E2E-encrypted layer (WebDAV or S3-compatible, one at a time).
 - Intended architecture: modular monolith — app target + WidgetExtension + one local Swift package `StickyCore` (7 modules). GRDB SQLite (WAL, FTS5) in the App Group container is the source of truth; Keychain for credentials/secrets; sync is an additive E2E-encrypted layer (WebDAV or S3-compatible, one at a time).

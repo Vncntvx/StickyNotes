@@ -164,6 +164,22 @@ public struct CanonicalBlock: Sendable, Codable, Equatable, Hashable {
         self.modifiedAt = modifiedAt
         self.payload = payload
     }
+
+    /// Convenience conversion from the runtime `Block`.
+    public init(block: Block) {
+        self.init(
+            id: block.id,
+            noteId: block.noteId,
+            kind: block.kind,
+            sortKey: block.sortKey,
+            versionId: block.versionId,
+            parentVersionId: block.parentVersionId,
+            lastModifiedDeviceId: block.lastModifiedDeviceId,
+            createdAt: block.createdAt,
+            modifiedAt: block.modifiedAt,
+            payload: block.payload
+        )
+    }
 }
 
 // MARK: - Canonical note document
@@ -242,5 +258,57 @@ public struct CanonicalNote: Sendable, Codable, Equatable, Hashable {
         self.createdAt = createdAt
         self.modifiedAt = modifiedAt
         self.blocks = blocks
+    }
+
+    /// Convenience conversion from the runtime `Note` + `[Block]` pair
+    /// (T015: canonical note document conforms to note-document.schema.json).
+    public init(note: Note, blocks: [Block]) {
+        self.init(
+            id: note.id,
+            title: note.title,
+            colorKey: note.colorKey,
+            customColor: note.customColor,
+            transparency: note.transparency,
+            textSize: note.textSize,
+            alwaysOnTop: note.alwaysOnTop,
+            widgetEligible: note.widgetEligible,
+            coverScreenshotBlockId: note.coverScreenshotBlockId,
+            manualSortKey: note.manualSortKey,
+            lifecycleState: note.lifecycleState,
+            trashedAt: note.trashedAt,
+            conflictOriginNoteId: note.conflictOriginNoteId,
+            conflictLabel: note.conflictLabel,
+            versionId: note.versionId,
+            parentVersionId: note.parentVersionId,
+            lastModifiedDeviceId: note.lastModifiedDeviceId,
+            createdAt: note.createdAt,
+            modifiedAt: note.modifiedAt,
+            blocks: blocks.map { CanonicalBlock(block: $0) }
+        )
+    }
+
+    /// Convenience conversion back to the runtime `Note`.
+    public var runtimeNote: Note {
+        Note(
+            id: id,
+            title: title,
+            colorKey: colorKey,
+            customColor: customColor,
+            transparency: transparency,
+            textSize: textSize,
+            alwaysOnTop: alwaysOnTop,
+            widgetEligible: widgetEligible,
+            coverScreenshotBlockId: coverScreenshotBlockId,
+            manualSortKey: manualSortKey,
+            lifecycleState: lifecycleState,
+            trashedAt: trashedAt,
+            conflictOriginNoteId: conflictOriginNoteId,
+            conflictLabel: conflictLabel,
+            versionId: versionId,
+            parentVersionId: parentVersionId,
+            lastModifiedDeviceId: lastModifiedDeviceId,
+            createdAt: createdAt,
+            modifiedAt: modifiedAt
+        )
     }
 }

@@ -405,3 +405,346 @@ import Domain
         #expect(coverAfter == nil, "deleting the cover screenshot block must null note.coverScreenshotBlockId (ON DELETE SET NULL)")
     }
 }
+
+// MARK: - Migration recovery & bootstrap tests (T153, T154)
+//
+// Per tasks.md T153: "Add migration-recovery tests covering `StickyMigrator`
+// pre-migration backup creation, restore-on-migration-failure,
+// `MigrationRecovery.recoverFromInterruptedMigration` (missing DB / corrupt
+// DB / intact DB no-op / backup consumed after restore), and
+// `currentSchemaVersion` fallback".
+//
+// T154: `DatabaseBootstrap` wires recovery → open → migrate as one startup
+// sequence; its behavior is verified here so the App target only calls it.
+
+@Suite struct MigrationRecoveryTests {
+
+    // MARK: - Helpers
+
+    /// A unique temp directory for a single test; removed afterwards.
+    private func tempDirectory(_ name: String) throws -> String {
+        let dir = (NSTemporaryDirectory() as NSString)
+            .appendingPathComponent("migration-recovery-\(name)-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    /// Creates a database at `path` with the v1 schema applied and a known
+    /// note row inserted. Returns the open pool (caller must close).
+    private func makeMigratedDatabase(at path: String, noteId: UUID = UUID()) throws -> DatabasePool {
+        let pool = try DatabasePool(path: path)
+        try InitialSchema.migrator().migrate(pool)
+        try pool.write { db in
+            try db.execute(
+                sql: """
+                    INSERT INTO note (id, colorKey, transparency, textSize, alwaysOnTop, widgetEligible,
+                                      manualSortKey, lifecycleState, versionId, lastModifiedDeviceId,
+                                      createdAt, modifiedAt)
+                    VALUES (?, 'yellow', 0.0, 'regular', 0, 1, 0, 'active', ?, ?, ?, ?)
+                    """,
+                arguments: [
+                    noteId.uuidString,
+                    UUID().uuidString,
+                    UUID().uuidString,
+                    Date().timeIntervalSince1970,
+                    Date().timeIntervalSince1970,
+                ]
+            )
+        }
+        return pool
+    }
+
+    /// A migrator with v1 (already applied in `makeMigratedDatabase`) plus a
+    /// pending v2 that creates a marker table.
+    private func migratorWithPendingV2() -> DatabaseMigrator {
+        var migrator = DatabaseMigrator()
+        migrator.registerMigration(StickyMigrationId.v1) { db in
+            try InitialSchema.createV1Schema(in: db)
+        }
+        migrator.registerMigration("v2_test_marker") { db in
+            try db.create(table: "v2_marker") { t in
+                t.column("id", .text).primaryKey()
+            }
+        }
+        return migrator
+    }
+
+    /// A migrator with v1 plus a v2 that always fails (mid-migration).
+    private func migratorWithFailingV2() -> DatabaseMigrator {
+        var migrator = DatabaseMigrator()
+        migrator.registerMigration(StickyMigrationId.v1) { db in
+            try InitialSchema.createV1Schema(in: db)
+        }
+        migrator.registerMigration("v2_failing") { _ in
+            throw DatabaseError(resultCode: .SQLITE_INTERNAL, message: "boom")
+        }
+        return migrator
+    }
+
+    // MARK: - StickyMigrator: pre-migration backup + restore-on-failure
+
+    @Test
+    func preMigrationBackupIsCreatedAndConsumedOnSuccess() async throws {
+        let dir = try tempDirectory("backup-created")
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        let dbPath = dir + "/db.sqlite"
+        let backupPath = dbPath + ".backup"
+
+        // Existing DB with v1 applied; v2 is pending.
+        let pool = try makeMigratedDatabase(at: dbPath)
+        try pool.close()
+
+        let migrator = StickyMigrator(
+            migrator: migratorWithPendingV2(),
+            databasePath: dbPath,
+            backupPath: backupPath
+        )
+
+        // Run the migration against a fresh pool (the StickyMigrator backs
+        // up the file on disk, not the open pool).
+        let pool2 = try DatabasePool(path: dbPath)
+        try await migrator.migrate(pool2)
+
+        // v2 applied; backup consumed after success.
+        let markerExists: Bool = try await pool2.read { db in
+            try Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='v2_marker')") ?? false
+        }
+        #expect(markerExists, "pending v2 must be applied")
+        #expect(!FileManager.default.fileExists(atPath: backupPath),
+                "backup must be consumed after a successful migration")
+        try pool2.close()
+    }
+
+    @Test
+    func failedMigrationRestoresBackupAndLeavesPreviousStateIntact() async throws {
+        let dir = try tempDirectory("restore-on-failure")
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        let dbPath = dir + "/db.sqlite"
+        let backupPath = dbPath + ".backup"
+        let noteId = UUID()
+
+        // DB with v1 applied and one known note row.
+        let pool = try makeMigratedDatabase(at: dbPath, noteId: noteId)
+        try pool.close()
+
+        let migrator = StickyMigrator(
+            migrator: migratorWithFailingV2(),
+            databasePath: dbPath,
+            backupPath: backupPath
+        )
+
+        let pool2 = try DatabasePool(path: dbPath)
+        do {
+            try await migrator.migrate(pool2)
+            Issue.record("Expected the failing v2 migration to throw")
+        } catch {
+            // .migrationFailed
+        }
+        try pool2.close()
+
+        // The restored DB must still have v1 applied, no v2, and the note row.
+        let pool3 = try DatabasePool(path: dbPath)
+        let noteCount: Int = try await pool3.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM note WHERE id = ?",
+                             arguments: [noteId.uuidString]) ?? 0
+        }
+        let v2Applied: Int = try await pool3.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM grdb_migrations WHERE identifier = 'v2_failing'") ?? -1
+        }
+        #expect(noteCount == 1, "restored DB must contain pre-migration data")
+        #expect(v2Applied == 0, "failed migration must not be recorded")
+        try pool3.close()
+    }
+
+    // MARK: - MigrationRecovery.recoverFromInterruptedMigration
+
+    @Test
+    func recoveryRestoresMissingDatabaseFromBackupAndConsumesIt() async throws {
+        let dir = try tempDirectory("recovery-missing-db")
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        let dbPath = dir + "/db.sqlite"
+        let backupPath = dbPath + ".backup"
+        let noteId = UUID()
+
+        let pool = try makeMigratedDatabase(at: dbPath, noteId: noteId)
+        try pool.close()
+
+        // Back up, then lose the database file entirely.
+        try FileManager.default.copyItem(atPath: dbPath, toPath: backupPath)
+        try FileManager.default.removeItem(atPath: dbPath)
+
+        try MigrationRecovery.recoverFromInterruptedMigration(
+            databasePath: dbPath,
+            backupPath: backupPath
+        )
+
+        #expect(!FileManager.default.fileExists(atPath: backupPath),
+                "backup must be consumed after restore")
+        #expect(FileManager.default.fileExists(atPath: dbPath),
+                "database must be restored from backup")
+
+        let pool2 = try DatabasePool(path: dbPath)
+        let noteCount: Int = try await pool2.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM note WHERE id = ?",
+                             arguments: [noteId.uuidString]) ?? 0
+        }
+        #expect(noteCount == 1, "restored database must contain the pre-migration data")
+        try pool2.close()
+    }
+
+    @Test
+    func recoveryRestoresCorruptDatabaseFromBackup() async throws {
+        let dir = try tempDirectory("recovery-corrupt-db")
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        let dbPath = dir + "/db.sqlite"
+        let backupPath = dbPath + ".backup"
+        let noteId = UUID()
+
+        let pool = try makeMigratedDatabase(at: dbPath, noteId: noteId)
+        try pool.close()
+
+        // Back up, then corrupt the database file.
+        try FileManager.default.copyItem(atPath: dbPath, toPath: backupPath)
+        try Data("not a sqlite database at all".utf8).write(to: URL(fileURLWithPath: dbPath))
+
+        try MigrationRecovery.recoverFromInterruptedMigration(
+            databasePath: dbPath,
+            backupPath: backupPath
+        )
+
+        #expect(!FileManager.default.fileExists(atPath: backupPath),
+                "backup must be consumed after restore")
+        let pool2 = try DatabasePool(path: dbPath)
+        let ok: String = try await pool2.read { db in
+            try String.fetchOne(db, sql: "PRAGMA integrity_check") ?? ""
+        }
+        #expect(ok == "ok", "restored database must pass integrity check; got \(ok)")
+        try pool2.close()
+    }
+
+    @Test
+    func recoveryIsNoOpForIntactDatabase() async throws {
+        let dir = try tempDirectory("recovery-intact")
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        let dbPath = dir + "/db.sqlite"
+        let backupPath = dbPath + ".backup"
+        let noteId = UUID()
+
+        let pool = try makeMigratedDatabase(at: dbPath, noteId: noteId)
+        try pool.close()
+
+        // Intact DB + a stale backup (e.g. leftover from an interrupted run
+        // whose DB actually completed).
+        try FileManager.default.copyItem(atPath: dbPath, toPath: backupPath)
+
+        try MigrationRecovery.recoverFromInterruptedMigration(
+            databasePath: dbPath,
+            backupPath: backupPath
+        )
+
+        // Intact DB must be untouched — no restore, backup retained.
+        #expect(FileManager.default.fileExists(atPath: backupPath),
+                "no restore happens for an intact database; backup stays")
+        let pool2 = try DatabasePool(path: dbPath)
+        let noteCount: Int = try await pool2.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM note WHERE id = ?",
+                             arguments: [noteId.uuidString]) ?? 0
+        }
+        #expect(noteCount == 1, "intact database must not be modified")
+        try pool2.close()
+    }
+
+    // MARK: - currentSchemaVersion fallback
+
+    @Test
+    func currentSchemaVersionReportsLatestApplied() async throws {
+        let dir = try tempDirectory("schema-version")
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        let dbPath = dir + "/db.sqlite"
+
+        let pool = try DatabasePool(path: dbPath)
+        try InitialSchema.migrator().migrate(pool)
+
+        let migrator = StickyMigrator(
+            migrator: InitialSchema.migrator(),
+            databasePath: dbPath,
+            backupPath: dbPath + ".backup"
+        )
+        let version = await migrator.currentSchemaVersion(pool)
+        #expect(version == StickyMigrationId.v1, "expected \(StickyMigrationId.v1), got \(String(describing: version))")
+        try pool.close()
+    }
+
+    @Test
+    func currentSchemaVersionIsNilForUnmigratedDatabase() async throws {
+        let dir = try tempDirectory("schema-version-unmigrated")
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        let dbPath = dir + "/db.sqlite"
+
+        // A fresh, empty database — no migrations applied, and the widget
+        // must not crash: it gets nil and falls back to privacy-safe
+        // placeholders.
+        let pool = try DatabasePool(path: dbPath)
+        let migrator = StickyMigrator(
+            migrator: InitialSchema.migrator(),
+            databasePath: dbPath,
+            backupPath: dbPath + ".backup"
+        )
+        let version = await migrator.currentSchemaVersion(pool)
+        #expect(version == nil, "unmigrated database must report nil schema version")
+        try pool.close()
+    }
+
+    // MARK: - DatabaseBootstrap (T154)
+
+    @Test
+    func bootstrapOpensMigratedStoreOnFreshDatabase() async throws {
+        let dir = try tempDirectory("bootstrap-fresh")
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        let dbPath = dir + "/db.sqlite"
+        let backupPath = dbPath + ".backup"
+
+        let store = try await DatabaseBootstrap.open(
+            databasePath: dbPath,
+            backupPath: backupPath
+        )
+
+        // Schema v1 applied.
+        let tables: [String] = try await store.read { db in
+            try String.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type='table' AND name='note'")
+        }
+        #expect(tables == ["note"], "v1 schema must be applied after bootstrap")
+        // Backup consumed after successful migration.
+        #expect(!FileManager.default.fileExists(atPath: backupPath))
+    }
+
+    @Test
+    func bootstrapRecoversInterruptedMigrationAndMigrates() async throws {
+        let dir = try tempDirectory("bootstrap-recovery")
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        let dbPath = dir + "/db.sqlite"
+        let backupPath = dbPath + ".backup"
+        let noteId = UUID()
+
+        // Simulate an interrupted migration: DB was lost mid-migration but a
+        // backup survives.
+        let pool = try makeMigratedDatabase(at: dbPath, noteId: noteId)
+        try pool.close()
+        try FileManager.default.copyItem(atPath: dbPath, toPath: backupPath)
+        try FileManager.default.removeItem(atPath: dbPath)
+
+        let store = try await DatabaseBootstrap.open(
+            databasePath: dbPath,
+            backupPath: backupPath
+        )
+
+        // Recovered, migrated, and consistent.
+        let noteCount: Int = try await store.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM note WHERE id = ?",
+                             arguments: [noteId.uuidString]) ?? 0
+        }
+        #expect(noteCount == 1, "recovered database must contain pre-migration data")
+        #expect(!FileManager.default.fileExists(atPath: backupPath),
+                "backup must be consumed after recovery+restore")
+    }
+}

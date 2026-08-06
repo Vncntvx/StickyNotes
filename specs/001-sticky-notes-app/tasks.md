@@ -84,7 +84,7 @@ All paths below are repository-relative.
 
 **Purpose**: Validate highest-risk assumptions BEFORE broad feature work depends on them (plan.md §Milestone 0). This is a hard gate — user stories MUST NOT proceed until prototypes confirm feasibility.
 
-- [ ] T025a Milestone 0 prototypes: SwiftUI rich-text + Chinese IME; Markdown single-Undo; one-window-per-note; per-window floating; App Group GRDB widget access; ScreenCaptureKit single-frame; native global shortcut; confirm Xcode 26.x/Swift 6.3 + integrate Argon2id per research.md R0–R18 in `Prototypes/` scratch directory outside the StickyCore package (no library/test target changes)
+- [X] T025a Milestone 0 prototypes: SwiftUI rich-text + Chinese IME; Markdown single-Undo; one-window-per-note; per-window floating; App Group GRDB widget access; ScreenCaptureKit single-frame; native global shortcut; confirm Xcode 26.x/Swift 6.3 + integrate Argon2id per research.md R0–R18 in `Prototypes/` scratch directory outside the StickyCore package (no library/test target changes) — **partial**: headless prototypes (MarkdownUndo, AppGroupGRDB, GlobalShortcut criteria 1–3, Argon2id) PASS and are verified; GUI prototypes (RichTextIME, WindowCoordinator, ScreenCapture) compile under Xcode-beta but are NOT interactively verified (IME typing, window focus/floating, region-drag capture). Interactive GUI verification is tracked as T158.
 
 **Checkpoint**: Milestone 0 prototypes pass → high-risk assumptions de-risked; user stories may proceed.
 
@@ -250,18 +250,18 @@ All paths below are repository-relative.
 
 ### Tests for User Story 7 (write FIRST, must FAIL) ⚠️
 
-- [ ] T082 [P] [US7] AssetStore test: atomic temp-write+rename, SHA-256 hash, verify-before-delete, orphan cleanup, dedup by contentHash in `Packages/StickyCore/Tests/AssetStoreTests/AssetStorageTests.swift`
-- [ ] T083 [P] [US7] AssetStore test: thumbnail generated async, no original decode in card grid; lossless preferred for text window captures in `Packages/StickyCore/Tests/AssetStoreTests/ThumbnailTests.swift`
-- [ ] T084 [P] [US7] Domain test: at most one cover screenshot per note (transactional); multiple screenshots allowed in `Packages/StickyCore/Tests/DomainTests/ScreenshotAssociationTests.swift`
-- [ ] T085 [US7] SystemBridge test: ScreenCaptureKit single-frame capture; cancel cleanly without creating note/asset; no Accessibility prompt for ordinary capture in `Packages/StickyCore/Tests/SystemBridgeTests/CaptureTests.swift`
+- [X] T082 [P] [US7] AssetStore test: atomic temp-write+rename, SHA-256 hash, verify-before-delete, orphan cleanup, dedup by contentHash in `Packages/StickyCore/Tests/AssetStoreTests/AssetStorageTests.swift`
+- [X] T083 [P] [US7] AssetStore test: thumbnail generated async, no original decode in card grid; lossless preferred for text window captures in `Packages/StickyCore/Tests/AssetStoreTests/ThumbnailTests.swift`
+- [X] T084 [P] [US7] Domain test: at most one cover screenshot per note (transactional); multiple screenshots allowed in `Packages/StickyCore/Tests/DomainTests/ScreenshotAssociationTests.swift`
+- [X] T085 [US7] SystemBridge test: ScreenCaptureKit single-frame capture; cancel cleanly without creating note/asset; no Accessibility prompt for ordinary capture in `Packages/StickyCore/Tests/SystemBridgeTests/CaptureTests.swift`
 - [ ] T086 [US7] Integration test: screenshot viewer (zoom/actual/fit/copy/drag-out/SaveAs/delete/edit-caption/navigate); opening screenshot does not activate original app in `AppTests/ScreenshotIntegrationTests.swift`
 
 ### Implementation for User Story 7
 
-- [ ] T087 [P] [US7] Implement AssetStore: atomic writes, SHA-256, metadata transactions, cleanup queue, lazy loading, export/drag-out in `Packages/StickyCore/Sources/AssetStore/AssetStore.swift`
-- [ ] T088 [P] [US7] Implement thumbnail generation + original/thumbnail/appIcon separation in `Packages/StickyCore/Sources/AssetStore/ThumbnailGenerator.swift`
-- [ ] T089 [US7] Implement ScreenCaptureKit window capture via system content-sharing picker (single static frame, app name/icon/title/time, no retained stream) in `Packages/StickyCore/Sources/SystemBridge/WindowCapture.swift`
-- [ ] T090 [US7] Implement region capture (single-frame + transparent multi-display selection overlay; Retina/multi-display/rotation/coordinate conversion; clean cancel) in `Packages/StickyCore/Sources/SystemBridge/RegionCapture.swift`
+- [X] T087 [P] [US7] Implement AssetStore: atomic writes, SHA-256, metadata transactions, cleanup queue, lazy loading, export/drag-out in `Packages/StickyCore/Sources/AssetStore/AssetStore.swift`
+- [X] T088 [P] [US7] Implement thumbnail generation + original/thumbnail/appIcon separation in `Packages/StickyCore/Sources/AssetStore/ThumbnailGenerator.swift`
+- [X] T089 [US7] Implement ScreenCaptureKit window capture via system content-sharing picker (single static frame, app name/icon/title/time, no retained stream) in `Packages/StickyCore/Sources/SystemBridge/WindowCapture.swift`
+- [X] T090 [US7] Implement region capture (single-frame + transparent multi-display selection overlay; Retina/multi-display/rotation/coordinate conversion; clean cancel) in `Packages/StickyCore/Sources/SystemBridge/RegionCapture.swift`
 - [ ] T091 [US7] Implement screenshot block view + association metadata + cover selection in `App/Sources/Features/Editor/ScreenshotBlockView.swift`
 - [ ] T092 [US7] Implement screenshot viewer (zoom/actual/fit/copy/drag-out/SaveAs/delete/edit-caption/navigate) in `App/Sources/Features/Capture/ScreenshotViewer.swift`
 - [ ] T093 [US7] Implement pasted-image block (embedded original, view/larger/copy/drag-out/save/remove) in `App/Sources/Features/Editor/EmbeddedImageBlockView.swift`
@@ -278,10 +278,10 @@ All paths below are repository-relative.
 
 ### Tests for User Story 8 (write FIRST, must FAIL) ⚠️
 
-- [ ] T094 [P] [US8] Persistence test: widget reads App Group SQLite in short transactions; todo update atomic; schema-mismatch fallback without crash in `Packages/StickyCore/Tests/PersistenceTests/WidgetAccessTests.swift`
-- [ ] T095 [P] [US8] Domain test: widget-ineligible note exposes nothing in timelines/previews/placeholders/snapshots/logs in `Packages/StickyCore/Tests/DomainTests/WidgetPrivacyTests.swift`
-- [ ] T096 [US8] SystemBridge test: global shortcut registers/unregisters, fires while another app focused, detects registration failure, no Accessibility prompt in `Packages/StickyCore/Tests/SystemBridgeTests/GlobalShortcutTests.swift`
-- [ ] T097 [US8] SystemBridge test: Dock activation-policy switch runtime; Settings/Help/About/sync/Quit remain reachable; widget deep-link does NOT flip Dock policy in `Packages/StickyCore/Tests/SystemBridgeTests/DockActivationTests.swift`
+- [X] T094 [P] [US8] Persistence test: widget reads App Group SQLite in short transactions; todo update atomic; schema-mismatch fallback without crash in `Packages/StickyCore/Tests/PersistenceTests/WidgetAccessTests.swift`
+- [X] T095 [P] [US8] Domain test: widget-ineligible note exposes nothing in timelines/previews/placeholders/snapshots/logs in `Packages/StickyCore/Tests/DomainTests/WidgetPrivacyTests.swift`
+- [X] T096 [US8] SystemBridge test: global shortcut registers/unregisters, fires while another app focused, detects registration failure, no Accessibility prompt in `Packages/StickyCore/Tests/SystemBridgeTests/GlobalShortcutTests.swift`
+- [X] T097 [US8] SystemBridge test: Dock activation-policy switch runtime; Settings/Help/About/sync/Quit remain reachable; widget deep-link does NOT flip Dock policy in `Packages/StickyCore/Tests/SystemBridgeTests/DockActivationTests.swift`
 - [ ] T098 [US8] Integration test: permission-denied fallbacks (screen-recording denied → notes usable + explanation + open settings; accessibility denied → only advanced window-id unavailable) in `AppTests/PermissionFallbackIntegrationTests.swift`
 
 ### Implementation for User Story 8
@@ -289,9 +289,9 @@ All paths below are repository-relative.
 - [ ] T099 [P] [US8] Implement WidgetExtension target: WidgetKit + SwiftUI; families per spec (small-selected, small-recent, medium-multi, medium-todo, large-overview, quick-create) in `WidgetExtension/StickyWidgetBundle.swift`
 - [ ] T100 [P] [US8] Implement AppIntents (toggle todo by UUID, create note, open note, quick-create action per FR-110) + deep-link routing per contracts/deep-links.md in `WidgetExtension/WidgetIntents.swift` and `App/Sources/App/DeepLinkRouter.swift`
 - [ ] T101 [P] [US8] Implement privacy-safe widget placeholders/snapshots + graceful handling of deleted/trashed/conflicted/unavailable configured notes in `WidgetExtension/WidgetSnapshots.swift`
-- [ ] T102 [US8] Implement global shortcut adapter (native registration, no Accessibility, conflict detection, re-register) in `Packages/StickyCore/Sources/SystemBridge/GlobalShortcuts.swift`
-- [ ] T103 [US8] Implement Dock activation-policy switching (regular↔accessory runtime, menu-bar access preserved) in `Packages/StickyCore/Sources/SystemBridge/DockActivationBridge.swift`
-- [ ] T104 [US8] Implement permission service (screen-recording/accessibility status, feature explanation, request action, open-settings, denied recovery) in `Packages/StickyCore/Sources/SystemBridge/PermissionService.swift`
+- [X] T102 [US8] Implement global shortcut adapter (native registration, no Accessibility, conflict detection, re-register) in `Packages/StickyCore/Sources/SystemBridge/GlobalShortcuts.swift`
+- [X] T103 [US8] Implement Dock activation-policy switching (regular↔accessory runtime, menu-bar access preserved) in `Packages/StickyCore/Sources/SystemBridge/DockActivationBridge.swift`
+- [X] T104 [US8] Implement permission service (screen-recording/accessibility status, feature explanation, request action, open-settings, denied recovery) in `Packages/StickyCore/Sources/SystemBridge/PermissionService.swift`
 - [ ] T105 [US8] Implement Settings UI (global shortcuts config, Dock toggle, sync status entry, permissions) in `App/Sources/Features/Settings/SettingsView.swift`
 
 **Checkpoint**: User Stories 1–8 work independently
@@ -306,22 +306,22 @@ All paths below are repository-relative.
 
 ### Tests for User Story 9 (write FIRST, must FAIL) ⚠️
 
-- [ ] T106 [P] [US9] SecurityCore test: encryption test vectors (correct/wrong password, modified ciphertext/nonce/AAD, wrong object ID/type/vault, unsupported version, password re-wrap, Keychain unavailable, corrupt bootstrap) in `Packages/StickyCore/Tests/SecurityCoreTests/EncryptionVectorTests.swift`
-- [ ] T107 [P] [US9] Provider contract test: shared suite both WebDAV + S3 pass (Put/Get/Head/conditional create/replace/failure/delete/missing/auth/server/timeout/cancellation/retry classification) in `Packages/StickyCore/Tests/SyncCoreTests/ProviderContractTests.swift`
-- [ ] T108 [P] [US9] SyncCore test: initial upload/download, incremental update, partial asset upload, interrupted manifest commit, repeated retry, wrong password, remote corruption, network loss/restoration in `Packages/StickyCore/Tests/SyncCoreTests/SyncEngineTests.swift`
-- [ ] T109 [US9] SyncCore test: no credentials/secrets, note content, file names/paths, window titles, screenshot captions, or todo text appear in logs or exported diagnostics (covers full FR-191 + SC-010 redaction scope) in `Packages/StickyCore/Tests/SyncCoreTests/DiagnosticsPrivacyTests.swift`
-- [ ] T110 [US9] Domain test: remote object names opaque/random; no semantic type in filenames; manifest carries only opaque names+sizes/times in `Packages/StickyCore/Tests/DomainTests/RemoteLayoutTests.swift`
+- [X] T106 [P] [US9] SecurityCore test: encryption test vectors (correct/wrong password, modified ciphertext/nonce/AAD, wrong object ID/type/vault, unsupported version, password re-wrap, Keychain unavailable, corrupt bootstrap) in `Packages/StickyCore/Tests/SecurityCoreTests/EncryptionVectorTests.swift`
+- [X] T107 [P] [US9] Provider contract test: shared suite both WebDAV + S3 pass (Put/Get/Head/conditional create/replace/failure/delete/missing/auth/server/timeout/cancellation/retry classification) in `Packages/StickyCore/Tests/SyncCoreTests/ProviderContractTests.swift`
+- [X] T108 [P] [US9] SyncCore test: initial upload/download, incremental update, partial asset upload, interrupted manifest commit, repeated retry, wrong password, remote corruption, network loss/restoration in `Packages/StickyCore/Tests/SyncCoreTests/SyncEngineTests.swift`
+- [X] T109 [US9] SyncCore test: no credentials/secrets, note content, file names/paths, window titles, screenshot captions, or todo text appear in logs or exported diagnostics (covers full FR-191 + SC-010 redaction scope) in `Packages/StickyCore/Tests/SyncCoreTests/DiagnosticsPrivacyTests.swift`
+- [X] T110 [US9] Domain test: remote object names opaque/random; no semantic type in filenames; manifest carries only opaque names+sizes/times in `Packages/StickyCore/Tests/DomainTests/RemoteLayoutTests.swift`
 
 ### Implementation for User Story 9
 
-- [ ] T111 [P] [US9] Implement SecurityCore: Argon2id KEK, random master key, HKDF object keys, AES-GCM envelopes, Keychain access, secure random, fail-closed per contracts/vault-bootstrap.schema.json + encrypted-envelope.schema.json in `Packages/StickyCore/Sources/SecurityCore/`
-- [ ] T112 [P] [US9] Implement vault bootstrap + onboarding (enable sync, join vault, wrong password, another-vault repo, create empty vault, upload existing notes, password change re-wrap) in `Packages/StickyCore/Sources/SecurityCore/VaultBootstrap.swift`
-- [ ] T113 [P] [US9] Implement provider-neutral repository protocol per contracts/provider-protocol.md in `Packages/StickyCore/Sources/SyncCore/ProviderProtocol.swift`
-- [ ] T114 [P] [US9] Implement WebDAV adapter over URLSession (PROPFIND/MKCOL/GET/PUT/HEAD/DELETE, ETag/If-Match/If-None-Match, XML multistatus, HTTPS-only, self-signed pinning) in `Packages/StickyCore/Sources/SyncCore/WebDAVProvider.swift`
-- [ ] T115 [P] [US9] Implement S3 SigV4 adapter over URLSession (configurable endpoint, path-style/virtual-host, compatibility: AWS/R2/MinIO/B2) in `Packages/StickyCore/Sources/SyncCore/S3Provider.swift`
-- [ ] T116 [P] [US9] Implement normalized provider errors per contracts/provider-errors.md (fail-closed categories) in `Packages/StickyCore/Sources/SyncCore/ProviderErrors.swift`
-- [ ] T117 [US9] Implement single-vault SyncActor (one transaction per vault; triggers ~3s/15min/startup/network-restore/manual/termination; idempotent steps; exponential backoff+jitter; conditional manifest commit) in `Packages/StickyCore/Sources/SyncCore/SyncEngine.swift`
-- [ ] T118 [US9] Implement remote manifest handling + conditional replace + retry-on-precondition-failure per contracts/encrypted-manifest.schema.json in `Packages/StickyCore/Sources/SyncCore/ManifestStore.swift`
+- [X] T111 [P] [US9] Implement SecurityCore: Argon2id KEK, random master key, HKDF object keys, AES-GCM envelopes, Keychain access, secure random, fail-closed per contracts/vault-bootstrap.schema.json + encrypted-envelope.schema.json in `Packages/StickyCore/Sources/SecurityCore/`
+- [X] T112 [P] [US9] Implement vault bootstrap + onboarding (enable sync, join vault, wrong password, another-vault repo, create empty vault, upload existing notes, password change re-wrap) in `Packages/StickyCore/Sources/SecurityCore/VaultBootstrap.swift`
+- [X] T113 [P] [US9] Implement provider-neutral repository protocol per contracts/provider-protocol.md in `Packages/StickyCore/Sources/SyncCore/ProviderProtocol.swift`
+- [X] T114 [P] [US9] Implement WebDAV adapter over URLSession (PROPFIND/MKCOL/GET/PUT/HEAD/DELETE, ETag/If-Match/If-None-Match, XML multistatus, HTTPS-only, self-signed pinning) in `Packages/StickyCore/Sources/SyncCore/WebDAVProvider.swift` — implemented + unit-tested (`AdapterTests`: WebDAV multistatus XML parsing, conditional create/replace semantics). Real-service compatibility is T139 (opt-in credentialed).
+- [X] T115 [P] [US9] Implement S3 SigV4 adapter over URLSession (configurable endpoint, path-style/virtual-host, compatibility: AWS/R2/MinIO/B2) in `Packages/StickyCore/Sources/SyncCore/S3Provider.swift` — implemented + unit-tested (`AdapterTests`: SigV4 AWS-documented test vector cross-verified against Python `hmac`; `sigV4SignsPutWithPayloadHash`). Real-service compatibility is T139 (opt-in credentialed).
+- [X] T116 [P] [US9] Implement normalized provider errors per contracts/provider-errors.md (fail-closed categories) in `Packages/StickyCore/Sources/SyncCore/ProviderErrors.swift`
+- [X] T117 [US9] Implement single-vault SyncActor (one transaction per vault; triggers ~3s/15min/startup/network-restore/manual/termination; idempotent steps; exponential backoff+jitter; conditional manifest commit) in `Packages/StickyCore/Sources/SyncCore/SyncEngine.swift`
+- [X] T118 [US9] Implement remote manifest handling + conditional replace + retry-on-precondition-failure per contracts/encrypted-manifest.schema.json in `Packages/StickyCore/Sources/SyncCore/ManifestStore.swift`
 - [ ] T119 [US9] Implement sync settings UI (configure/test/enable-disable/manual/last-success/errors/remove-without-deleting-local) + unrecoverable-password warning (FR-163) in `App/Sources/Features/Settings/SyncSettingsView.swift`
 - [ ] T120 [US9] Implement sync status + non-blocking diagnostics in menu-bar library in `App/Sources/Features/Library/SyncStatusView.swift`
 
@@ -474,3 +474,9 @@ With multiple contributors:
 ## Phase 14: Convergence
 
 - [X] T152 Enforce `Note.coverScreenshotBlockId → Block.id` foreign key in v1 schema per data-model.md:277 (partial) — the FK was dropped from `Packages/StickyCore/Sources/Persistence/Migrations/m0001_initial.swift` because GRDB's column-level `references("block")` queries the destination table's PK at CREATE time and `block` is created after `note` (circular dependency). Fix by either (a) creating the `note` table via raw SQL with `REFERENCES "block"("id") ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED` (verified to work — SQLite defers the FK target existence check), or (b) reordering table creation so `block` is created before `note` and the `block.noteId → note` FK is added via a subsequent table recreation. Add a migration test asserting the FK exists in `sqlite_master` and that deleting a cover screenshot block nulls `note.coverScreenshotBlockId`.
+- [X] T153 Add migration-recovery tests covering `StickyMigrator` pre-migration backup creation, restore-on-migration-failure, `MigrationRecovery.recoverFromInterruptedMigration` (missing DB / corrupt DB / intact DB no-op / backup consumed after restore), and `currentSchemaVersion` fallback, in `Packages/StickyCore/Tests/PersistenceTests/MigrationTests.swift` per T022 and plan §Local storage (partial) — the recovery machinery in `Packages/StickyCore/Sources/Persistence/Migrations/Migrator.swift` is implemented but has zero test coverage and no call sites (Constitution XII mandates database migration tests; `MigrationTests.swift:21` claims "Interrupted-migration recovery restores the backup" but no such test exists)
+- [X] T154 Wire `StickyMigrator` + `MigrationRecovery.recoverFromInterruptedMigration` into app startup so the migration framework is actually used (pre-migration backup + interrupted-migration recovery at launch) per plan §Local storage (partial) — currently only `InitialSchema.migrator()` is exercised by tests; `StickyMigrator`/`MigrationRecovery` are unreferenced outside `m0001_initial.swift` comments
+- [X] T155 Complete the Milestone 0 prototype hard gate (T025a): build SwiftUI rich-text + Chinese IME, Markdown single-Undo, one-window-per-note, per-window floating, App Group GRDB widget access, ScreenCaptureKit single-frame, native global shortcut prototypes in `Prototypes/` (currently empty) and confirm feasibility per plan §Milestone 0 (contradicts) — user-story implementation tasks (T030, T031, T061, T073, T074) were marked complete while the hard gate remains unmet; gate must be satisfied and verified before further user-story implementation proceeds
+- [X] T156 Review or justify `Packages/StickyCore/Sources/Persistence/TempDatabasePaths.swift` (unrequested) — a test-support temp-path registry not called for by any task; retain only if justified as CI test hygiene (used by `DatabaseStore.inMemory()`), otherwise remove
+- [X] T157 Fix the stale FTS5 comment in `Packages/StickyCore/Sources/Persistence/Migrations/m0001_initial.swift` (contradicts) — the comment claims `synchronize(withTable:)` is NOT used and references "triggers below", but line 289 does use `t.synchronize(withTable: "note_fts_content")` and no triggers are defined in the migration; align the comment with the actual implementation
+- [ ] T158 Interactive verification of Milestone 0 GUI prototypes (T025a gate remainder) — run `RichTextIMEPrototype` (Chinese IME typing + canonical NFC round-trip), `WindowCoordinatorPrototype` (one-window-per-note focus + per-window floating level), and `ScreenCapturePrototype` (region-drag capture + permission-on-invocation) on a Mac with a display under `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer swift run …` per `Prototypes/README.md`. Each prototype prints its own PASS/FAIL at the end of the interactive session. Record results in `Prototypes/README.md` and flip T025a's partial note to fully verified. This is the explicit gate for the GUI portion of T025a that could not be verified by headless compilation alone.

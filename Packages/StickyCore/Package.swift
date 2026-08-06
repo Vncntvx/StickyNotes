@@ -9,9 +9,9 @@
 // minimal Domain + Persistence surface and never links SyncCore/SecurityCore.
 //
 // Toolchain baseline (research.md R0): macOS 26 deployment target, Swift 6.3
-// in Swift 6 language mode with strict concurrency. The dev machine that
-// generated this file has only Command Line Tools (Swift 6.4, macOS 27 SDK);
-// the macOS 26 minimum is preserved here regardless.
+// in Swift 6 language mode with strict concurrency. The dev machine runs
+// Xcode-beta (Swift 6.4, macOS 27 SDK); the macOS 26 minimum is preserved
+// here regardless — see AGENTS.md §Environment gotchas.
 
 import PackageDescription
 
@@ -34,6 +34,11 @@ let package = Package(
         // (migrations, WAL, FTS5). Pinned via Package.resolved. Wired into
         // the Persistence target only (constitution XIII; plan §Dependencies).
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.11.0"),
+        // SwiftArgon2 v1.0.4 — the R9-selected Argon2id implementation
+        // (MIT, pure Swift 6, zero transitive deps, RFC 9106 compliant).
+        // Selection record: Prototypes/README.md §R9. Wired into the
+        // SecurityCore target only (constitution VII + XIII).
+        .package(url: "https://github.com/mimiclone/argon2-swift.git", from: "1.0.4"),
     ],
     targets: [
         // MARK: - Library targets
@@ -74,21 +79,28 @@ let package = Package(
         ),
 
         // SecurityCore: vault, KDF, key wrap, AES-GCM envelopes. Depends on
-        // Domain + CryptoKit + Security (Keychain).
+        // Domain + CryptoKit + Security (Keychain) + SwiftArgon2 (R9).
         .target(
             name: "SecurityCore",
-            dependencies: ["Domain"],
+            dependencies: [
+                "Domain",
+                .product(name: "SwiftArgon2", package: "argon2-swift"),
+            ],
             path: "Sources/SecurityCore"
         ),
 
         // SyncCore: provider protocol, WebDAV, S3-SigV4, sync engine.
-        // Depends on Domain + SecurityCore + Persistence abstractions.
+        // Depends on Domain + SecurityCore + Persistence + AssetStore (the
+        // engine delegates asset byte I/O to AssetStore while owning asset
+        // metadata via raw SQL, mirroring how it owns note/tombstone rows).
         .target(
             name: "SyncCore",
             dependencies: [
                 "Domain",
                 "SecurityCore",
                 "Persistence",
+                "AssetStore",
+                .product(name: "GRDB", package: "GRDB.swift"),
             ],
             path: "Sources/SyncCore"
         ),
@@ -137,7 +149,7 @@ let package = Package(
         ),
         .testTarget(
             name: "SyncCoreTests",
-            dependencies: ["SyncCore", "Domain", "Persistence", "SecurityCore"],
+            dependencies: ["SyncCore", "Domain", "Persistence", "SecurityCore", "AssetStore"],
             path: "Tests/SyncCoreTests"
         ),
         .testTarget(
