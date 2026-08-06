@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stickynotes.local/contracts/note-document.schema.json",
+  "title": "Canonical Note Document",
+  "description": "Versioned canonical representation of a note for storage, export, and encrypted synchronization. No Swift type names, no platform archives, no local paths, no bookmark bytes. Schema version 1.",
+  "type": "object",
+  "required": ["schemaVersion", "id", "colorKey", "transparency", "textSize", "alwaysOnTop", "widgetEligible", "manualSortKey", "lifecycleState", "versionId", "lastModifiedDeviceId", "createdAt", "modifiedAt", "blocks"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": 1, "description": "Canonical note schema version." },
+    "id": { "type": "string", "format": "uuid", "description": "Stable note identity." },
+    "title": { "type": ["string", "null"], "description": "Optional manual title. null means no manual title; a generated summary is display-only and never stored here." },
+    "colorKey": { "enum": ["yellow", "pink", "purple", "blue", "green", "gray", "custom"] },
+    "customColor": { "type": ["string", "null"], "description": "Hex color (e.g. #RRGGBB) when colorKey is custom; otherwise null." },
+    "transparency": { "type": "number", "minimum": 0, "maximum": 1, "description": "Background transparency. 0 = opaque." },
+    "textSize": { "enum": ["small", "regular", "large", "extraLarge"] },
+    "alwaysOnTop": { "type": "boolean", "description": "Per-note floating state." },
+    "widgetEligible": { "type": "boolean", "description": "Per-note widget privacy gate." },
+    "coverScreenshotBlockId": { "type": ["string", "null"], "format": "uuid", "description": "At most one cover screenshot per note; references a screenshot block id." },
+    "manualSortKey": { "type": "integer", "description": "Manual-order sort key (1024-gap convention)." },
+    "lifecycleState": { "enum": ["active", "trashed", "permanentlyDeleted", "conflictCopy"] },
+    "trashedAt": { "type": ["string", "null"], "format": "date-time", "description": "UTC ISO 8601; set on trashing; drives 30-day retention." },
+    "conflictOriginNoteId": { "type": ["string", "null"], "format": "uuid", "description": "Set on conflict copies." },
+    "conflictLabel": { "type": ["string", "null"], "description": "Origin/time label for conflict copies." },
+    "versionId": { "type": "string", "format": "uuid", "description": "Per-mutation version." },
+    "parentVersionId": { "type": ["string", "null"], "format": "uuid", "description": "Previous version; null for the initial version." },
+    "lastModifiedDeviceId": { "type": "string", "format": "uuid" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "modifiedAt": { "type": "string", "format": "date-time" },
+    "blocks": {
+      "type": "array",
+      "description": "Ordered content blocks. Each block's payload conforms to block-payloads.schema.json.",
+      "items": { "$ref": "block-payloads.schema.json" }
+    }
+  }
+}

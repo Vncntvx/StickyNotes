@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stickynotes.local/contracts/sync-profile-export.schema.json",
+  "title": "Synchronization Profile Export",
+  "description": "A portable, human-assisted way to join a vault from another Mac (e.g. enter the random vault locator and provider config). Contains NO secrets: credentials live in Keychain and MUST NOT be present here. NO decrypted keys, NO bookmarks, NO note content. Schema version 1.",
+  "type": "object",
+  "required": ["schemaVersion", "vaultId", "vaultLocator", "providerType", "providerConfig", "encryptionSuiteVersion"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "vaultId": { "type": "string", "format": "uuid" },
+    "vaultLocator": { "type": "string", "description": "Random/opaque remote locator." },
+    "providerType": { "enum": ["webdav", "s3"] },
+    "providerConfig": {
+      "type": "object",
+      "description": "Redacted provider configuration with NO secrets. The receiving Mac enters the synchronization password separately and stores credentials in its own Keychain.",
+      "additionalProperties": false,
+      "properties": {
+        "endpoint": { "type": "string" },
+        "region": { "type": ["string", "null"] },
+        "bucket": { "type": ["string", "null"] },
+        "prefix": { "type": ["string", "null"] },
+        "pathStyle": { "type": ["boolean", "null"], "description": "S3 path-style vs virtual-host addressing." },
+        "certificateFingerprint": { "type": ["string", "null"], "description": "Optional pinned self-signed cert fingerprint for this endpoint (not a secret)." }
+      }
+    },
+    "encryptionSuiteVersion": { "type": "integer", "minimum": 1 },
+    "createdAt": { "type": ["string", "null"], "format": "date-time" }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stickynotes.local/contracts/rich-text.schema.json",
+  "title": "Canonical Rich-Text Document",
+  "description": "Project-owned run/paragraph rich-text model. NOT an archived NSAttributedString/AttributedString. Stores only application-supported formatting. Text is Unicode scalars normalized to NFC; run boundaries are scalar offsets (not Swift String.Index). Schema version 1.",
+  "type": "object",
+  "required": ["schemaVersion", "text", "paragraphs"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "text": { "type": "string", "description": "Full plain text in NFC, Unicode scalars. The source of truth for characters; runs reference offsets into this string." },
+    "paragraphs": {
+      "type": "array",
+      "description": "Ordered paragraphs. A paragraph covers a contiguous scalar range and carries paragraph-level style.",
+      "items": {
+        "type": "object",
+        "required": ["startScalar", "endScalar", "style"],
+        "additionalProperties": false,
+        "properties": {
+          "startScalar": { "type": "integer", "minimum": 0, "description": "Inclusive start scalar offset into text." },
+          "endScalar": { "type": "integer", "minimum": 0, "description": "Exclusive end scalar offset into text." },
+          "style": { "enum": ["body", "heading", "bullet"], "description": "Paragraph style. body = normal prose; heading = simple heading; bullet = bulleted list item." },
+          "runs": {
+            "type": "array",
+            "description": "Ordered text runs within this paragraph. Unstyled ranges need no run. Overlapping marks are expressed via a marks set on each run.",
+            "items": {
+              "type": "object",
+              "required": ["startScalar", "endScalar"],
+              "additionalProperties": false,
+              "properties": {
+                "startScalar": { "type": "integer", "minimum": 0 },
+                "endScalar": { "type": "integer", "minimum": 0 },
+                "marks": {
+                  "type": "array",
+                  "description": "Supported marks only. Unsupported/private attributes MUST NOT appear here.",
+                  "items": { "enum": ["bold", "italic", "underline", "strikethrough", "inlineCode"] },
+                  "uniqueItems": true
+                },
+                "link": { "type": ["string", "null"], "description": "Optional link target (web/email/phone) auto-detected or set by user." },
+                "hardBreak": { "type": "boolean", "description": "Explicit hard line break at end of run." }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

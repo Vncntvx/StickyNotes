@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stickynotes.local/contracts/tombstone.schema.json",
+  "title": "Tombstone",
+  "description": "Deletion record carrying enough version lineage to prevent resurrection. Synchronized. Retained 30 days subject to synchronization-safety checks. Schema version 1.",
+  "type": "object",
+  "required": ["schemaVersion", "noteId", "deletedVersionId", "deletingDeviceId", "deletedAt"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "noteId": { "type": "string", "format": "uuid", "description": "The deleted note's stable identity." },
+    "deletedVersionId": { "type": "string", "format": "uuid", "description": "Version at which the note was deleted." },
+    "parentVersionId": { "type": ["string", "null"], "format": "uuid", "description": "Lineage parent; null if the note was deleted at its initial version." },
+    "deletingDeviceId": { "type": "string", "format": "uuid" },
+    "deletedAt": { "type": "string", "format": "date-time", "description": "UTC; drives 30-day retention." }
+  }
+}

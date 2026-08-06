@@ -1,0 +1,254 @@
+# Xcode
+#
+# gitignore contributors: remember to update Global/Xcode.gitignore, Objective-C.gitignore & Swift.gitignore
+
+## User settings
+xcuserdata/
+
+## Obj-C/Swift specific
+*.hmap
+
+## App packaging
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+## Playgrounds
+timeline.xctimeline
+playground.xcworkspace
+
+# Swift Package Manager
+#
+# Add this line if you want to avoid checking in source code from Swift Package Manager dependencies.
+# Packages/
+# Package.pins
+# Package.resolved
+# *.xcodeproj
+#
+# Xcode automatically generates this directory with a .xcworkspacedata file and xcuserdata
+# hence it is not needed unless you have added a package configuration file to your project
+# .swiftpm
+
+.build/
+
+# CocoaPods
+#
+# We recommend against adding the Pods directory to your .gitignore. However
+# you should judge for yourself, the pros and cons are mentioned at:
+# https://guides.cocoapods.org/using/using-cocoapods.html#should-i-check-the-pods-directory-into-source-control
+#
+# Pods/
+#
+# Add this line if you want to avoid checking in source code from the Xcode workspace
+# *.xcworkspace
+
+# Carthage
+#
+# Add this line if you want to avoid checking in source code from Carthage dependencies.
+# Carthage/Checkouts
+
+Carthage/Build/
+
+# fastlane
+#
+# It is recommended to not store the screenshots in the git repo.
+# Instead, use fastlane to re-generate the screenshots whenever they are needed.
+# For more information about the recommended setup visit:
+# https://docs.fastlane.tools/best-practices/source-control/#source-control
+
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# AI agents and assistants
+#
+# Some common agent instruction and project configuration files are listed
+# below as commented-out examples. They are often intentionally committed and
+# shared with a team, so only uncomment them if they are local-only in your
+# project.
+
+# GEMINI.md
+# WARP.md
+# CRUSH.md
+# QWEN.md
+
+# OpenAI Codex
+# AGENTS.md
+# .codex/
+
+# Aider
+.aider.input.history
+.aider.chat.history.md
+.aider.llm.history
+.aider.tags.cache.v*
+# .aiderignore
+
+# Claude Code
+.claude/*.local.json
+.claude/**/*.log
+CLAUDE.local.md
+# .claude/
+
+# Gemini CLI
+gemini-debug.log
+.gemini-clipboard/
+# .gemini/
+
+# Cursor AI
+# .cursorrules
+# .cursor/
+# .cursor.json
+# .cursor-settings.yaml
+
+# Continue
+# .continue/
+# .continuerc.json
+
+# Cline
+# .cline/
+# .clinerules
+# cline.json
+
+# Other agent/editor project config
+# .warp/
+# .crush/
+# .codeium/
+# .deepseek/
+# .amazon-codewhisperer/
+# .tabnineignore
+# .tabnine/
+
+# GitHub Copilot
+# .github/copilot-instructions.md
+
+# Windsurf Editor
+# .windsurfrules
+# .windsurf/
+
+# Replit AI Development
+# .replit
+# replit.nix
+
+# General
+.DS_Store
+.localized
+__MACOSX/
+.AppleDouble
+.LSOverride
+Icon[
+]
+
+# Resource forks
+._*
+
+# Files and directories that might appear in the root of a volume
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.com.apple.timemachine.supported
+.PKInstallSandboxManager
+.PKInstallSandboxManager-SystemSoftware
+.hotfiles.btree
+.vol
+.file
+.disk_label*
+lost+found
+.HFS+ Private Directory Data[
+]
+
+# Directories potentially created on remote AFP share
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Mac OS 6 to 9
+Desktop DB
+Desktop DF
+TheFindByContentFolder
+TheVolumeSettingsFolder
+.FBCIndex
+.FBCSemaphoreFile
+.FBCLockFolder
+
+# Quota system
+.quota.group
+.quota.user
+.quota.ops.group
+.quota.ops.user
+
+# TimeMachine
+Backups.backupdb
+.MobileBackups
+.MobileBackups.trash
+MobileBackups.trash
+tmbootpicker.efi
+
+# ----------------------------------------------------------------------------
+# StickyNotes project-specific (T010 / quickstart.md §Avoiding committing
+# secrets). Constitution VI/VIII: never commit App Group container data,
+# derived data, local credential/env files, or anything containing note
+# content / file paths / secrets.
+# ----------------------------------------------------------------------------
+
+# Derived data (Xcode / SwiftPM)
+DerivedData/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+
+# SwiftPM local build artifacts (already partly covered above; explicit repeat)
+.build/
+.build.swiftpm/
+*.xctest
+Packages/*/Package.resolved
+!Packages/StickyCore/Package.resolved
+# (Package.resolved at the workspace root IS committed to pin deps; the
+#  above exception preserves the StickyCore one if it lives at the package
+#  root. The xcodeproj-level Package.resolved is also committed.)
+
+# App Group container (NEVER commit — may contain real note content/DB/assets)
+# The placeholder group id is `group.local.stickynotes.placeholder`.
+# This path is typically under ~/Library/Group Containers/<group-id>/.
+# The pattern below is a defensive catch for accidental copies.
+group.local.stickynotes.placeholder/
+
+# Local credential / env files (NEVER commit real credentials)
+.env
+.env.*
+*.local.env
+secrets/
+*.key
+*.pem
+*.p12
+*.mobileprovision
+
+# Sync test fixtures that may contain real provider URLs/credentials
+# (deterministic local test servers / mocks ARE committed; real-service
+# configs are NOT).
+local-sync-config.json
+webdav-local.json
+s3-local.json
+
+# Diagnostics bundles exported by the app (may contain sanitized logs but
+# still not source-controlled).
+*.diagnosticsbundle
+Diagnostics/
+
+# Prototypes scratch directory (T025a Milestone 0 prototypes live here; not
+# part of the shipping app/package).
+Prototypes/*/
+
+# macOS Keychain export files (defensive)
+*.keychain
+*.keychain-db
+
+# Xcode中风 generated source files (defensive — should not be committed)
+*.generated.swift
+

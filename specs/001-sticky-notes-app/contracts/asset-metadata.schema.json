@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stickynotes.local/contracts/asset-metadata.schema.json",
+  "title": "Asset Metadata",
+  "description": "Synchronized metadata for a binary asset. The asset bytes themselves are synchronized as an independent encrypted object (see encrypted-envelope.schema.json). storagePath is device-local and MUST NOT be synchronized. Schema version 1.",
+  "type": "object",
+  "required": ["schemaVersion", "id", "kind", "contentHash", "byteSize", "contentType", "createdAt"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "id": { "type": "string", "format": "uuid", "description": "Asset identity." },
+    "kind": { "enum": ["original", "thumbnail", "appIcon"] },
+    "contentHash": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "SHA-256 content hash; enables dedup and corruption detection." },
+    "byteSize": { "type": "integer", "minimum": 0 },
+    "contentType": { "type": "string", "description": "UTType identifier (e.g. public.png, public.jpeg)." },
+    "createdAt": { "type": "string", "format": "date-time" }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stickynotes.local/contracts/encrypted-manifest.schema.json",
+  "title": "Encrypted Remote Manifest",
+  "description": "The single encrypted manifest/index object that serializes multi-device synchronization. Committed via a conditional write (If-Match / versioned If-Match). After decryption it lists the current set of remote objects with their version lineage so devices can compare without listing. The manifest itself is encrypted as an object (see encrypted-envelope.schema.json); this schema describes the decrypted manifest payload. Schema version 1.",
+  "type": "object",
+  "required": ["schemaVersion", "manifestVersion", "vaultId", "entries", "tombstones", "updatedAt", "updatedByDeviceId"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "manifestVersion": { "type": "string", "description": "Opaque version token used as the If-Match precondition (e.g. an opaque tag or numeric version). Changing entries changes this token." },
+    "vaultId": { "type": "string", "format": "uuid" },
+    "entries": {
+      "type": "array",
+      "description": "One entry per remote object (note, asset, tombstone). Object names are opaque; semantic type is encrypted inside the object, NOT exposed here.",
+      "items": {
+        "type": "object",
+        "required": ["objectName", "objectId", "contentHash", "byteSize", "modifiedAt"],
+        "additionalProperties": false,
+        "properties": {
+          "objectName": { "type": "string", "description": "Opaque remote object name (random). The provider sees this name; it reveals nothing semantic." },
+          "objectId": { "type": "string", "description": "Opaque object id matching the envelope's objectId (used as AAD). Not the semantic entity UUID." },
+          "contentHash": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "SHA-256 of the decrypted canonical object bytes (envelope integrity / dedup)." },
+          "byteSize": { "type": "integer", "minimum": 0 },
+          "modifiedAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "tombstones": {
+      "type": "array",
+      "description": "Tombstones tracked at the manifest level so a returning device can reconcile deletion history before uploading. Each points to a deleted note lineage.",
+      "items": {
+        "type": "object",
+        "required": ["noteId", "deletedVersionId", "deletingDeviceId", "deletedAt"],
+        "additionalProperties": false,
+        "properties": {
+          "noteId": { "type": "string", "format": "uuid" },
+          "deletedVersionId": { "type": "string", "format": "uuid" },
+          "parentVersionId": { "type": ["string", "null"], "format": "uuid" },
+          "deletingDeviceId": { "type": "string", "format": "uuid" },
+          "deletedAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "updatedByDeviceId": { "type": "string", "format": "uuid" }
+  }
+}

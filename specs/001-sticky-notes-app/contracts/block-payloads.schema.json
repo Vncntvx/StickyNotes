@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stickynotes.local/contracts/block-payloads.schema.json",
+  "title": "Block Payloads",
+  "description": "Kind-specific canonical payload for each block category. One of these payloads is embedded as a block's `payload`. Schema version 1. No local paths, no bookmark bytes anywhere.",
+  "type": "object",
+  "required": ["schemaVersion", "id", "noteId", "kind", "sortKey", "versionId", "lastModifiedDeviceId", "createdAt", "modifiedAt", "payload"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "id": { "type": "string", "format": "uuid", "description": "Stable block identity." },
+    "noteId": { "type": "string", "format": "uuid" },
+    "kind": { "enum": ["richText", "todo", "code", "fileRef", "image", "screenshot"] },
+    "sortKey": { "type": "integer", "description": "1024-gap ordering within the note." },
+    "versionId": { "type": "string", "format": "uuid" },
+    "parentVersionId": { "type": ["string", "null"], "format": "uuid" },
+    "lastModifiedDeviceId": { "type": "string", "format": "uuid" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "modifiedAt": { "type": "string", "format": "date-time" },
+    "payload": {
+      "oneOf": [
+        { "title": "RichText payload", "type": "object", "required": ["richText"], "additionalProperties": false, "properties": { "richText": { "$ref": "rich-text.schema.json" } } },
+        { "title": "Todo payload", "type": "object", "required": ["todoId"], "additionalProperties": false, "properties": { "todoId": { "type": "string", "format": "uuid", "description": "Stable todo identity (see TodoItem). Text is in a nested richText." }, "richText": { "$ref": "rich-text.schema.json" } } },
+        { "title": "Code payload", "type": "object", "required": ["text"], "additionalProperties": false, "properties": { "text": { "type": "string", "description": "Exact code text; spaces/tabs/line breaks preserved." }, "language": { "type": ["string", "null"], "description": "Optional language label. No syntax highlighting in v1." } } },
+        { "title": "FileReference payload (synchronized metadata only)", "type": "object", "required": ["displayName", "contentType", "originDeviceId", "addedAt"], "additionalProperties": false, "properties": { "displayName": { "type": "string" }, "contentType": { "type": "string", "description": "UTType identifier." }, "approximateSize": { "type": ["integer", "null"], "minimum": 0 }, "originDeviceId": { "type": "string", "format": "uuid" }, "addedAt": { "type": "string", "format": "date-time" }, "caption": { "type": ["string", "null"] } }, "description": "Bookmark bytes and absolute paths MUST NOT appear here." },
+        { "title": "Embedded image payload", "type": "object", "required": ["originalAssetId", "thumbnailAssetId"], "additionalProperties": false, "properties": { "originalAssetId": { "type": "string", "format": "uuid" }, "thumbnailAssetId": { "type": "string", "format": "uuid" }, "caption": { "type": ["string", "null"] } } },
+        { "title": "Screenshot association payload", "type": "object", "required": ["originalAssetId", "thumbnailAssetId", "capturedAt"], "additionalProperties": false, "properties": { "originalAssetId": { "type": "string", "format": "uuid" }, "thumbnailAssetId": { "type": "string", "format": "uuid" }, "appIconAssetId": { "type": ["string", "null"], "format": "uuid" }, "applicationName": { "type": ["string", "null"] }, "windowTitle": { "type": ["string", "null"] }, "caption": { "type": ["string", "null"] }, "capturedAt": { "type": "string", "format": "date-time" }, "isCover": { "type": "boolean" } } }
+      ]
+    }
+  }
+}

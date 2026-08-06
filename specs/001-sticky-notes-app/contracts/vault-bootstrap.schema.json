@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stickynotes.local/contracts/vault-bootstrap.schema.json",
+  "title": "Vault Bootstrap",
+  "description": "Versioned structure containing only the information needed to open the vault. The password protects the random master key (it does NOT directly encrypt every object). Stored as the one discoverable bootstrap object under the random vault locator. Schema version 1.",
+  "type": "object",
+  "required": ["schemaVersion", "formatVersion", "vaultId", "vaultLocator", "argon2id", "wrappedMasterKey", "encryptionSuiteVersion", "createdAt"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "formatVersion": { "type": "integer", "minimum": 1, "description": "Bootstrap format version (independent of schemaVersion for forward evolution)." },
+    "vaultId": { "type": "string", "format": "uuid", "description": "Random vault identity. Used as HKDF context." },
+    "vaultLocator": { "type": "string", "description": "Random/opaque remote locator under which all vault objects live. Reveals nothing semantic." },
+    "argon2id": {
+      "type": "object",
+      "description": "Argon2id parameters for deriving the key-encryption key (KEK) from the synchronization password.",
+      "required": ["salt", "memoryKiB", "iterations", "parallelism"],
+      "additionalProperties": false,
+      "properties": {
+        "salt": { "type": "string", "description": "Base64 random salt." },
+        "memoryKiB": { "type": "integer", "minimum": 8 },
+        "iterations": { "type": "integer", "minimum": 1 },
+        "parallelism": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "wrappedMasterKey": {
+      "type": "object",
+      "description": "Master key wrapped (encrypted) with the password-derived KEK. Re-wrapping on password change replaces only this; unchanged objects are not re-encrypted.",
+      "required": ["nonce", "ciphertext", "tag"],
+      "additionalProperties": false,
+      "properties": {
+        "nonce": { "type": "string", "description": "Base64 AES-GCM nonce." },
+        "ciphertext": { "type": "string", "description": "Base64 wrapped master key ciphertext." },
+        "tag": { "type": "string", "description": "Base64 authentication tag." }
+      }
+    },
+    "keyConfirmation": {
+      "type": ["object", "null"],
+      "description": "Optional password-verification / key-confirmation material (not a password hint). Lets the app detect a wrong password before attempting object decryption.",
+      "properties": {
+        "nonce": { "type": "string" },
+        "ciphertext": { "type": "string" },
+        "tag": { "type": "string" }
+      }
+    },
+    "encryptionSuiteVersion": { "type": "integer", "minimum": 1, "description": "Identifies the encryption suite (Argon2id KEK + HKDF-SHA-256 + AES-GCM). Bumping it is a MAJOR change." },
+    "createdAt": { "type": "string", "format": "date-time" }
+  }
+}

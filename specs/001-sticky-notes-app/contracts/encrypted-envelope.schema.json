@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stickynotes.local/contracts/encrypted-envelope.schema.json",
+  "title": "Encrypted Envelope",
+  "description": "Versioned framing for one encrypted object. Contains only safe framing data: the object is authenticated with immutable context (vaultID, objectID, objectType, schemaVersion, encryptionSuiteVersion) as AES-GCM associated data, which is NOT repeated in the envelope to avoid substitution. Remote filenames are random/opaque and do NOT encode objectType. Schema version 1.",
+  "type": "object",
+  "required": ["envelopeVersion", "objectId", "nonce", "ciphertext"],
+  "additionalProperties": false,
+  "properties": {
+    "envelopeVersion": { "const": 1, "description": "Envelope format version." },
+    "objectId": { "type": "string", "description": "Opaque object identifier (random). Not necessarily the semantic entity UUID; must not reveal object type." },
+    "nonce": { "type": "string", "description": "Base64 cryptographically-secure random nonce for AES-GCM." },
+    "ciphertext": { "type": "string", "description": "Base64 AES-GCM ciphertext (combined with authentication tag where the implementation uses combined mode)." },
+    "tag": { "type": ["string", "null"], "description": "Base64 authentication tag when not included in combined ciphertext; null otherwise." }
+  },
+  "$comment": "Authenticated associated data (AAD) = canonical bytes of {vaultId, objectId, objectType, schemaVersion, encryptionSuiteVersion}. Mismatch of any AAD field MUST fail closed."
+}
