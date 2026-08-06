@@ -1,0 +1,274 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, '001-sticky-notes-app' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+# CI uses a GitHub-hosted macOS runner with Xcode 26.x. This dev machine has
+# only Command Line Tools — see Documentation/toolchain.md. The matrix below
+# is the project's intended CI environment, not the local environment that
+# generated the spec/plan/tasks.
+
+permissions:
+  contents: read
+
+env:
+  XCODE_VERSION: "26.x"
+  PROJECT: StickyNotes.xcodeproj
+  SCHEME: StickyNotes
+  # Local debug builds do not code-sign (quickstart.md §Building without code
+  # signing). Credentialed sync tests opt in via secrets only.
+  CODE_SIGNING_ALLOWED: "NO"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  resolve:
+    name: Resolve dependencies
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -switch /Applications/Xcode_$XCODE_VERSION.app
+      - name: Resolve SwiftPM dependencies
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project "$PROJECT" \
+            -scheme "$SCHEME"
+      - name: Upload Package.resolved
+        uses: actions/upload-artifact@v4
+        with:
+          name: Package.resolved
+          path: |
+            StickyNotes.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+            Packages/StickyCore/Package.resolved
+
+  build:
+    name: Debug build
+    runs-on: macos-26
+    needs: resolve
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -switch /Applications/Xcode_$XCODE_VERSION.app
+      - name: Build (Debug, no code signing)
+        run: |
+          xcodebuild build \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED="$CODE_SIGNING_ALLOWED" \
+            | xcpretty
+
+  stickycore-unit:
+    name: StickyCore unit tests (Swift Testing)
+    runs-on: macos-26
+    needs: resolve
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -switch /Applications/Xcode_$XCODE_VERSION.app
+      - name: SwiftPM build + test (Domain/EditorCore/etc.)
+        working-directory: Packages/StickyCore
+        run: swift test --parallel
+
+  migration-tests:
+    name: Migration + schema integrity tests
+    runs-on: macos-26
+    needs: build
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -switch /Applications/Xcode_$XCODE_VERSION.app
+      - name: Migration tests
+        run: |
+          xcodebuild test \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -destination 'platform=macOS' \
+            -only-testing:PersistenceTests/MigrationTests \
+            CODE_SIGNING_ALLOWED="$CODE_SIGNING_ALLOWED" \
+            | xcpretty
+
+  editor-tests:
+    name: Editor + Markdown + IME tests
+    runs-on: macos-26
+    needs: build
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -switch /Applications/Xcode_$XCODE_VERSION.app
+      - name: Editor tests
+        run: |
+          xcodebuild test \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -destination 'platform=macOS' \
+            -only-testing:EditorCoreTests \
+            CODE_SIGNING_ALLOWED="$CODE_SIGNING_ALLOWED" \
+            | xcpretty
+
+  security-tests:
+    name: Security vector tests
+    runs-on: macos-26
+    needs: build
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -switch /Applications/Xcode_$XCODE_VERSION.app
+      - name: Security tests
+        run: |
+          xcodebuild test \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -destination 'platform=macOS' \
+            -only-testing:SecurityCoreTests \
+            CODE_SIGNING_ALLOWED="$CODE_SIGNING_ALLOWED" \
+            | xcpretty
+
+  provider-contract-tests:
+    name: Provider contract tests (deterministic local providers)
+    runs-on: macos-26
+    needs: build
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -switch /Applications/Xcode_$XCODE_VERSION.app
+      - name: Provider contract tests
+        run: |
+          xcodebuild test \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -destination 'platform=macOS' \
+            -only-testing:SyncCoreTests/ProviderContractTests \
+            CODE_SIGNING_ALLOWED="$CODE_SIGNING_ALLOWED" \
+            | xcpretty
+
+  sync-tests:
+    name: Sync engine tests (failure injection)
+    runs-on: macos-26
+    needs: build
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -switch /Applications/Xcode_$XCODE_VERSION.app
+      - name: Sync tests
+        run: |
+          xcodebuild test \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -destination 'platform=macOS' \
+            -only-testing:SyncCoreTests/SyncEngineTests \
+            -only-testing:SyncCoreTests/ConflictCopyTests \
+            -only-testing:SyncCoreTests/DeleteEditConflictTests \
+            -only-testing:SyncCoreTests/TombstoneTests \
+            -only-testing:SyncCoreTests/LongOfflineTests \
+            -only-testing:SyncCoreTests/DiagnosticsPrivacyTests \
+            CODE_SIGNING_ALLOWED="$CODE_SIGNING_ALLOWED" \
+            | xcpretty
+
+  ui-smoke:
+    name: UI smoke tests (XCUITest critical flows)
+    runs-on: macos-26
+    needs: build
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -switch /Applications/Xcode_$XCODE_VERSION.app
+      - name: XCUITest critical flows
+        run: |
+          xcodebuild test \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -destination 'platform=macOS' \
+            -only-testing:AppUITests/CriticalFlowsUITests \
+            CODE_SIGNING_ALLOWED="$CODE_SIGNING_ALLOWED" \
+            | xcpretty
+
+  static-warnings:
+    name: Treat warnings as errors (project-owned code)
+    runs-on: macos-26
+    needs: build
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -switch /Applications/Xcode_$XCODE_VERSION.app
+      - name: Build with warnings-as-errors
+        run: |
+          xcodebuild build \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED="$CODE_SIGNING_ALLOWED" \
+            GCC_TREAT_WARNINGS_AS_ERRORS=YES \
+            SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
+            | xcpretty
+
+  # Credentialed compatibility tests — opt-in via secrets only. Skipped when
+  # secrets are absent (quickstart.md §Rules for test credentials). NEVER
+  # commit real credentials.
+  webdav-compat:
+    name: WebDAV compatibility (credentialed, opt-in)
+    runs-on: macos-26
+    needs: sync-tests
+    if: ${{ vars.STICKY_RUN_CREDENTIALED_SYNC == 'true' }}
+    timeout-minutes: 30
+    env:
+      STICKY_WEBDAV_TEST_URL: ${{ secrets.STICKY_WEBDAV_TEST_URL }}
+      STICKY_WEBDAV_TEST_USER: ${{ secrets.STICKY_WEBDAV_TEST_USER }}
+      STICKY_WEBDAV_TEST_PASS: ${{ secrets.STICKY_WEBDAV_TEST_PASS }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -switch /Applications/Xcode_$XCODE_VERSION.app
+      - name: Real WebDAV compatibility
+        run: |
+          xcodebuild test \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -destination 'platform=macOS' \
+            -only-testing:SyncCoreTests/RealServiceCompatibilityTests/WebDAV \
+            CODE_SIGNING_ALLOWED="$CODE_SIGNING_ALLOWED" \
+            | xcpretty
+
+  s3-compat:
+    name: S3-compatible compatibility (credentialed, opt-in)
+    runs-on: macos-26
+    needs: sync-tests
+    if: ${{ vars.STICKY_RUN_CREDENTIALED_SYNC == 'true' }}
+    timeout-minutes: 30
+    env:
+      STICKY_S3_TEST_ENDPOINT: ${{ secrets.STICKY_S3_TEST_ENDPOINT }}
+      STICKY_S3_TEST_REGION: ${{ secrets.STICKY_S3_TEST_REGION }}
+      STICKY_S3_TEST_BUCKET: ${{ secrets.STICKY_S3_TEST_BUCKET }}
+      STICKY_S3_TEST_KEY: ${{ secrets.STICKY_S3_TEST_KEY }}
+      STICKY_S3_TEST_SECRET: ${{ secrets.STICKY_S3_TEST_SECRET }}
+      STICKY_S3_TEST_TOKEN: ${{ secrets.STICKY_S3_TEST_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -switch /Applications/Xcode_$XCODE_VERSION.app
+      - name: Real S3 compatibility
+        run: |
+          xcodebuild test \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -destination 'platform=macOS' \
+            -only-testing:SyncCoreTests/RealServiceCompatibilityTests/S3 \
+            CODE_SIGNING_ALLOWED="$CODE_SIGNING_ALLOWED" \
+            | xcpretty

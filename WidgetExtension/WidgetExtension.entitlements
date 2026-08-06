@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+        WidgetExtension entitlements.
+
+        The widget reads the App Group SQLite DB in short transactions and
+        performs small atomic todo-toggle writes (plan §Widgets; research.md
+        R6). It MUST NOT initialize the sync engine, MUST NOT link
+        SyncCore/SecurityCore, and MUST fall back to privacy-safe placeholders
+        on schema mismatch (constitution VI).
+    -->
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.local.stickynotes.placeholder</string>
+    </array>
+
+    <!--
+        Read-write access to the App Group container is required for atomic
+        todo-toggle writes. Widget writes are tiny and retried on SQLITE_BUSY
+        (research.md R6).
+    -->
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <false/>
+
+    <!--
+        The widget NEVER needs network access. Sync is owned by the main app
+        (constitution VI/XI).
+    -->
+</dict>
+</plist>

@@ -42,15 +42,15 @@ All paths below are repository-relative.
 **Purpose**: Xcode workspace, Swift package, targets, CI, App Group, entitlements.
 
 - [ ] T001 Create Xcode workspace with macOS app target `App` and Widget Extension target `WidgetExtension` per plan.md §Project Structure
-- [ ] T002 [P] Create local Swift package `Packages/StickyCore/Package.swift` declaring 7 library targets (Domain, Persistence, EditorCore, AssetStore, SecurityCore, SyncCore, SystemBridge) + 7 test targets with dependency direction from plan.md §Module boundaries
-- [ ] T003 [P] Configure macOS 26 deployment target + Swift 6 language mode + strict concurrency + treat-warnings-as-errors for project-owned code in both Xcode project and Package.swift
-- [ ] T004 Add GRDB.swift as a SwiftPM dependency pinned via Package.resolved; wire into Persistence target only
-- [ ] T005 [P] Create App Group entitlement (`group.local.stickynotes.placeholder`) + sandbox + user-selected read/write in `App/Resources/StickyNotes.entitlements` and matching entry in `WidgetExtension/WidgetExtension.entitlements`
-- [ ] T006 [P] Create `App/Resources/PrivacyInfo.xcprivacy` documenting screen-recording usage (capture) only, per constitution Principle VI
-- [ ] T007 [P] Create String Catalogs `App/Resources/Localizable.xcstrings` with English + Simplified Chinese (zh-Hans) per plan.md §Localization
-- [ ] T008 [P] Set up `Documentation/toolchain.md` recording the detected Xcode/Swift toolchain and macOS 26 minimum target per research.md R0
-- [ ] T009 Create `.github/workflows/ci.yml` macOS runner with Xcode 26.x stages: dependency resolve, debug build, unit tests, migration tests, editor tests, security vectors, provider contract tests, sync tests, UI smoke, static warnings per plan.md §Testing and §Project Structure (.github/workflows/)
-- [ ] T010 [P] Configure `.gitignore` to exclude App Group container, derived data, local credential/env files per quickstart.md §Avoiding committing secrets
+- [X] T002 [P] Create local Swift package `Packages/StickyCore/Package.swift` declaring 7 library targets (Domain, Persistence, EditorCore, AssetStore, SecurityCore, SyncCore, SystemBridge) + 7 test targets with dependency direction from plan.md §Module boundaries
+- [X] T003 [P] Configure macOS 26 deployment target + Swift 6 language mode + strict concurrency + treat-warnings-as-errors for project-owned code in both Xcode project and Package.swift
+- [X] T004 Add GRDB.swift as a SwiftPM dependency pinned via Package.resolved; wire into Persistence target only
+- [X] T005 [P] Create App Group entitlement (`group.local.stickynotes.placeholder`) + sandbox + user-selected read/write in `App/Resources/StickyNotes.entitlements` and matching entry in `WidgetExtension/WidgetExtension.entitlements`
+- [X] T006 [P] Create `App/Resources/PrivacyInfo.xcprivacy` documenting screen-recording usage (capture) only, per constitution Principle VI
+- [X] T007 [P] Create String Catalogs `App/Resources/Localizable.xcstrings` with English + Simplified Chinese (zh-Hans) per plan.md §Localization
+- [X] T008 [P] Set up `Documentation/toolchain.md` recording the detected Xcode/Swift toolchain and macOS 26 minimum target per research.md R0
+- [X] T009 Create `.github/workflows/ci.yml` macOS runner with Xcode 26.x stages: dependency resolve, debug build, unit tests, migration tests, editor tests, security vectors, provider contract tests, sync tests, UI smoke, static warnings per plan.md §Testing and §Project Structure (.github/workflows/)
+- [X] T010 [P] Configure `.gitignore` to exclude App Group container, derived data, local credential/env files per quickstart.md §Avoiding committing secrets
 
 ---
 
@@ -60,21 +60,21 @@ All paths below are repository-relative.
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T011 [P] Define Domain value types: `Note`, `Block`, `TodoItem`, `Asset`, `FileReference`, `ScreenshotAssociation`, `Tombstone`, `DeviceIdentity`, `VaultConfiguration`, `WindowState` (device-local frame), `SyncState` (device-local vault run state), `SearchDocument` projection in `Packages/StickyCore/Sources/Domain/Models/` per data-model.md §Entities (Foundation-only, Sendable)
-- [ ] T012 [P] Define Domain enums: `BlockKind`, `NoteColorKey`, `TextSize`, `NoteLifecycleState`, `FileAvailability`, `SyncVersionState` (per-entity sync lineage: unsynchronizedLocalModification/synchronizedVersion/divergentVersion/partialAssetSyncFailure per data-model.md §SyncVersionState) in `Packages/StickyCore/Sources/Domain/Models/Enums.swift`
-- [ ] T013 [P] Define Domain version-lineage struct (`versionId`, `parentVersionId`, `lastModifiedDeviceId`, `modifiedAt`) + sort-key normalization rules (1024-gap) in `Packages/StickyCore/Sources/Domain/Models/VersionLineage.swift`
-- [ ] T014 [P] Define canonical rich-text model (paragraph/run/scalar-offset, NFC, supported marks) in `Packages/StickyCore/Sources/Domain/Models/RichTextDocument.swift` conforming to contracts/rich-text.schema.json
-- [ ] T015 [P] Define canonical note document + block payload types in `Packages/StickyCore/Sources/Domain/Models/CanonicalNote.swift` conforming to contracts/note-document.schema.json and contracts/block-payloads.schema.json
-- [ ] T016 [P] Implement deterministic JSON encoding/decoding for canonical types (stable keys, ISO 8601 UTC, UUID strings, explicit schemaVersion) in `Packages/StickyCore/Sources/Domain/CanonicalCoding.swift`
-- [ ] T017 Implement GRDB `DatabasePool` with WAL mode + bounded busy timeout in App Group container in `Packages/StickyCore/Sources/Persistence/DatabaseStore.swift`
-- [ ] T018 Implement ordered migration framework + `schema_migrations` table in `Packages/StickyCore/Sources/Persistence/Migrations/Migrator.swift`; main app owns migrations
-- [ ] T019 Create initial schema migration `v1` (all entities from data-model.md) in `Packages/StickyCore/Sources/Persistence/Migrations/m0001_initial.swift` with indexes from data-model.md §Indexes
-- [ ] T020 [P] Implement FTS5 `notes_fts` table + indexing on note change in `Packages/StickyCore/Sources/Persistence/FullTextSearch.swift`
-- [ ] T021 [P] Define repository protocols (NoteRepository, BlockRepository, TodoRepository, AssetRepository) in `Packages/StickyCore/Sources/Persistence/Repositories/` returning Sendable snapshots; concrete rows NOT exported as contracts
-- [ ] T022 Implement integrity check + pre-migration backup + interrupted-migration recovery in `Packages/StickyCore/Sources/Persistence/Recovery.swift`
-- [ ] T023 [P] Define typed error categories (Persistence, EditorConversion, AssetStorage, FileRefAccess, Capture, Permission, Encryption, Credentials, WebDAV, S3, SyncConflict, RemoteCorruption, SchemaCompatibility) in `Packages/StickyCore/Sources/Domain/Errors.swift`
+- [X] T011 [P] Define Domain value types: `Note`, `Block`, `TodoItem`, `Asset`, `FileReference`, `ScreenshotAssociation`, `Tombstone`, `DeviceIdentity`, `VaultConfiguration`, `WindowState` (device-local frame), `SyncState` (device-local vault run state), `SearchDocument` projection in `Packages/StickyCore/Sources/Domain/Models/` per data-model.md §Entities (Foundation-only, Sendable)
+- [X] T012 [P] Define Domain enums: `BlockKind`, `NoteColorKey`, `TextSize`, `NoteLifecycleState`, `FileAvailability`, `SyncVersionState` (per-entity sync lineage: unsynchronizedLocalModification/synchronizedVersion/divergentVersion/partialAssetSyncFailure per data-model.md §SyncVersionState) in `Packages/StickyCore/Sources/Domain/Models/Enums.swift`
+- [X] T013 [P] Define Domain version-lineage struct (`versionId`, `parentVersionId`, `lastModifiedDeviceId`, `modifiedAt`) + sort-key normalization rules (1024-gap) in `Packages/StickyCore/Sources/Domain/Models/VersionLineage.swift`
+- [X] T014 [P] Define canonical rich-text model (paragraph/run/scalar-offset, NFC, supported marks) in `Packages/StickyCore/Sources/Domain/Models/RichTextDocument.swift` conforming to contracts/rich-text.schema.json
+- [X] T015 [P] Define canonical note document + block payload types in `Packages/StickyCore/Sources/Domain/Models/CanonicalNote.swift` conforming to contracts/note-document.schema.json and contracts/block-payloads.schema.json
+- [X] T016 [P] Implement deterministic JSON encoding/decoding for canonical types (stable keys, ISO 8601 UTC, UUID strings, explicit schemaVersion) in `Packages/StickyCore/Sources/Domain/CanonicalCoding.swift`
+- [X] T017 Implement GRDB `DatabasePool` with WAL mode + bounded busy timeout in App Group container in `Packages/StickyCore/Sources/Persistence/DatabaseStore.swift`
+- [X] T018 Implement ordered migration framework + `schema_migrations` table in `Packages/StickyCore/Sources/Persistence/Migrations/Migrator.swift`; main app owns migrations
+- [X] T019 Create initial schema migration `v1` (all entities from data-model.md) in `Packages/StickyCore/Sources/Persistence/Migrations/m0001_initial.swift` with indexes from data-model.md §Indexes
+- [X] T020 [P] Implement FTS5 `notes_fts` table + indexing on note change in `Packages/StickyCore/Sources/Persistence/FullTextSearch.swift`
+- [X] T021 [P] Define repository protocols (NoteRepository, BlockRepository, TodoRepository, AssetRepository) in `Packages/StickyCore/Sources/Persistence/Repositories/` returning Sendable snapshots; concrete rows NOT exported as contracts
+- [X] T022 Implement integrity check + pre-migration backup + interrupted-migration recovery in `Packages/StickyCore/Sources/Persistence/Recovery.swift`
+- [X] T023 [P] Define typed error categories (Persistence, EditorConversion, AssetStorage, FileRefAccess, Capture, Permission, Encryption, Credentials, WebDAV, S3, SyncConflict, RemoteCorruption, SchemaCompatibility) in `Packages/StickyCore/Sources/Domain/Errors.swift`
 - [ ] T024 [P] Define small `AppEnvironment` with explicit-initializer DI (composed services, no DI framework) in `App/Sources/App/AppEnvironment.swift`
-- [ ] T025 [P] Define OSLog `Logger` wrappers with privacy annotations + sanitized error codes in `Packages/StickyCore/Sources/Domain/Logging.swift` per plan.md §Diagnostics
+- [X] T025 [P] Define OSLog `Logger` wrappers with privacy annotations + sanitized error codes in `Packages/StickyCore/Sources/Domain/Logging.swift` per plan.md §Diagnostics
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
@@ -468,3 +468,9 @@ With multiple contributors:
 - Verify each checkpoint before moving on; stop at any checkpoint to validate a story independently.
 - Avoid: vague tasks, same-file conflicts, cross-story dependencies that break independence.
 - Milestone 0 prototypes (T025a) validate high-risk assumptions per research.md R0–R18 before broad feature work depends on them.
+
+---
+
+## Phase 14: Convergence
+
+- [ ] T152 Enforce `Note.coverScreenshotBlockId → Block.id` foreign key in v1 schema per data-model.md:277 (partial) — the FK was dropped from `Packages/StickyCore/Sources/Persistence/Migrations/m0001_initial.swift` because GRDB's column-level `references("block")` queries the destination table's PK at CREATE time and `block` is created after `note` (circular dependency). Fix by either (a) creating the `note` table via raw SQL with `REFERENCES "block"("id") ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED` (verified to work — SQLite defers the FK target existence check), or (b) reordering table creation so `block` is created before `note` and the `block.noteId → note` FK is added via a subsequent table recreation. Add a migration test asserting the FK exists in `sqlite_master` and that deleting a cover screenshot block nulls `note.coverScreenshotBlockId`.
