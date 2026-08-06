@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://stickynotes.local/contracts/encrypted-manifest.schema.json",
   "title": "Encrypted Remote Manifest",
-  "description": "The single encrypted manifest/index object that serializes multi-device synchronization. Committed via a conditional write (If-Match / versioned If-Match). After decryption it lists the current set of remote objects with their version lineage so devices can compare without listing. The manifest itself is encrypted as an object (see encrypted-envelope.schema.json); this schema describes the decrypted manifest payload. Schema version 1.",
+  "description": "The single encrypted manifest/index object that serializes multi-device synchronization. Committed via a conditional write (If-Match / versioned If-Match). After decryption it lists the current set of remote objects with their version lineage so devices can compare without listing. The manifest itself is encrypted as an object (see encrypted-envelope.schema.json); this schema describes the decrypted manifest payload. Schema version 1. The manifest carries only opaque object names + sizes/times (FR-160b accepted observable-leakage bound); semantic object types are encrypted inside each object, NOT exposed here. Assets appear as independent entries (FR-090a) — never bundled inside note envelopes.",
   "type": "object",
   "required": ["schemaVersion", "manifestVersion", "vaultId", "entries", "tombstones", "updatedAt", "updatedByDeviceId"],
   "additionalProperties": false,

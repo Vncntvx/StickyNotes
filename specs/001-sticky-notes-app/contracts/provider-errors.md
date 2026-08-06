@@ -23,14 +23,15 @@ content, credentials, or full remote responses in user-facing messages or logs.
 | `schemaUnsupported` | Object envelope/manifest version unsupported. | Fail closed; surface "vault needs a newer app version"; do not mutate. |
 | `canceled` | Operation canceled. | Stop; leave remote consistent. |
 | `tls` | TLS/certificate failure (e.g. pinned cert mismatch). | Fail closed; require explicit re-confirmation (self-signed advanced flow). |
+| `wrongVault` | Bootstrap object's `vaultId` does not match the locally-configured `vaultId`, or a bootstrap already exists under the chosen locator for a new vault (FR edge case, clarified 2026-08-07). | Fail closed; do NOT modify any local or remote data; prompt user to choose a different repository or start a new empty vault under a fresh random locator. |
 | `unknown` | Unrecognized provider response. | Sanitized diagnostic; do not retry indefinitely. |
 
 ## Rules
 
 - Adapters MUST map every raw provider outcome into exactly one category.
-- `corrupt`, `auth`, `forbidden`, `schemaUnsupported`, `tls`, and an unexpected
-  context/decryption failure MUST **fail closed**: no local data is overwritten
-  or deleted; no remote object is silently accepted.
+- `corrupt`, `auth`, `forbidden`, `schemaUnsupported`, `tls`, `wrongVault`,
+  and an unexpected context/decryption failure MUST **fail closed**: no local
+  data is overwritten or deleted; no remote object is silently accepted.
 - Logs record only the code + operation timing + object counts/sizes (no names,
   no content). User-facing messages are localized and reveal no sensitive
   technical detail.
