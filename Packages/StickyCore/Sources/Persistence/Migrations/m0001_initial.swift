@@ -264,13 +264,13 @@ public enum InitialSchema {
         // MARK: FTS5 notes_fts (T020)
         //
         // External-content FTS5 synchronized with a `note_fts_content`
-        // content table. We do NOT use GRDB's `synchronize(withTable:)`
-        // because the FTS columns source from multiple tables (Note.title,
-        // generated summary, concatenated block payloads). Instead we
-        // expose a dedicated content table `note_fts_content` whose columns
-        // are written transactionally by the SearchService when a note
-        // changes (T042). The triggers below keep the FTS index in sync
-        // with the content table.
+        // content table. The FTS columns source from multiple tables
+        // (Note.title, generated summary, concatenated block payloads), so
+        // SearchService writes the `note_fts_content` rows transactionally
+        // when a note changes (T042). `synchronize(withTable:)` below links
+        // the virtual table to that content table and installs the
+        // INSERT/UPDATE/DELETE triggers (created automatically by GRDB) that
+        // keep the FTS index in sync with the content table.
 
         try db.create(table: "note_fts_content") { t in
             t.column("noteId", .text).notNull().primaryKey()

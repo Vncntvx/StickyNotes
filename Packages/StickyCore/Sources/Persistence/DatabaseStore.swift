@@ -23,6 +23,8 @@ import Domain
 /// management and concurrency).
 public final class DatabaseStore: Sendable {
     public let dbPool: DatabasePool
+    /// The database file path (nil for stores built from an existing pool).
+    public let databasePath: String?
 
     /// Opens (or creates) the database at the given path with WAL mode and a
     /// bounded busy timeout.
@@ -33,6 +35,7 @@ public final class DatabaseStore: Sendable {
     ///     (default 5 seconds; the widget uses shorter timeouts via its own
     ///     pool).
     public init(path: String, busyTimeout: TimeInterval = 5.0) throws {
+        self.databasePath = path
         var config = Configuration()
         // WAL mode + busy timeout (research.md R6).
         config.busyMode = .timeout(busyTimeout)
@@ -65,21 +68,13 @@ public final class DatabaseStore: Sendable {
     public static func inMemory() throws -> DatabaseStore {
         let tempDir = NSTemporaryDirectory()
         let path = (tempDir as NSString).appendingPathComponent("stickynotes-test-\(UUID().uuidString).sqlite")
-        let store = try DatabaseStore(path: path, busyTimeout: 1.0)
-        // Register the temp path for cleanup on deinit.
-        Task { await TempDatabasePaths.register(path) }
-        return store
-    }
-
-    deinit {
-        // No explicit cleanup — temp DBs are cleaned up by the OS.
-        // Persistence tests use unique UUID-suffixed paths to avoid
-        // collisions across parallel test runs.
+        return try DatabaseStore(path: path, busyTimeout: 1.0)
     }
 
     /// Internal initializer for tests that already have a pool.
     public init(pool: DatabasePool) {
         self.dbPool = pool
+        self.databasePath = nil
     }
 
     // MARK: - Read/write helpers

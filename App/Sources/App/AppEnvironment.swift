@@ -62,6 +62,46 @@ public struct AppEnvironment: Sendable {
         sync: SyncServices.placeholder,
         systemBridge: SystemBridgeServices.placeholder
     )
+
+    /// Bootstraps the database and composes the environment (T154).
+    ///
+    /// Startup sequence per plan §Local storage:
+    /// 1. `MigrationRecovery.recoverFromInterruptedMigration` — restore the
+    ///    pre-migration backup if a previous launch crashed mid-migration.
+    /// 2. Open the `DatabasePool` (WAL, foreign keys, bounded busy timeout).
+    /// 3. Run pending migrations with pre-migration backup + post-migration
+    ///    integrity check (restore-on-failure, never half-migrated).
+    ///
+    /// The app calls this once at launch; a failure surfaces a
+    /// `SchemaCompatibility`-class error and the app refuses to start rather
+    /// than running against an inconsistent database (constitution IV, X).
+    public static func bootstrap(
+        appGroupContainerURL: URL
+    ) async throws -> AppEnvironment {
+        let fm = FileManager.default
+        let baseURL = appGroupContainerURL.appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent("Application Support", isDirectory: true)
+        try fm.createDirectory(at: baseURL, withIntermediateDirectories: true)
+
+        let databasePath = baseURL
+            .appendingPathComponent(DatabaseBootstrap.databaseFileName).path
+        let backupPath = DatabaseBootstrap.backupPath(forDatabasePath: databasePath)
+
+        let store = try await DatabaseBootstrap.open(
+            databasePath: databasePath,
+            backupPath: backupPath
+        )
+
+        return AppEnvironment(
+            domain: DomainServices(),
+            persistence: PersistenceServices(store: store),
+            editor: EditorServices(),
+            assets: AssetServices(),
+            security: SecurityServices(),
+            sync: SyncServices(),
+            systemBridge: SystemBridgeServices()
+        )
+    }
 }
 
 // MARK: - Service groupings
@@ -76,8 +116,14 @@ public struct DomainServices: Sendable {
 }
 
 public struct PersistenceServices: Sendable {
-    public init() {}
-    public static let placeholder = PersistenceServices()
+    /// The open database store (nil until the app has bootstrapped).
+    public let store: DatabaseStore?
+
+    public init(store: DatabaseStore? = nil) {
+        self.store = store
+    }
+
+    public static let placeholder = PersistenceServices(store: nil)
 }
 
 public struct EditorServices: Sendable {
