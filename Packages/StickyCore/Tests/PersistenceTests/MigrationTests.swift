@@ -325,4 +325,83 @@ import Domain
             #expect(true)
         }
     }
+
+    // MARK: - coverScreenshotBlockId FK (T152 convergence)
+    //
+    // The note.coverScreenshotBlockId → block.id FK is declared
+    // DEFERRABLE INITIALLY DEFERRED in m0001 (raw SQL). This test asserts
+    // the FK exists in sqlite_master's foreign_key_list and that deleting
+    // the referenced block nulls the note's coverScreenshotBlockId (ON
+    // DELETE SET NULL).
+
+    @Test
+    func coverScreenshotBlockIdForeignKeyExistsAndCascadesSetNull() async throws {
+        let store = try await freshDatabase()
+
+        // The FK should be registered. PRAGMA foreign_key_list(note) lists
+        // it; the "table" column points at "block" with ON DELETE SET NULL.
+        // Row isn't Sendable in GRDB, so extract values inside the read.
+        // PRAGMA foreign_key_list returns on_delete as a String in this
+        // SQLite version (e.g. "SET NULL", "NO ACTION", "CASCADE").
+        let fkInfo: [(table: String, onDelete: String)] = try await store.read { db in
+            let rows = try Row.fetchAll(db, sql: "PRAGMA foreign_key_list(note)")
+            return rows.map { row -> (table: String, onDelete: String) in
+                (table: row["table"] ?? "", onDelete: row["on_delete"] ?? "")
+            }
+        }
+        // Find the FK whose target table is "block".
+        let blockFK = fkInfo.first { $0.table == "block" }
+        #expect(blockFK != nil, "note.coverScreenshotBlockId → block.id FK must exist (T152)")
+        #expect(blockFK?.onDelete == "SET NULL", "FK must be ON DELETE SET NULL; got \(String(describing: blockFK?.onDelete))")
+
+        // Behavioral test: inserting a note + a screenshot block, setting
+        // the cover reference, then deleting the block should null the
+        // note's coverScreenshotBlockId (DB-level ON DELETE SET NULL).
+        let noteId = UUID()
+        let blockId = UUID()
+        let deviceId = UUID()
+        try await store.write { db in
+            try db.execute(
+                sql: """
+                    INSERT INTO note (id, colorKey, transparency, textSize, alwaysOnTop, widgetEligible,
+                                      manualSortKey, lifecycleState, versionId, lastModifiedDeviceId,
+                                      createdAt, modifiedAt)
+                    VALUES (?, 'yellow', 0.0, 'regular', 0, 1, 0, 'active', ?, ?, ?, ?)
+                    """,
+                arguments: [noteId.uuidString, UUID().uuidString, deviceId.uuidString,
+                            Date().timeIntervalSince1970, Date().timeIntervalSince1970]
+            )
+            try db.execute(
+                sql: """
+                    INSERT INTO block (id, noteId, kind, sortKey, payload, versionId, lastModifiedDeviceId,
+                                       createdAt, modifiedAt)
+                    VALUES (?, ?, 'screenshot', 0, '{}', ?, ?, ?, ?)
+                    """,
+                arguments: [blockId.uuidString, noteId.uuidString, UUID().uuidString, deviceId.uuidString,
+                            Date().timeIntervalSince1970, Date().timeIntervalSince1970]
+            )
+            try db.execute(
+                sql: "UPDATE note SET coverScreenshotBlockId = ? WHERE id = ?",
+                arguments: [blockId.uuidString, noteId.uuidString]
+            )
+        }
+
+        // Verify the cover reference is set.
+        let coverBefore: String? = try await store.read { db in
+            try String.fetchOne(db, sql: "SELECT coverScreenshotBlockId FROM note WHERE id = ?",
+                                arguments: [noteId.uuidString])
+        }
+        #expect(coverBefore == blockId.uuidString)
+
+        // Delete the block; the DB-level ON DELETE SET NULL should fire.
+        try await store.write { db in
+            try db.execute(sql: "DELETE FROM block WHERE id = ?", arguments: [blockId.uuidString])
+        }
+
+        let coverAfter: String? = try await store.read { db in
+            try String.fetchOne(db, sql: "SELECT coverScreenshotBlockId FROM note WHERE id = ?",
+                                arguments: [noteId.uuidString])
+        }
+        #expect(coverAfter == nil, "deleting the cover screenshot block must null note.coverScreenshotBlockId (ON DELETE SET NULL)")
+    }
 }

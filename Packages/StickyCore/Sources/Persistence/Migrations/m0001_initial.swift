@@ -47,37 +47,39 @@ public enum InitialSchema {
     /// data-model.md.
     public static func createV1Schema(in db: Database) throws {
         // MARK: Note
+        //
+        // Created via raw SQL (not GRDB's `db.create(table:)` DSL) so the
+        // `coverScreenshotBlockId → block.id` foreign key can be declared
+        // `DEFERRABLE INITIALLY DEFERRED`. This defers SQLite's FK target
+        // existence check until the first transaction commit, which lets
+        // us reference `block` (created below) without reordering. The FK
+        // enforces `ON DELETE SET NULL` at the DB level — defense-in-depth
+        // alongside the app-layer clearing in NoteRepository.deleteBlock
+        // (T030). Per T152 (convergence) and data-model.md:277.
 
-        try db.create(table: "note") { t in
-            t.column("id", .text).notNull().primaryKey()
-            // nullable manual title; nil ⇒ generated summary is display-only.
-            t.column("title", .text)
-            t.column("colorKey", .text).notNull()
-            t.column("customColor", .text)
-            t.column("transparency", .double).notNull()
-            t.column("textSize", .text).notNull()
-            t.column("alwaysOnTop", .boolean).notNull()
-            t.column("widgetEligible", .boolean).notNull()
-            // coverScreenshotBlockId: nullable FK to block. We do NOT declare
-            // the FK constraint here because `block` is created after `note`
-            // (block.noteId references note via cascade), and GRDB's column-
-            // level `references` requires the destination table to exist at
-            // CREATE TABLE time (it queries the destination PK). App-layer
-            // integrity checks (T022) handle orphans; the SET NULL behavior
-            // is enforced at the repository level (NoteRepository clears
-            // coverScreenshotBlockId when the referenced block is deleted).
-            t.column("coverScreenshotBlockId", .text)
-            t.column("manualSortKey", .integer).notNull()
-            t.column("lifecycleState", .text).notNull()
-            t.column("trashedAt", .datetime)
-            t.column("conflictOriginNoteId", .text)
-            t.column("conflictLabel", .text)
-            t.column("versionId", .text).notNull()
-            t.column("parentVersionId", .text)
-            t.column("lastModifiedDeviceId", .text).notNull()
-            t.column("createdAt", .datetime).notNull()
-            t.column("modifiedAt", .datetime).notNull()
-        }
+        try db.execute(sql: """
+            CREATE TABLE note (
+                id TEXT NOT NULL PRIMARY KEY,
+                title TEXT,
+                colorKey TEXT NOT NULL,
+                customColor TEXT,
+                transparency DOUBLE NOT NULL,
+                textSize TEXT NOT NULL,
+                alwaysOnTop BOOLEAN NOT NULL,
+                widgetEligible BOOLEAN NOT NULL,
+                coverScreenshotBlockId TEXT REFERENCES block(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED,
+                manualSortKey INTEGER NOT NULL,
+                lifecycleState TEXT NOT NULL,
+                trashedAt DATETIME,
+                conflictOriginNoteId TEXT,
+                conflictLabel TEXT,
+                versionId TEXT NOT NULL,
+                parentVersionId TEXT,
+                lastModifiedDeviceId TEXT NOT NULL,
+                createdAt DATETIME NOT NULL,
+                modifiedAt DATETIME NOT NULL
+            )
+            """)
 
         // Indexes per data-model.md §Indexes.
         try db.create(index: "note_lifecycle_modifiedAt", on: "note", columns: ["lifecycleState", "modifiedAt"])

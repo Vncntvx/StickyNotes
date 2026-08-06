@@ -23,7 +23,7 @@ import Foundation
 ///   format does not require slash escaping.
 /// - `.sortedKeys`: deterministic output for content hashing & stable diffs.
 /// - Date encoding: ISO 8601 with `Z` suffix (UTC) — see `CanonicalDateFormatter`.
-public struct CanonicalJSONEncoder {
+public struct CanonicalJSONEncoder: Sendable {
     public let encoder: JSONEncoder
 
     public init() {
@@ -49,7 +49,7 @@ public struct CanonicalJSONEncoder {
 }
 
 /// The canonical JSON decoder used at every persistence/sync boundary.
-public struct CanonicalJSONDecoder {
+public struct CanonicalJSONDecoder: Sendable {
     public let decoder: JSONDecoder
 
     public init() {

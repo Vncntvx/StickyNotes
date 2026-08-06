@@ -73,7 +73,7 @@ All paths below are repository-relative.
 - [X] T021 [P] Define repository protocols (NoteRepository, BlockRepository, TodoRepository, AssetRepository) in `Packages/StickyCore/Sources/Persistence/Repositories/` returning Sendable snapshots; concrete rows NOT exported as contracts
 - [X] T022 Implement integrity check + pre-migration backup + interrupted-migration recovery in `Packages/StickyCore/Sources/Persistence/Recovery.swift`
 - [X] T023 [P] Define typed error categories (Persistence, EditorConversion, AssetStorage, FileRefAccess, Capture, Permission, Encryption, Credentials, WebDAV, S3, SyncConflict, RemoteCorruption, SchemaCompatibility) in `Packages/StickyCore/Sources/Domain/Errors.swift`
-- [ ] T024 [P] Define small `AppEnvironment` with explicit-initializer DI (composed services, no DI framework) in `App/Sources/App/AppEnvironment.swift`
+- [X] T024 [P] Define small `AppEnvironment` with explicit-initializer DI (composed services, no DI framework) in `App/Sources/App/AppEnvironment.swift`
 - [X] T025 [P] Define OSLog `Logger` wrappers with privacy annotations + sanitized error codes in `Packages/StickyCore/Sources/Domain/Logging.swift` per plan.md §Diagnostics
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
@@ -98,15 +98,15 @@ All paths below are repository-relative.
 
 ### Tests for User Story 1 (write FIRST, must FAIL) ⚠️
 
-- [ ] T026 [P] [US1] Migration test: fresh DB creation + v1 schema integrity in `Packages/StickyCore/Tests/PersistenceTests/MigrationTests.swift`
-- [ ] T027 [P] [US1] Domain test: Note create/lifecycle + auto-discard empty note + preserve previously-content note when text empty in `Packages/StickyCore/Tests/DomainTests/NoteLifecycleTests.swift`
-- [ ] T028 [P] [US1] Domain test: canonical Note round-trip JSON lossless in `Packages/StickyCore/Tests/DomainTests/CanonicalNoteTests.swift`
+- [X] T026 [P] [US1] Migration test: fresh DB creation + v1 schema integrity in `Packages/StickyCore/Tests/PersistenceTests/MigrationTests.swift`
+- [X] T027 [P] [US1] Domain test: Note create/lifecycle + auto-discard empty note + preserve previously-content note when text empty in `Packages/StickyCore/Tests/DomainTests/NoteLifecycleTests.swift`
+- [X] T028 [P] [US1] Domain test: canonical Note round-trip JSON lossless in `Packages/StickyCore/Tests/DomainTests/CanonicalNoteTests.swift`
 - [ ] T029 [US1] Integration test: create note → close without save → reopen → content preserved; one window per note, focus not duplicate in `AppTests/NoteCaptureIntegrationTests.swift`
 
 ### Implementation for User Story 1
 
-- [ ] T030 [US1] Implement SQLite repository for Note + Block (CRUD, ordering) in `Packages/StickyCore/Sources/Persistence/Repositories/NoteRepository.swift`
-- [ ] T031 [P] [US1] Implement auto-save draft manager (debounce ~300ms, structural ops immediate, flush on focus-loss/close/terminate, revision tokens) in `Packages/StickyCore/Sources/EditorCore/AutoSave.swift`
+- [X] T030 [US1] Implement SQLite repository for Note + Block (CRUD, ordering) in `Packages/StickyCore/Sources/Persistence/Repositories/NoteRepository.swift`
+- [X] T031 [P] [US1] Implement auto-save draft manager (debounce ~300ms, structural ops immediate, flush on focus-loss/close/terminate, revision tokens) in `Packages/StickyCore/Sources/EditorCore/AutoSave.swift`
 - [ ] T032 [US1] Implement SwiftUI `MenuBarExtra` window-style library scene with search/sort/new/Trash/sync-status/Settings/Help/Quit affordances in `App/Sources/Features/Library/MenuBarLibraryScene.swift`
 - [ ] T033 [US1] Implement re-click behavior (focus if not focused, dismiss if focused, never second window) per FR-009 in `App/Sources/Features/Library/MenuBarLibraryScene.swift`
 - [ ] T034 [US1] Implement SwiftUI multi-window note scenes + `NoteWindowCoordinator` (open by UUID, one window per note, focus existing, flush pending edits before close, no reopen after relaunch) in `App/Sources/Features/NoteWindow/NoteWindowCoordinator.swift`
@@ -126,17 +126,17 @@ All paths below are repository-relative.
 
 ### Tests for User Story 2 (write FIRST, must FAIL) ⚠️
 
-- [ ] T038 [P] [US2] Persistence test: FTS5 indexes title/summary/body/todos/code/fileNames/captions and updates transactionally in `Packages/StickyCore/Tests/PersistenceTests/FullTextSearchTests.swift`
-- [ ] T039 [P] [US2] Performance test: search across 10,000 textual notes within 200ms in `Packages/StickyCore/Tests/PersistenceTests/SearchPerformanceTests.swift`
-- [ ] T040 [P] [US2] Domain test: generated summary does not silently become permanent title in `Packages/StickyCore/Tests/DomainTests/GeneratedSummaryTests.swift`
+- [X] T038 [P] [US2] Persistence test: FTS5 indexes title/summary/body/todos/code/fileNames/captions and updates transactionally in `Packages/StickyCore/Tests/PersistenceTests/FullTextSearchTests.swift`
+- [X] T039 [P] [US2] Performance test: search across 10,000 textual notes within 200ms in `Packages/StickyCore/Tests/PersistenceTests/SearchPerformanceTests.swift`
+- [X] T040 [P] [US2] Domain test: generated summary does not silently become permanent title in `Packages/StickyCore/Tests/DomainTests/NoteSummaryTests.swift`
 - [ ] T041 [US2] Integration test: sort switch (modified/created/title/manual) + manual reorder persists in `AppTests/RetrievalIntegrationTests.swift`
 
 ### Implementation for User Story 2
 
-- [ ] T042 [P] [US2] Implement search query + result update (active notes by default; privacy-excluded never revealed) in `Packages/StickyCore/Sources/Persistence/SearchService.swift`
-- [ ] T043 [P] [US2] Implement manual-order sort key + reorder (1024-gap, normalize on collision) in `Packages/StickyCore/Sources/Domain/Models/ManualSort.swift`
+- [X] T042 [P] [US2] Implement search query + result update (active notes by default; privacy-excluded never revealed) in `Packages/StickyCore/Sources/Persistence/SearchService.swift`
+- [X] T043 [P] [US2] Implement manual-order sort key + reorder (1024-gap, normalize on collision) in `Packages/StickyCore/Sources/Domain/Models/VersionLineage.swift`
 - [ ] T044 [US2] Implement library search field + sort switcher UI with prompt result updates in `App/Sources/Features/Library/LibrarySearchView.swift`
-- [ ] T045 [US2] Implement generated-summary derivation (first meaningful content as temporary display title) in `Packages/StickyCore/Sources/Domain/NoteSummary.swift`
+- [X] T045 [US2] Implement generated-summary derivation (first meaningful content as temporary display title) in `Packages/StickyCore/Sources/Domain/NoteSummary.swift`
 
 **Checkpoint**: User Stories 1 AND 2 work independently
 
@@ -150,15 +150,15 @@ All paths below are repository-relative.
 
 ### Tests for User Story 3 (write FIRST, must FAIL) ⚠️
 
-- [ ] T046 [P] [US3] Domain test: color/transparency/textSize/alwaysOnTop persist per note in `Packages/StickyCore/Tests/DomainTests/NoteAppearanceTests.swift`
-- [ ] T047 [P] [US3] Persistence test: WindowState (frame, preferredDisplayUUID, fallbackFrame) stored device-local, never synced in `Packages/StickyCore/Tests/PersistenceTests/WindowStateTests.swift`
+- [X] T046 [P] [US3] Domain test: color/transparency/textSize/alwaysOnTop persist per note in `Packages/StickyCore/Tests/DomainTests/NoteAppearanceTests.swift`
+- [X] T047 [P] [US3] Persistence test: WindowState (frame, preferredDisplayUUID, fallbackFrame) stored device-local, never synced in `Packages/StickyCore/Tests/PersistenceTests/WindowStateTests.swift`
 - [ ] T048 [US3] SystemBridge test: window-frame correction moves off-screen window to visible display + preserves disconnected-display preferred frame in `Packages/StickyCore/Tests/SystemBridgeTests/WindowFrameCorrectionTests.swift`
 - [ ] T049 [US3] Integration test: Always-on-Top per note; contrast readable across light/dark/custom-color/transparency/increased-contrast in `AppTests/AppearanceIntegrationTests.swift`
 
 ### Implementation for User Story 3
 
-- [ ] T050 [P] [US3] Implement note appearance model (built-in colors Yellow/Pink/Purple/Blue/Green/Gray + custom) in `Packages/StickyCore/Sources/Domain/Models/NoteAppearance.swift`
-- [ ] T051 [P] [US3] Implement WindowState repository (device-local) in `Packages/StickyCore/Sources/Persistence/Repositories/WindowStateRepository.swift`
+- [X] T050 [P] [US3] Implement note appearance model (built-in colors Yellow/Pink/Purple/Blue/Green/Gray + custom) in `Packages/StickyCore/Sources/Domain/Models/NoteAppearance.swift`
+- [X] T051 [P] [US3] Implement WindowState repository (device-local) in `Packages/StickyCore/Sources/Persistence/Repositories/WindowStateRepository.swift`
 - [ ] T052 [US3] Implement upper control area (title/color/transparency/textSize/Always-on-Top/screenshot/file-ref/actions/close) hidden until pointer enter in `App/Sources/Features/NoteWindow/NoteControlsView.swift`
 - [ ] T053 [US3] Implement per-window floating level via AppKit bridge in `Packages/StickyCore/Sources/SystemBridge/WindowLevelBridge.swift`
 - [ ] T054 [US3] Implement display connect/disconnect handling + frame restoration + fallback frame in `Packages/StickyCore/Sources/SystemBridge/DisplayChangeBridge.swift`
@@ -176,18 +176,18 @@ All paths below are repository-relative.
 
 ### Tests for User Story 4 (write FIRST, must FAIL) ⚠️
 
-- [ ] T056 [P] [US4] Domain test: TodoItem stable UUID across identical text/text-change/reorder (FR-071) + hierarchy validation (no cycles, depth bound, no orphaned children) in `Packages/StickyCore/Tests/DomainTests/TodoIdentityTests.swift`
-- [ ] T057 [P] [US4] Domain test: code block preserves whitespace/tabs/line breaks; copy copies only code in `Packages/StickyCore/Tests/DomainTests/CodeBlockTests.swift`
-- [ ] T058 [P] [US4] Domain test: FileReference syncs only generic metadata; FileLocator bookmark/paths never in canonical JSON in `Packages/StickyCore/Tests/DomainTests/FileReferenceTests.swift`
+- [X] T056 [P] [US4] Domain test: TodoItem stable UUID across identical text/text-change/reorder (FR-071) + hierarchy validation (no cycles, depth bound, no orphaned children) in `Packages/StickyCore/Tests/PersistenceTests/TodoRepositoryTests.swift`
+- [X] T057 [P] [US4] Domain test: code block preserves whitespace/tabs/line breaks; copy copies only code in `Packages/StickyCore/Tests/DomainTests/CodeBlockTests.swift`
+- [X] T058 [P] [US4] Domain test: FileReference syncs only generic metadata; FileLocator bookmark/paths never in canonical JSON in `Packages/StickyCore/Tests/DomainTests/FileReferenceTests.swift`
 - [ ] T059 [US4] SystemBridge test: drag-out copies without deleting; explicit move requires command+destination+confirmation+verify-before-replace; missing file preserves card + relink; no filesystem scan in `Packages/StickyCore/Tests/SystemBridgeTests/FileReferenceAccessTests.swift`
 - [ ] T060 [US4] Integration test: todo complete state communicated by more than color alone (strikethrough) in `AppTests/TodoCodeFileRefIntegrationTests.swift`
 
 ### Implementation for User Story 4
 
-- [ ] T061 [P] [US4] Implement TodoItem repository (identity, hierarchy, sort-key, completion) in `Packages/StickyCore/Sources/Persistence/Repositories/TodoRepository.swift`
+- [X] T061 [P] [US4] Implement TodoItem repository (identity, hierarchy, sort-key, completion) in `Packages/StickyCore/Sources/Persistence/Repositories/TodoRepository.swift`
 - [ ] T062 [P] [US4] Implement todo block view (complete/incomplete, drag reorder, indent/outdent, edit, delete, strikethrough) in `App/Sources/Features/Editor/TodoBlockView.swift`
 - [ ] T063 [P] [US4] Implement code block view (monospaced, preserved whitespace, copy button, optional language label, wrap-or-scroll) in `App/Sources/Features/Editor/CodeBlockView.swift`
-- [ ] T064 [P] [US4] Implement FileReference + FileLocator models per data-model.md in `Packages/StickyCore/Sources/Domain/Models/FileReference.swift`
+- [X] T064 [P] [US4] Implement FileReference + FileLocator models per data-model.md in `Packages/StickyCore/Sources/Domain/Models/FileReference.swift`
 - [ ] T065 [US4] Implement security-scoped bookmark access (balanced start/stop) + availability status + relink in `Packages/StickyCore/Sources/SystemBridge/SecurityScopedBookmarks.swift`
 - [ ] T066 [US4] Implement file-reference card view (name/icon/size/date/availability/origin device) + open/reveal/copy-path/drag-out/move/relink/remove in `App/Sources/Features/Editor/FileReferenceCardView.swift`
 - [ ] T067 [US4] Implement drag-out (copy, never move/delete) + explicit move (destination picker + confirmation + verify) in `Packages/StickyCore/Sources/SystemBridge/FileDragOutBridge.swift`
@@ -204,16 +204,16 @@ All paths below are repository-relative.
 
 ### Tests for User Story 5 (write FIRST, must FAIL) ⚠️
 
-- [ ] T068 [P] [US5] EditorCore test: line-level transforms (heading/bullet/todo/code-fence) trigger on space/confirm in `Packages/StickyCore/Tests/EditorCoreTests/MarkdownLineTransformTests.swift`
-- [ ] T069 [P] [US5] EditorCore test: inline transforms (bold/italic/strike/inline-code) trigger after valid closing delimiter in `Packages/StickyCore/Tests/EditorCoreTests/MarkdownInlineTransformTests.swift`
-- [ ] T070 [P] [US5] EditorCore test: single Undo restores exact Markdown syntax + formatting; unmatched delimiters ignored; no conversion inside code blocks except closing fence in `Packages/StickyCore/Tests/EditorCoreTests/MarkdownUndoTests.swift`
-- [ ] T071 [P] [US5] EditorCore test: no corruption of Chinese IME marked text / mixed Chinese-English / emoji / partial syntax in `Packages/StickyCore/Tests/EditorCoreTests/IMECompositionTests.swift`
-- [ ] T072 [P] [US5] EditorCore test: canonical rich-text round-trip lossless for supported marks; unsupported attributes stripped in `Packages/StickyCore/Tests/EditorCoreTests/RichTextRoundTripTests.swift`
+- [X] T068 [P] [US5] EditorCore test: line-level transforms (heading/bullet/todo/code-fence) trigger on space/confirm in `Packages/StickyCore/Tests/EditorCoreTests/MarkdownLineTransformTests.swift`
+- [X] T069 [P] [US5] EditorCore test: inline transforms (bold/italic/strike/inline-code) trigger after valid closing delimiter in `Packages/StickyCore/Tests/EditorCoreTests/MarkdownInlineTransformTests.swift`
+- [X] T070 [P] [US5] EditorCore test: single Undo restores exact Markdown syntax + formatting; unmatched delimiters ignored; no conversion inside code blocks except closing fence in `Packages/StickyCore/Tests/EditorCoreTests/MarkdownUndoTests.swift`
+- [X] T071 [P] [US5] EditorCore test: no corruption of Chinese IME marked text / mixed Chinese-English / emoji / partial syntax in `Packages/StickyCore/Tests/EditorCoreTests/IMECompositionTests.swift`
+- [X] T072 [P] [US5] EditorCore test: canonical rich-text round-trip lossless for supported marks; unsupported attributes stripped in `Packages/StickyCore/Tests/EditorCoreTests/RichTextRoundTripTests.swift`
 
 ### Implementation for User Story 5
 
-- [ ] T073 [US5] Implement Markdown transformation state machine (line-level + inline, ignores unmatched, skips when IME marked text active, one undo group) in `Packages/StickyCore/Sources/EditorCore/MarkdownTransformer.swift`
-- [ ] T074 [US5] Implement editor command layer over `UndoManager` (cursor placement after conversion) in `Packages/StickyCore/Sources/EditorCore/EditorCommands.swift`
+- [X] T073 [US5] Implement Markdown transformation state machine (line-level + inline, ignores unmatched, skips when IME marked text active, one undo group) in `Packages/StickyCore/Sources/EditorCore/MarkdownTransformer.swift`
+- [X] T074 [US5] Implement editor command layer over `UndoManager` (cursor placement after conversion) in `Packages/StickyCore/Sources/EditorCore/EditorCommands.swift`
 - [ ] T075 [US5] Wire Markdown transforms into rich-text block view with IME-safe transformation decisions in `App/Sources/Features/Editor/RichTextBlockView.swift`
 
 **Checkpoint**: User Stories 1–5 work independently
@@ -228,13 +228,13 @@ All paths below are repository-relative.
 
 ### Tests for User Story 6 (write FIRST, must FAIL) ⚠️
 
-- [ ] T076 [P] [US6] Domain test: lifecycle transitions active→trashed→permanentlyDeleted; 30-day expiry; distinguish Trash/permanent/conflictCopy/active in `Packages/StickyCore/Tests/DomainTests/TrashLifecycleTests.swift`
-- [ ] T077 [P] [US6] Domain test: never-contained-content note auto-discardable on close; previously-content note NOT auto-deleted when text empty in `Packages/StickyCore/Tests/DomainTests/EmptyNoteDiscardTests.swift`
-- [ ] T078 [US6] Persistence test: Trash expiry scan + retention 30 days in `Packages/StickyCore/Tests/PersistenceTests/TrashExpiryTests.swift`
+- [X] T076 [P] [US6] Domain test: lifecycle transitions active→trashed→permanentlyDeleted; 30-day expiry; distinguish Trash/permanent/conflictCopy/active in `Packages/StickyCore/Tests/DomainTests/TrashLifecycleTests.swift`
+- [X] T077 [P] [US6] Domain test: never-contained-content note auto-discardable on close; previously-content note NOT auto-deleted when text empty in `Packages/StickyCore/Tests/DomainTests/EmptyNoteDiscardTests.swift`
+- [X] T078 [US6] Persistence test: Trash expiry scan + retention 30 days in `Packages/StickyCore/Tests/PersistenceTests/TrashExpiryTests.swift`
 
 ### Implementation for User Story 6
 
-- [ ] T079 [P] [US6] Implement lifecycle state machine + trash/restore/permanent-delete in `Packages/StickyCore/Sources/Domain/NoteLifecycle.swift`
+- [X] T079 [P] [US6] Implement lifecycle state machine + trash/restore/permanent-delete in `Packages/StickyCore/Sources/Domain/NoteLifecycle.swift`
 - [ ] T080 [US6] Implement Trash UI (list, restore, permanently delete, distinguish states) in `App/Sources/Features/Trash/TrashView.swift`
 - [ ] T081 [US6] Implement empty-note auto-discard logic on window close in `App/Sources/Features/NoteWindow/NoteWindowCoordinator.swift`
 
@@ -473,4 +473,4 @@ With multiple contributors:
 
 ## Phase 14: Convergence
 
-- [ ] T152 Enforce `Note.coverScreenshotBlockId → Block.id` foreign key in v1 schema per data-model.md:277 (partial) — the FK was dropped from `Packages/StickyCore/Sources/Persistence/Migrations/m0001_initial.swift` because GRDB's column-level `references("block")` queries the destination table's PK at CREATE time and `block` is created after `note` (circular dependency). Fix by either (a) creating the `note` table via raw SQL with `REFERENCES "block"("id") ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED` (verified to work — SQLite defers the FK target existence check), or (b) reordering table creation so `block` is created before `note` and the `block.noteId → note` FK is added via a subsequent table recreation. Add a migration test asserting the FK exists in `sqlite_master` and that deleting a cover screenshot block nulls `note.coverScreenshotBlockId`.
+- [X] T152 Enforce `Note.coverScreenshotBlockId → Block.id` foreign key in v1 schema per data-model.md:277 (partial) — the FK was dropped from `Packages/StickyCore/Sources/Persistence/Migrations/m0001_initial.swift` because GRDB's column-level `references("block")` queries the destination table's PK at CREATE time and `block` is created after `note` (circular dependency). Fix by either (a) creating the `note` table via raw SQL with `REFERENCES "block"("id") ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED` (verified to work — SQLite defers the FK target existence check), or (b) reordering table creation so `block` is created before `note` and the `block.noteId → note` FK is added via a subsequent table recreation. Add a migration test asserting the FK exists in `sqlite_master` and that deleting a cover screenshot block nulls `note.coverScreenshotBlockId`.
