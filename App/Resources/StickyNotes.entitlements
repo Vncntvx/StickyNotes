@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+        App Sandbox + App Group + user-selected file access for the macOS app.
+
+        The App Group identifier is a PLACEHOLDER until a final bundle id is
+        chosen (plan.md §Project Structure; quickstart.md §Placeholder App
+        Group + entitlements setup). It MUST be identical in both the app and
+        the WidgetExtension entitlements.
+    -->
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.local.stickynotes.placeholder</string>
+    </array>
+
+    <!--
+        User-selected read/write: required for file-reference security-scoped
+        bookmarks (FR-100..FR-106) and for screenshot Save As (FR-094). Files
+        are referenced, not copied (constitution IX); bookmarks are
+        device-local and never enter canonical JSON.
+    -->
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+
+    <!--
+        Network client: required only for the optional encrypted sync layer
+        (US9). Local-first core (US1–US8) works fully offline (constitution
+        III); this entitlement is granted up-front so the user can enable sync
+        on demand without re-entitling.
+    -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+
+    <!--
+        Camera / microphone are NOT requested — the product captures
+        screenshots of the screen, not camera frames (constitution I).
+    -->
+</dict>
+</plist>

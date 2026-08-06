@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+        PrivacyInfo.xcprivacy — declares the app's privacy-relevant data
+        practices per Apple's Privacy Manifest format (constitution VI:
+        privacy & least privilege).
+
+        This app collects NO analytics and NO telemetry. The only
+        user-content-leaving-device path is the optional E2E-encrypted sync
+        (US9), where content is encrypted client-side before any network
+        transfer and the provider cannot read it (constitution VII).
+
+        The single usage reason declared here is screen recording for the
+        screenshot-capture feature (US7). Capture is invoked on explicit user
+        action only — never preemptively (research.md R7).
+    -->
+
+    <key>NSPrivacyTracking</key>
+    <false/>
+
+    <key>NSPrivacyTrackingDomains</key>
+    <array/>
+
+    <key>NSPrivacyCollectedDataTypes</key>
+    <array/>
+
+    <key>NSPrivacyAccessedAPITypes</key>
+    <array>
+        <dict>
+            <!--
+                ScreenCaptureKit — used for the screenshot capture feature
+                (FR-080..FR-095). Static single-frame capture only; no live
+                monitoring or continuous recording (constitution I non-goal).
+                Requested on explicit user action; no Accessibility prompt
+                for ordinary capture (research.md R7).
+            -->
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryScreenCapture</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <!--
+                    1C8F — App captures images of the user's screen at the
+                    user's explicit request (screenshot feature).
+                -->
+                <string>1C8F.1</string>
+            </array>
+        </dict>
+        <dict>
+            <!--
+                File timestamp / disk-space APIs may be touched by the
+                AssetStore (atomic writes + cleanup queue) and file-reference
+                availability checks. Declared defensively; no user-content
+                collection.
+            -->
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <!-- C617 — file timestamp used by the app's own file handling. -->
+                <string>C617.1</string>
+            </array>
+        </dict>
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryDiskSpace</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <!-- E174 — disk space checked for asset storage sizing. -->
+                <string>E174.1</string>
+            </array>
+        </dict>
+        <dict>
+            <!--
+                UserDefaults — used for non-sensitive local preferences only
+                (window states, sort order, Dock toggle). NEVER for
+                credentials, sync secrets, or note content (constitution VI).
+            -->
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>CA92.1</string>
+            </array>
+        </dict>
+    </array>
+</dict>
+</plist>
