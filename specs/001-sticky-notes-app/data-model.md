@@ -15,9 +15,16 @@ the canonical format) from **device-local** data (never leaves the device).
 - **Timestamps**: UTC, ISO 8601, stored as `TEXT` (SQLite) / ISO strings
   (canonical). Column names: `createdAt`, `modifiedAt`, etc.
 - **Sort keys**: ordered integers with a 1024 gap (e.g., 0, 1024, 2048) so a
-  drag usually changes only the moved row. Normalization: when the gap between
-  two neighbors drops below a threshold (e.g., < 64), renumber the contiguous
-  run by 1024 steps within a single transaction.
+  drag usually changes only the moved row (FR-022a). Normalization: when the
+  gap between two neighbors drops below 64, renumber the contiguous run by
+  1024 steps within a single transaction (FR-022a). **Trash restore
+  (FR-022a, clarified 2026-08-07)**: when a note is restored from Trash, its
+  `manualSortKey` MUST be reset to (current maximum sort-key among active
+  notes) + 1024, placing it at the end of Manual order. The pre-deletion
+  sort-key MUST NOT be retained (notes may have been inserted or reordered
+  during the note's absence, invalidating the original position). The new
+  key is strictly greater than all existing keys, so restore alone never
+  triggers renormalization.
 - **Version lineage** (synced entities): `versionId` (UUID, per mutation),
   `parentVersionId` (UUID, previous version; nil for the initial version),
   `lastModifiedDeviceId` (UUID), `modifiedAt` (UTC).
@@ -36,9 +43,9 @@ The unit a user creates, edits, and retrieves.
 |-------|------|---------|-------|
 | id | UUID | yes | stable note identity |
 | title | TEXT (nullable) | yes | optional manual title; nil ⇒ generated summary is display-only |
-| colorKey | enum | yes | yellow/pink/purple/blue/green/gray/custom |
+| colorKey | enum | yes | yellow/pink/purple/blue/green/gray/custom; built-ins have one canonical sRGB hex each (FR-040a): yellow #FFE08A, pink #F9A8C4, purple #C9A8E8, blue #A8CFF9, green #A8E8B8, gray #D8D8DC |
 | customColor | TEXT (nullable) | yes | hex/rgb when colorKey=custom |
-| transparency | REAL | yes | 0.0–1.0 background transparency |
+| transparency | REAL | yes | background opacity, 0.40–1.00 inclusive, 0.05 steps, default 1.00 (FR-041a; below 1.00 the FR-042 contrast logic validates against the composited background); field name retained from v1 — semantic is opacity (FR-041a), not transparency |
 | textSize | enum | yes | per-note text size |
 | alwaysOnTop | INT (bool) | yes | per-note floating |
 | widgetEligible | INT (bool) | yes | per-note widget privacy gate |
@@ -90,7 +97,7 @@ payload; identity/hierarchy is separate for stability across reorders/edits.)
 | blockId | UUID | yes | FK Block (the todo block) |
 | parentTodoId | UUID (nullable) | yes | explicit hierarchy (subtask) |
 | sortKey | INT | yes | 1024-gap ordering |
-| depth | INT | yes | nesting depth (validation bound, e.g. ≤ 6) |
+| depth | INT | yes | nesting depth; max 6 (FR-072a) |
 | isComplete | INT (bool) | yes | completion state |
 | versionId | UUID | yes | |
 | parentVersionId | UUID (nullable) | yes | |
@@ -99,9 +106,9 @@ payload; identity/hierarchy is separate for stability across reorders/edits.)
 | modifiedAt | TEXT | yes | |
 
 **Validation**: no cycles (parent chain must terminate); parent must be in the
-same note; depth ≤ max; sort-key collisions normalize; deleting a parent does
-not orphan children (children reparented to grandparent or flagged — see
-*State Transitions*).
+same note; depth ≤ 6 (FR-072a); sort-key collisions normalize; deleting a
+parent does not orphan children (children reparented to grandparent or flagged
+— see *State Transitions*).
 
 ### Asset
 
@@ -120,10 +127,18 @@ thumbnails, app icons). Referenced by blocks.
 | syncFailureState | enum (nullable) | local | partial-asset-sync-failure marker |
 | createdAt | TEXT | yes | |
 
-Asset *bytes* are synchronized as independent encrypted objects; the
-`storagePath` is device-local only. `contentHash` enables dedup (two notes
-pasting the same image share one asset object remotely and can share bytes
-locally via reference counting).
+Asset *bytes* are synchronized as independent encrypted objects (FR-090a) —
+never bundled inside an encrypted note envelope; the `storagePath` is
+device-local only. Each asset object carries a SHA-256 `contentHash`
+(Constitution IV) for dedup and corruption detection, and is independently
+retried on partial upload/download failure (Constitution VIII). A failed
+asset upload MUST NOT block synchronization of the referencing note's
+metadata; the asset's `syncFailureState` is set to
+`partialAssetSyncFailure` so it retries independently on the next sync run.
+`contentHash` enables dedup (two notes pasting the same image share one asset
+object remotely and can share bytes locally via reference counting).
+Thumbnails use a 256px longest edge (FR-094a) — the single canonical
+thumbnail size for card-grid and widget display.
 
 ### ScreenshotAssociation
 
@@ -213,6 +228,27 @@ Per-vault synchronization scheduling/progress (vault-level run state; distinct f
 | pendingSince | TEXT (nullable) | local | |
 | config | JSON (redacted) | local | endpoint/region/bucket/prefix; no secrets |
 
+### DiagnosticSnapshot (device-local, never synchronized, never logged with content)
+
+Aggregate, sanitized snapshot used to populate the user-exportable diagnostic
+bundle (FR-191, clarified 2026-08-07). **All fields are positively enumerated;
+any field not listed here is excluded by default.** No note content, titles,
+summaries, captions, file names/paths, window titles, credentials, passwords,
+key material, raw server responses, or remote object names appear here or in
+the exported bundle.
+
+| Field | Type | Synced? | Notes |
+|-------|------|---------|-------|
+| appVersion | TEXT | local | bundle/marketing version |
+| osVersion | TEXT | local | macOS version |
+| schemaVersion | INT | local | local DB schema version |
+| providerType | enum (nullable) | local | webdav/s3, or null if sync unconfigured (never endpoint/hostname/credentials) |
+| recentErrorEvents | JSON array | local | last 30 days; each entry = {timestamp, normalizedErrorCategory}; never raw server responses/bodies |
+| syncRunCounts | JSON | local | {last24h, last7d, last30d} counts + durations (no payloads/object names) |
+| objectCounts | JSON | local | {notes, blocks, assets} aggregate counts (no titles/summaries/captions/content) |
+| vaultState | enum | local | locked/unlocked/unconfigured (never password or derived key) |
+| permissionStatuses | JSON | local | {screenRecording: bool, accessibility: bool} |
+
 ### DeviceIdentity
 
 | Field | Type | Synced? | Notes |
@@ -220,6 +256,21 @@ Per-vault synchronization scheduling/progress (vault-level run state; distinct f
 | id | UUID | yes | stable device identity |
 | displayName | TEXT | local | user-facing name (NOT synced to remote as meaningful metadata) |
 | createdAt | TEXT | yes | |
+
+### LocalPreferences (device-local, never synchronized)
+
+Non-sensitive local preferences. Not a database table — stored in App Group
+UserDefaults, never in SQLite, never in canonical JSON, never synchronized
+(FR-014a, FR-191 boundary).
+
+| Key | Type | Notes |
+|-----|------|-------|
+| `onboardingHintSeen` | bool | first-launch hint shown at least once (FR-014a) |
+| `onboardingHintDismissed` | bool | user dismissed the hint (FR-014a) |
+| `hasCreatedFirstNote` | bool | set when the first note is created; once true the hint is never shown again (FR-014a) |
+
+These keys are app-side UI state; the Widget Extension does not read them.
+They MUST NOT appear in exported diagnostics (FR-191).
 
 ### VaultConfiguration (device-local reference)
 
@@ -232,8 +283,43 @@ Points at a configured vault + provider. **Secrets live in Keychain, not here.**
 | providerType | enum | local | webdav/s3 |
 | providerConfig | JSON (redacted) | local | endpoint/region/bucket/prefix |
 | keychainCredentialRef | TEXT | local | Keychain account label (no secret value) |
-| rememberedUnlock | INT (bool) | local | whether unlocked key material may be remembered |
+| rememberedUnlock | enum | local | disabled / enabledUntilLockOrRestart (FR-162a) |
+| rememberedUnlockKeychainRef | TEXT (nullable) | local | Keychain account label for remembered unwrapped key, only when rememberedUnlock ≠ disabled; cleared on explicit lock; not a login-item daemon (does not survive logout/restart) |
+| rememberedUnlockBootTimestamp | INT (nullable) | local | System boot timestamp captured at remember-time, used to detect Mac restart (FR-162a, clarified 2026-08-07). On app launch, if the current boot timestamp differs, the remembered key is treated as stale and the password is required. |
 | createdAt | TEXT | local | |
+| replacedFromVaultLocator | TEXT (nullable) | local | when this vault replaced a prior one (FR-154), the prior locator is recorded here for user reference; the prior remote data is NOT auto-deleted |
+
+**`rememberedUnlock` semantics (FR-162a, clarified 2026-08-07)**:
+
+- `disabled` (default): password required on every sync-triggering app launch.
+- `enabledUntilLockOrRestart`: the unwrapped vault key may be stored in a
+  Keychain item (referenced by `rememberedUnlockKeychainRef`) so that ordinary
+  app relaunches do not re-prompt for the password. The Keychain item MUST be
+  cleared on explicit lock. The application MUST NOT behave as a login-item-
+  bound daemon that keeps the vault unlocked across system logout or restart;
+  after logout/restart, the password is required again. Forgetting the
+  synchronization password remains unrecoverable regardless of this setting
+  (FR-163).
+- **App-launch unlock (FR-162a, clarified 2026-08-07)**: at application launch
+  with auto-synchronization enabled, (a) if `rememberedUnlock =
+  enabledUntilLockOrRestart` AND `rememberedUnlockBootTimestamp` equals the
+  current system boot timestamp AND the user has not explicitly locked the
+  vault, the application silently restores the unlocked vault state from
+  Keychain and triggers startup synchronization per FR-152a without
+  prompting; (b) otherwise (remember disabled, Mac restarted, or vault
+  locked), the application prompts for the synchronization password before
+  any synchronization occurs. The boot-timestamp comparison makes the
+  "restart clears remember" rule objectively testable and eliminates reliance
+  on login-item or daemon behavior.
+- **Toggle-off while unlocked (FR-162a, clarified 2026-08-07)**: when the user
+  toggles `rememberedUnlock` from `enabledUntilLockOrRestart` to `disabled`
+  while the vault is currently unlocked, the application immediately removes
+  the remembered key from Keychain (clearing `rememberedUnlockKeychainRef`
+  and `rememberedUnlockBootTimestamp`) so future launches will not silently
+  restore, but preserves the current unlocked vault state in memory until
+  the user explicitly locks the vault or the application exits. The
+  application MUST NOT force a re-prompt merely because the setting was
+  toggled off — explicit lock remains a separate, intentional user action.
 
 ### SearchDocument (FTS5)
 
@@ -250,9 +336,13 @@ One searchable row per note. Rebuilt transactionally on note change.
 | captions | screenshot captions |
 | ocr | (future OCR text; empty in v1) |
 
-FTS5 table `notes_fts` is external-content or contentless-with-rowid mapped to
-`Note.id`. Scope filter excludes trashed/permanently-deleted notes by default;
-a separate Trash scope query is provided.
+FTS5 table `notes_fts` is an **external-content table** backed by the
+canonical note/block rows, with an explicit rowid-to-`Note.id` mapping
+(FR-023a). The external-content design guarantees the index cannot drift from
+canonical data: note deletion cascades to the FTS5 entry automatically. If
+drift is detected, the index is rebuilt from canonical data without loss.
+Scope filter excludes trashed/permanently-deleted notes by default; a separate
+Trash scope query is provided.
 
 ## Relationships
 
@@ -273,16 +363,39 @@ DeviceIdentity *───* (Note.lastModifiedDeviceId, Tombstone.deletingDeviceI
 
 - `Block.noteId` → `Note.id` (cascade on note permanent purge).
 - `TodoItem.parentTodoId` → `TodoItem.id` within the same `noteId`; no cycles;
-  `depth ≤ maxDepth`.
+  `depth ≤ 6` (FR-072a).
 - `Note.coverScreenshotBlockId` → `Block.id` where `Block.kind = screenshot`;
   at most one `ScreenshotAssociation.isCover = true` per note (enforced in a
   transaction).
 - `Asset.contentHash` unique among same `kind`+`contentType` for dedup.
 - `FileLocator` is 1:1 with a `fileRef` block; bookmark bytes never appear in
   `FileReference` or canonical JSON.
-- Sort keys: 1024-gap; normalize contiguous runs when gap < threshold.
+- Sort keys: 1024-gap; normalize contiguous runs when gap < 64 (FR-022a).
+- **Sort-key sync reconciliation (FR-022b, clarified 2026-08-07)**: sort-key
+  divergence across devices is reconciled per-note by last-writer-wins (most
+  recently written sort key via the note's version timestamp/sequence); it
+  never triggers a conflict copy. Content divergence is evaluated on content
+  fields only. (Enforced in `SyncCore`, not as a DB constraint.)
+- **Scale limits (FR-090b, clarified 2026-08-07)**: a single asset must be
+  ≤ 50 MB raw and ≤ 16,384 px on the longest edge after capture/paste
+  normalization; a single note's structured content (canonical envelope before
+  asset payloads) must be ≤ 5 MB. Oversize insertions are rejected with no
+  partial write; oversize content changes are refused while preserving the
+  last valid saved state. Enforced at the persistence/asset-store boundary.
 - Lifecycle invariants: a `permanentlyDeleted` note retains a `Tombstone` until
   sync-safety allows purge.
+- **Wrong-vault detection (FR edge case, clarified 2026-08-07)**: the bootstrap
+  object's `vaultId` is authoritative. If a configured or newly-chosen
+  repository contains a bootstrap whose `vaultId` ≠ the locally-configured
+  `vaultId` (or, for a brand-new vault, a bootstrap already exists under the
+  chosen locator), the application MUST fail closed with a typed
+  `Encryption.wrongVaultContext` / `Credentials.wrongVault` error, MUST NOT
+  modify any local or remote data, and MUST prompt the user to choose a
+  different repository or start a new empty vault under a fresh random locator
+  (which bootstraps alongside the existing one without overwriting it). This is
+  enforced in `SecurityCore` / `SyncCore`, not as a DB constraint, but the data
+  model guarantees `VaultConfiguration.vaultId` is the single source of truth
+  for the comparison.
 
 ## State Transitions
 
@@ -312,6 +425,15 @@ DeviceIdentity *───* (Note.lastModifiedDeviceId, Tombstone.deletingDeviceI
   retained for sync.
 - **conflictCopy**: a new note UUID labeled as a conflict/recovered copy;
   behaves as active but is distinguishable.
+- **restore (trashed → active)**: the note returns to the active library;
+  its `manualSortKey` is reset to (max active sort-key) + 1024, placing it
+  at the end of Manual order (FR-022a, clarified 2026-08-07). The
+  pre-deletion sort-key is NOT retained.
+- **Empty Trash (FR-014b, clarified 2026-08-07)**: a batch action transitions
+  every `trashed` note to `permanentlyDeleted` in one transaction, following
+  the same permanent-deletion path (readable local content removed when safe;
+  tombstones retained for sync). Requires explicit user confirmation stating
+  immediate permanent deletion and loss of the 30-day guarantee.
 
 ### File reference availability
 
@@ -339,7 +461,8 @@ unsynchronizedLocalModification ──push──▶ synchronizedVersion
 - **divergentVersion**: local `versionId` and remote `versionId` share a common
   `parentVersionId` but differ → conflict copy.
 - **partialAssetSyncFailure**: asset metadata synced but bytes failed; marked in
-  `Asset.syncFailureState`; retried without re-encrypting metadata.
+  `Asset.syncFailureState`; retried independently without re-encrypting or
+  re-uploading note metadata (FR-090a).
 
 ## Indexes
 
@@ -364,7 +487,10 @@ unsynchronizedLocalModification ──push──▶ synchronizedVersion
 - High-risk migrations: back up the DB file before running; on failure, restore
   backup and report `SchemaCompatibility` error; never leave a half-migrated DB.
 - Widget: on open, read schema version; if unsupported, fall back to
-  privacy-safe read-only placeholders (no migration, no crash).
+  privacy-safe read-only placeholders (no migration, no crash). Widget read
+  transactions MUST be short enough to complete within the 5s bounded busy
+  timeout (FR-140a); on timeout, report a sanitized "temporarily unavailable"
+  status.
 - Interrupted migration recovery: a `schema_migrations` table records applied
   migrations atomically; an incomplete migration is rolled back via the backup
   on next launch.
@@ -405,7 +531,7 @@ note trashed (local) ──30 d / manual purge──▶ permanentlyDeleted + Tom
                                                       │
                                             sync propagates tombstone
                                                       │
-                                      remote retention 30 d (sync-safety-gated)
+                                        remote retention 30 d (sync-safety-gated)
                                                       │
                                               canPurgeRemote ──▶ remove remote object + local tombstone
 ```
@@ -414,6 +540,35 @@ note trashed (local) ──30 d / manual purge──▶ permanentlyDeleted + Tom
   within the retention window (sync-safety check).
 - Delete-vs-edit: the edited side becomes a recovered conflict copy; the
   tombstone remains until retention expires.
+
+### Long-offline device returning after remote tombstone purge (FR-174, clarified 2026-08-07)
+
+```text
+returning device syncs
+        │
+        ▼
+reconcile remote deletion history BEFORE uploading local notes
+        │
+        ├── remote tombstone found for note ──▶ honor deletion (no resurrection)
+        │
+        └── no remote tombstone found (already purged >30 d)
+                │
+                ▼
+        treat as "no remote deletion record found"
+                │
+                ├── note present locally & user did NOT delete it here
+                │       └─▶ preserve locally; sync normally (may create conflict copy if diverged)
+                │
+                └── note locally deleted by user on this returning device
+                        └─▶ do NOT re-upload; inform user some sync history aged out
+```
+
+- The returning device MUST NOT auto-delete any local content.
+- Locally-deleted notes MUST NOT be re-uploaded unless the user explicitly
+  restores them.
+- The application MUST inform the user that some synchronization history has
+  aged out.
+- Not wall-clock "last modified wins."
 
 ## Version lineage
 
@@ -456,7 +611,7 @@ sync conflictCopy normally (it is just another note)
   "title": null,
   "colorKey": "yellow",
   "customColor": null,
-  "transparency": 0.0,
+  "transparency": 1.0,
   "textSize": "regular",
   "alwaysOnTop": false,
   "widgetEligible": true,

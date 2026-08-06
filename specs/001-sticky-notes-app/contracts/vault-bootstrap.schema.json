@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://stickynotes.local/contracts/vault-bootstrap.schema.json",
   "title": "Vault Bootstrap",
-  "description": "Versioned structure containing only the information needed to open the vault. The password protects the random master key (it does NOT directly encrypt every object). Stored as the one discoverable bootstrap object under the random vault locator. Schema version 1.",
+  "description": "Versioned structure containing only the information needed to open the vault. The password protects the random master key (it does NOT directly encrypt every object). Stored as the one discoverable bootstrap object under the random vault locator. Schema version 1. The `vaultId` field is authoritative for wrong-vault detection (FR edge case, clarified 2026-08-07): if a configured or newly-chosen repository contains a bootstrap whose `vaultId` does not match the locally-configured `vaultId`, the application MUST fail closed with a `wrongVault` error and MUST NOT modify any local or remote data. Argon2id parameters (FR-160c, clarified 2026-08-07): production vault bootstrapping MUST use memoryKiB >= 19456 (19 MiB), iterations >= 2, parallelism >= 1 (OWASP guidance). The schema minimums below (memoryKiB >= 8, iterations >= 1, parallelism >= 1) exist ONLY to permit deterministic unit-test fixtures that exercise envelope parsing without paying the full derivation cost; production bootstrapping MUST reject parameter sets weaker than the FR-160c minimums. Parameter values used at vault creation are stored here so future unlocks reproduce the derivation exactly.",
   "type": "object",
   "required": ["schemaVersion", "formatVersion", "vaultId", "vaultLocator", "argon2id", "wrappedMasterKey", "encryptionSuiteVersion", "createdAt"],
   "additionalProperties": false,
@@ -13,14 +13,14 @@
     "vaultLocator": { "type": "string", "description": "Random/opaque remote locator under which all vault objects live. Reveals nothing semantic." },
     "argon2id": {
       "type": "object",
-      "description": "Argon2id parameters for deriving the key-encryption key (KEK) from the synchronization password.",
+      "description": "Argon2id parameters for deriving the key-encryption key (KEK) from the synchronization password. Production minimums (FR-160c): memoryKiB >= 19456, iterations >= 2, parallelism >= 1. Schema minimums below are for test fixtures only.",
       "required": ["salt", "memoryKiB", "iterations", "parallelism"],
       "additionalProperties": false,
       "properties": {
         "salt": { "type": "string", "description": "Base64 random salt." },
-        "memoryKiB": { "type": "integer", "minimum": 8 },
-        "iterations": { "type": "integer", "minimum": 1 },
-        "parallelism": { "type": "integer", "minimum": 1 }
+        "memoryKiB": { "type": "integer", "minimum": 8, "description": "Memory cost in KiB. Production: >= 19456 (FR-160c). Test fixtures: >= 8." },
+        "iterations": { "type": "integer", "minimum": 1, "description": "Iteration count. Production: >= 2 (FR-160c). Test fixtures: >= 1." },
+        "parallelism": { "type": "integer", "minimum": 1, "description": "Parallelism (lanes). Production: >= 1 (FR-160c)." }
       }
     },
     "wrappedMasterKey": {

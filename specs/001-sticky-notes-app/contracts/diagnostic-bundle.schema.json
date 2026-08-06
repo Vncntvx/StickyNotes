@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stickynotes.local/contracts/diagnostic-bundle.schema.json",
+  "title": "Diagnostic Bundle",
+  "description": "The user-exportable diagnostic bundle (the artifact a user may save and share for support). Per FR-191 (clarified 2026-08-07), this is a POSITIVE content boundary: only the fields enumerated below are permitted. Any field not listed here is excluded by default. No note content, titles, summaries, captions, file names/paths, window titles, credentials, passwords, key material, raw server responses, or remote object names appear in this bundle. Schema version 1.",
+  "type": "object",
+  "required": ["schemaVersion", "appVersion", "osVersion", "schemaVersionLocal", "vaultState", "permissionStatuses", "objectCounts"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "appVersion": {
+      "type": "string",
+      "description": "Application bundle/marketing version."
+    },
+    "osVersion": {
+      "type": "string",
+      "description": "macOS version the bundle was generated on."
+    },
+    "schemaVersionLocal": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Local SQLite schema version."
+    },
+    "providerType": {
+      "type": ["string", "null"],
+      "enum": ["webdav", "s3", null],
+      "description": "Sync provider type, or null if sync is unconfigured. NEVER the endpoint URL, hostname, or credentials."
+    },
+    "recentErrorEvents": {
+      "type": "array",
+      "description": "Normalized provider error events from the last 30 days. NEVER raw server responses or bodies.",
+      "items": {
+        "type": "object",
+        "required": ["timestamp", "normalizedErrorCategory"],
+        "additionalProperties": false,
+        "properties": {
+          "timestamp": { "type": "string", "format": "date-time" },
+          "normalizedErrorCategory": {
+            "type": "string",
+            "enum": ["auth", "forbidden", "conditionalFailed", "notFound", "conflict", "network", "server", "clockSkew", "corrupt", "schemaUnsupported", "canceled", "tls", "wrongVault", "unknown"]
+          }
+        }
+      }
+    },
+    "syncRunCounts": {
+      "type": ["object", "null"],
+      "description": "Synchronization run counts and durations. NEVER payloads or object names.",
+      "additionalProperties": false,
+      "properties": {
+        "last24h": { "type": "integer", "minimum": 0 },
+        "last7d": { "type": "integer", "minimum": 0 },
+        "last30d": { "type": "integer", "minimum": 0 },
+        "averageDurationMs": { "type": ["number", "null"], "minimum": 0 }
+      }
+    },
+    "objectCounts": {
+      "type": "object",
+      "description": "Aggregate counts of notes / blocks / assets. NEVER titles, summaries, captions, or content.",
+      "required": ["notes", "blocks", "assets"],
+      "additionalProperties": false,
+      "properties": {
+        "notes": { "type": "integer", "minimum": 0 },
+        "blocks": { "type": "integer", "minimum": 0 },
+        "assets": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "vaultState": {
+      "type": "string",
+      "enum": ["locked", "unlocked", "unconfigured"],
+      "description": "Vault state at generation time. NEVER the password or derived key."
+    },
+    "permissionStatuses": {
+      "type": "object",
+      "description": "Boolean granted-or-denied statuses for relevant system permissions.",
+      "required": ["screenRecording", "accessibility"],
+      "additionalProperties": false,
+      "properties": {
+        "screenRecording": { "type": "boolean" },
+        "accessibility": { "type": "boolean" }
+      }
+    },
+    "generatedAt": { "type": "string", "format": "date-time" }
+  }
+}

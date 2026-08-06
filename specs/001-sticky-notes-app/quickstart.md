@@ -61,6 +61,72 @@ recording usage (capture) only.
 Open `StickyNotes.xcodeproj` in Xcode, select the `StickyNotes` scheme, and run
 (⌘R). The menu-bar icon appears; click it to open the library.
 
+## Validating the first-launch experience (FR-014a)
+
+On a fresh install (delete the App Group container first — see *Resetting local
+development data*):
+
+1. Launch the app and open the menu-bar library: the card grid is empty with a
+   clear call-to-action to create the first note (button and keyboard
+   shortcut).
+2. No permission prompts appear (no screen-recording, no accessibility, no
+   notifications) — permissions are requested only when the corresponding
+   feature is invoked.
+3. With synchronization unconfigured, the sync-status area shows
+   "not configured" — never an error.
+4. A brief onboarding hint (auto-save + menu-bar-primary model) is visible and
+   dismissible; after creating the first note, the hint is never shown again
+   (relaunch the app to confirm).
+5. The hint state keys never appear in an exported diagnostic bundle
+   (FR-191 boundary).
+
+## Measuring keystroke-to-glyph latency (SC-004a)
+
+SC-004a requires keystroke-to-glyph latency below 16 ms (one frame at 60 Hz)
+during normal editing, including with Chinese IME composition active. Measure
+with:
+
+- **Instruments**: profile the app with the Signpost Logging track and filter
+  on the editor's keystroke interval; or
+- **Automated**: the editor performance test types a mixed CJK/Latin/emoji
+  sequence through the rich-text adapter and asserts the signposted
+  keystroke-to-glyph interval stays below 16 ms on the supported baseline
+  (see [research.md](./research.md) R29).
+
+## Validating core-behavior clarifications (2026-08-07)
+
+These scenarios validate the behavior fixed by the latest spec clarifications:
+
+- **Auto-save + crash-loss (FR-141a)**: type into a note, stop for 500 ms,
+  verify the note persists without any save command; kill the app process
+  (or `kill -9`) within the debounce window and relaunch — at most the input
+  from the last debounce window is lost, never content persisted by a
+  completed autosave. Automated crash-recovery tests terminate the process
+  mid-edit and verify restoration.
+- **JSON export/import round-trip (FR-031a)**: from a note's contextual menu,
+  export as JSON; import that JSON from the library; verify text,
+  rich-text attributes, todos (text/state/nesting/order), code blocks,
+  embedded images/screenshots, and appearance survive unchanged; file
+  references import as generic-metadata-only cards. Importing a corrupted or
+  unsupported-version JSON is refused with no partial note created.
+- **Empty Trash (FR-014b)**: with notes in Trash, choose Empty Trash; the
+  confirmation states immediate permanent deletion (30-day guarantee lost);
+  after confirming, the notes are gone from Trash and tombstones follow
+  sync-safety rules.
+- **Scale limits (FR-090b)**: pasting an image over 50 MB or 16,384 px longest
+  edge is rejected with a localized explanation and no partial asset;
+  oversized note content is refused while the last valid state is preserved.
+- **Widget change-driven refresh (FR-110a)**: with a widget configured, edit
+  or todo-toggle the displayed note in the main app and confirm the widget
+  updates shortly after without any fixed polling interval of its own.
+- **Empty-block behavior (FR-050a)**: clear a paragraph mid-note — it stays
+  while the cursor remains, is removed when the cursor exits, and a single
+  Undo restores it; the final paragraph of a note is never removed.
+- **Colors/opacity (FR-040a/FR-041a)**: each built-in color matches its
+  canonical hex; opacity steps are 5% in 40%–100%; at any custom
+  color + opacity step the text meets WCAG 2.2 AA (auto foreground
+  adjustment applies below 100%).
+
 ## Running the Widget Extension
 
 Select the `WidgetExtension` scheme and run (⌘R) onto the desktop to add a
