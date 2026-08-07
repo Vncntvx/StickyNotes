@@ -52,7 +52,7 @@ public struct EmptyLibraryView: View {
             HStack {
                 Spacer()
                 Button("Got it") {
-                    model.preferences.dismissOnboardingHint()
+                    model.dismissOnboardingHint()
                 }
                 .controlSize(.small)
             }

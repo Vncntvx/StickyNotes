@@ -37,6 +37,11 @@ public final class NoteWindowCoordinator {
     /// lock); removed in deinit. `@ObservationIgnored`: not part of the
     /// observable state.
     @ObservationIgnored private nonisolated(unsafe) var displayObserver: NSObjectProtocol?
+    /// Retains each window's delegate: `NSWindow.delegate` is WEAK, so the
+    /// delegate would otherwise deallocate right after `open()` returns and
+    /// `windowWillClose` (frame save, FR-141a flush, FR-012a auto-discard)
+    /// would never fire. Freed on unregister/close.
+    @ObservationIgnored private var windowDelegates: [UUID: NoteWindowDelegate] = [:]
 
     public init(environment: AppEnvironment) {
         self.environment = environment
@@ -125,6 +130,7 @@ public final class NoteWindowCoordinator {
             windowStateRepository: environment.persistence.windowStateRepository
         )
         window.delegate = delegate
+        windowDelegates[noteId] = delegate
 
         // FR-007a: the new note window receives keyboard focus immediately.
         window.makeKeyAndOrderFront(nil)
@@ -136,11 +142,18 @@ public final class NoteWindowCoordinator {
     public func closeAll(noteId: UUID) {
         NoteWindowBridge.registeredWindow(for: noteId)?.close()
         NoteWindowBridge.unregister(noteId: noteId)
+        windowDelegates[noteId] = nil
     }
 
     /// Whether a note window is currently open.
     public func isOpen(noteId: UUID) -> Bool {
         NoteWindowBridge.isOpen(noteId: noteId)
+    }
+
+    /// Frees the retained window delegate (called from windowWillClose and
+    /// the FR-009a delete path).
+    public func releaseWindowDelegate(noteId: UUID) {
+        windowDelegates[noteId] = nil
     }
 
     // MARK: - FR-032/FR-033 window frames (T289)
@@ -222,6 +235,9 @@ private final class NoteWindowDelegate: NSObject, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         saveFrame(from: notification)
+        // Release the retained delegate (see windowDelegates — NSWindow's
+        // delegate reference is weak; the coordinator holds it).
+        coordinator?.releaseWindowDelegate(noteId: noteId)
         // FR-141a flush + FR-012a auto-discard decision.
         guard let host else { return }
         Task {
