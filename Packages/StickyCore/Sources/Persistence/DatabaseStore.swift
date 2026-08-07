@@ -25,6 +25,12 @@ public final class DatabaseStore: Sendable {
     public let dbPool: DatabasePool
     /// The database file path (nil for stores built from an existing pool).
     public let databasePath: String?
+    /// The bounded busy timeout this store was opened with (FR-140a).
+    public let busyTimeout: TimeInterval
+
+    /// The production default busy timeout (FR-140a: 5 seconds). Widget
+    /// pools use a shorter timeout via `WidgetDatabase.readBusyTimeout`.
+    public static let defaultBusyTimeout: TimeInterval = 5.0
 
     /// Opens (or creates) the database at the given path with WAL mode and a
     /// bounded busy timeout.
@@ -32,10 +38,11 @@ public final class DatabaseStore: Sendable {
     /// - Parameters:
     ///   - path: Absolute path to the SQLite file in the App Group container.
     ///   - busyTimeout: Maximum time to wait on SQLITE_BUSY before failing
-    ///     (default 5 seconds; the widget uses shorter timeouts via its own
-    ///     pool).
-    public init(path: String, busyTimeout: TimeInterval = 5.0) throws {
+    ///     (default 5 seconds per FR-140a; the widget uses shorter timeouts
+    ///     via its own pool).
+    public init(path: String, busyTimeout: TimeInterval = DatabaseStore.defaultBusyTimeout) throws {
         self.databasePath = path
+        self.busyTimeout = busyTimeout
         var config = Configuration()
         // WAL mode + busy timeout (research.md R6).
         config.busyMode = .timeout(busyTimeout)
@@ -75,6 +82,7 @@ public final class DatabaseStore: Sendable {
     public init(pool: DatabasePool) {
         self.dbPool = pool
         self.databasePath = nil
+        self.busyTimeout = DatabaseStore.defaultBusyTimeout
     }
 
     // MARK: - Read/write helpers

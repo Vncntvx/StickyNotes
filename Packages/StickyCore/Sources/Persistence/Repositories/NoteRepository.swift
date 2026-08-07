@@ -122,18 +122,32 @@ public final class SQLiteNoteRepository: NoteRepository, BlockRepository, Sendab
     public func restore(id: UUID, deviceId: UUID) async throws {
         try await store.write { db in
             let now = Date()
+            // FR-022a (clarified 2026-08-07): on restore, reset
+            // manualSortKey to (max active sort-key) + 1024, placing the
+            // restored note at the end of Manual order. The pre-deletion
+            // sort-key is NOT retained (notes may have been inserted or
+            // reordered during the note's absence). The new key is strictly
+            // greater than all existing keys, so restore alone never
+            // triggers renormalization.
+            let maxSortKey: Int = try Int.fetchOne(
+                db,
+                sql: "SELECT MAX(manualSortKey) FROM note WHERE lifecycleState = 'active'",
+                arguments: []
+            ) ?? ManualSortKeys.initialSortKey - ManualSortKeys.standardGap
+            let restoredSortKey = maxSortKey + ManualSortKeys.standardGap
             try db.execute(
                 sql: """
                     UPDATE note
                     SET lifecycleState = 'active',
                         trashedAt = NULL,
+                        manualSortKey = ?,
                         versionId = ?,
                         parentVersionId = (SELECT versionId FROM note WHERE id = ?),
                         lastModifiedDeviceId = ?,
                         modifiedAt = ?
                     WHERE id = ?
                     """,
-                arguments: [UUID().uuidString, id.uuidString, deviceId.uuidString, now, id.uuidString]
+                arguments: [restoredSortKey, UUID().uuidString, id.uuidString, deviceId.uuidString, now, id.uuidString]
             )
         }
     }

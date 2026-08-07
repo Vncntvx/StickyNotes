@@ -470,6 +470,22 @@ public struct DeviceIdentity: Sendable, Identifiable, Equatable, Hashable {
 //
 // Points at a configured vault + provider. Secrets live in Keychain, NOT
 // here (constitution VII/VIII; data-model.md §VaultConfiguration).
+//
+// Per FR-162a (clarified 2026-08-07): `rememberedUnlock` is an enum
+// (disabled / enabledUntilLockOrRestart) — NOT a bare Bool. The boot
+// timestamp + Keychain ref support the launch-unlock + toggle-off behavior.
+// Per FR-154 (clarified 2026-08-07): `replacedFromVaultLocator` records a
+// prior vault locator when the user replaced the repository.
+
+/// The remember-unlock lifetime (FR-162a, clarified 2026-08-07).
+public enum RememberedUnlock: String, Sendable, Codable, Equatable {
+    /// Password required on every sync-triggering app launch (default).
+    case disabled
+    /// The unwrapped vault key may be stored in a Keychain item so ordinary
+    /// app relaunches do not re-prompt. MUST NOT survive logout/restart
+    /// (not a login-item daemon). Cleared on explicit lock.
+    case enabledUntilLockOrRestart
+}
 
 /// Device-local reference to a configured vault + provider. Secrets live in
 /// Keychain (referenced by `keychainCredentialRef`), NEVER here.
@@ -479,7 +495,20 @@ public struct VaultConfiguration: Sendable, Equatable {
     public var providerType: ProviderType
     public var providerConfig: RedactedSyncConfig
     public var keychainCredentialRef: String  // account label, no secret value
-    public var rememberedUnlock: Bool
+    /// Remember-unlock lifetime (FR-162a). Replaces the legacy `rememberedUnlock: Bool`.
+    public var rememberedUnlock: RememberedUnlock
+    /// Keychain account label for the remembered unwrapped key, only when
+    /// `rememberedUnlock != .disabled`. Cleared on explicit lock.
+    public var rememberedUnlockKeychainRef: String?
+    /// System boot timestamp captured at remember-time, used to detect Mac
+    /// restart (FR-162a). On app launch, if the current boot timestamp
+    /// differs, the remembered key is treated as stale and the password is
+    /// required.
+    public var rememberedUnlockBootTimestamp: Int?
+    /// When this vault replaced a prior one (FR-154), the prior locator is
+    /// recorded here for user reference; the prior remote data is NOT
+    /// auto-deleted.
+    public var replacedFromVaultLocator: String?
     public let createdAt: Date
 
     public init(
@@ -488,7 +517,10 @@ public struct VaultConfiguration: Sendable, Equatable {
         providerType: ProviderType,
         providerConfig: RedactedSyncConfig,
         keychainCredentialRef: String,
-        rememberedUnlock: Bool = false,
+        rememberedUnlock: RememberedUnlock = .disabled,
+        rememberedUnlockKeychainRef: String? = nil,
+        rememberedUnlockBootTimestamp: Int? = nil,
+        replacedFromVaultLocator: String? = nil,
         createdAt: Date = Date()
     ) {
         self.vaultId = vaultId
@@ -497,6 +529,9 @@ public struct VaultConfiguration: Sendable, Equatable {
         self.providerConfig = providerConfig
         self.keychainCredentialRef = keychainCredentialRef
         self.rememberedUnlock = rememberedUnlock
+        self.rememberedUnlockKeychainRef = rememberedUnlockKeychainRef
+        self.rememberedUnlockBootTimestamp = rememberedUnlockBootTimestamp
+        self.replacedFromVaultLocator = replacedFromVaultLocator
         self.createdAt = createdAt
     }
 }

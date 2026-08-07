@@ -257,7 +257,15 @@ public enum InitialSchema {
             t.column("providerType", .text).notNull()
             t.column("providerConfig", .text).notNull()  // JSON redacted
             t.column("keychainCredentialRef", .text).notNull()
-            t.column("rememberedUnlock", .boolean).notNull().defaults(to: false)
+            // FR-162a (clarified 2026-08-07): remember-unlock lifetime enum
+            // stored as text ("disabled" / "enabledUntilLockOrRestart").
+            t.column("rememberedUnlock", .text).notNull().defaults(to: "disabled")
+            t.column("rememberedUnlockKeychainRef", .text)
+            t.column("rememberedUnlockBootTimestamp", .integer)
+            // FR-154 (clarified 2026-08-07): prior locator when the
+            // repository was replaced (user reference only; prior remote
+            // data is NOT auto-deleted).
+            t.column("replacedFromVaultLocator", .text)
             t.column("createdAt", .datetime).notNull()
         }
 

@@ -180,12 +180,25 @@ public enum PermissionError: Error, Sendable {
 
 /// Fail-closed encryption errors (constitution VII). None of these expose
 /// keys, nonces-as-identifiers, or ciphertext details in their codes.
+///
+/// Per FR-160d (clarified 2026-08-07) the eight enumerated fail-closed
+/// inputs each map to a distinct case: (a) wrongPassword, (b)
+/// modifiedCiphertext, (c) invalidTag, (d) wrongObjectId, (e)
+/// wrongObjectType, (f) wrongVaultContext, (g) unsupportedEnvelopeVersion,
+/// (h) corruptEnvelopeStructure. The legacy `wrongObjectContext` is
+/// retained as a convenience umbrella for code paths that have not yet
+/// been updated to distinguish the specific mismatch; new code SHOULD use
+/// the specific case (Constitution VII).
 public enum EncryptionError: Error, Sendable {
-    case wrongPassword              // fail-closed
-    case modifiedCiphertext         // fail-closed
-    case invalidTag                 // fail-closed (auth tag mismatch)
-    case wrongObjectContext         // fail-closed (object ID/type/vault mismatch)
-    case unsupportedEnvelopeVersion // fail-closed
+    case wrongPassword              // (a) fail-closed
+    case modifiedCiphertext         // (b) fail-closed (bit-flip/truncation/extension)
+    case invalidTag                 // (c) fail-closed (AES-GCM auth tag mismatch)
+    case wrongObjectContext         // legacy umbrella — prefer the specific case below
+    case wrongObjectId              // (d) fail-closed (object ID mismatch in AAD)
+    case wrongObjectType            // (e) fail-closed (object type mismatch in AAD)
+    case wrongVaultContext          // (f) fail-closed (vault ID mismatch in AAD)
+    case unsupportedEnvelopeVersion // (g) fail-closed
+    case corruptEnvelopeStructure   // (h) fail-closed (truncated/malformed envelope)
     case keychainUnavailable
     case corruptBootstrap           // fail-closed
     case kdfFailed
@@ -196,7 +209,11 @@ public enum EncryptionError: Error, Sendable {
         case .modifiedCiphertext: return "modifiedCiphertext"
         case .invalidTag: return "invalidTag"
         case .wrongObjectContext: return "wrongObjectContext"
+        case .wrongObjectId: return "wrongObjectId"
+        case .wrongObjectType: return "wrongObjectType"
+        case .wrongVaultContext: return "wrongVaultContext"
         case .unsupportedEnvelopeVersion: return "unsupportedEnvelopeVersion"
+        case .corruptEnvelopeStructure: return "corruptEnvelopeStructure"
         case .keychainUnavailable: return "keychainUnavailable"
         case .corruptBootstrap: return "corruptBootstrap"
         case .kdfFailed: return "kdfFailed"
@@ -211,6 +228,11 @@ public enum CredentialsError: Error, Sendable {
     case accessDenied
     case saveFailed
     case deleteFailed
+    /// Wrong vault detected (FR edge case, clarified 2026-08-07): the
+    /// bootstrap object's `vaultId` does not match the locally-configured
+    /// `vaultId`, or a bootstrap already exists under the chosen locator
+    /// for a new vault. Fail-closed; no local/remote mutation.
+    case wrongVault
 
     public var sanitizedCode: String {
         switch self {
@@ -218,6 +240,7 @@ public enum CredentialsError: Error, Sendable {
         case .accessDenied: return "accessDenied"
         case .saveFailed: return "saveFailed"
         case .deleteFailed: return "deleteFailed"
+        case .wrongVault: return "wrongVault"
         }
     }
 }

@@ -747,3 +747,97 @@ public actor SyncEngine {
         data.map { String(format: "%02x", $0) }.joined()
     }
 }
+
+// MARK: - Sync debounce (T198, FR-152a clarified 2026-08-07)
+//
+// Coalesces local-change notifications and fires the sync engine once 2-4
+// seconds have elapsed since the most recent change. The chosen value is
+// deterministic for a given build (no random jitter that could starve sync
+// indefinitely). Cancelable by manual-sync trigger, application shutdown, or
+// network change. MUST NOT block local editing (FR-153).
+//
+// The debouncer is a thin actor around a scheduled-task handle. The engine
+// exposes `localContentChanged()` to record a change; the debouncer
+// schedules a `syncNow()` after the window elapses. If another change
+// arrives within the window, the pending fire is rescheduled.
+
+/// The sync debounce window (FR-152a: 2-4 seconds after the last local
+/// change). The chosen value is deterministic for a given build.
+public enum SyncDebounce {
+    /// The debounce window in seconds. Fixed at 3.0s (within the 2-4s bound
+    /// from FR-152a). Deterministic per build — no random jitter.
+    public static let windowSeconds: TimeInterval = 3.0
+
+    /// The acceptable range per FR-152a (for validation/tests).
+    public static let minWindowSeconds: TimeInterval = 2.0
+    public static let maxWindowSeconds: TimeInterval = 4.0
+}
+
+/// Coalesces local-change notifications and fires the sync engine after the
+/// debounce window elapses. The debouncer does NOT block local editing — it
+/// only schedules the next sync pass. Cancelable by manual-sync, shutdown,
+/// or network-change triggers (which call `cancel()` then `syncNow()`
+/// directly).
+public actor SyncDebouncer {
+    private let engine: SyncEngine
+    private let window: TimeInterval
+    private let clock: @Sendable () -> Date
+    private var pendingTask: Task<Void, Never>?
+    private var lastChangeAt: Date?
+
+    public init(engine: SyncEngine, window: TimeInterval = SyncDebounce.windowSeconds) {
+        self.engine = engine
+        self.window = window
+        self.clock = { Date() }
+    }
+
+    /// Internal initializer with an injected clock for deterministic tests.
+    public init(engine: SyncEngine, window: TimeInterval, clock: @escaping @Sendable () -> Date) {
+        self.engine = engine
+        self.window = window
+        self.clock = clock
+    }
+
+    /// Records a local content change. Schedules (or reschedules) a sync
+    /// pass after the debounce window elapses. If a manual sync is already
+    /// pending, the window is reset from this change.
+    public func localContentChanged() {
+        lastChangeAt = clock()
+        pendingTask?.cancel()
+        let fireAt = lastChangeAt!.addingTimeInterval(window)
+        pendingTask = Task { [weak self] in
+            // Sleep until the fire time. Use a short poll loop so the clock
+            // injection in tests can advance time deterministically.
+            while !Task.isCancelled {
+                guard let self else { return }
+                let now = await self.clockAsync()
+                if now >= fireAt {
+                    await self.fire()
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 50_000_000) // 50ms
+            }
+        }
+    }
+
+    /// Cancels any pending debounced sync (manual-sync / shutdown / network
+    /// change). The caller then invokes `syncNow()` directly.
+    public func cancel() {
+        pendingTask?.cancel()
+        pendingTask = nil
+        lastChangeAt = nil
+    }
+
+    /// Returns `true` if a debounced sync is pending (has not yet fired).
+    public var hasPendingSync: Bool {
+        pendingTask != nil && !((pendingTask?.isCancelled) ?? true)
+    }
+
+    private func fire() async {
+        pendingTask = nil
+        lastChangeAt = nil
+        _ = try? await engine.syncNow()
+    }
+
+    private func clockAsync() -> Date { clock() }
+}
