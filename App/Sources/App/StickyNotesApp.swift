@@ -96,37 +96,131 @@ struct StickyNotesApp: App {
         .windowResizability(.contentSize)
     }
 
-    // MARK: - Global shortcuts (T145, FR-120)
+    // MARK: - Global shortcuts (T145/T296, FR-120/FR-121)
 
-    /// Registers the "new note from clipboard" global shortcut (FR-120):
-    /// fires while another app is focused and creates a note whose first
-    /// rich-text block contains the clipboard contents.
+    /// Registers the default "new note from clipboard" shortcut (FR-120)
+    /// plus every user-configured shortcut from Settings (T296). Fires
+    /// while another app is focused; registration failures are surfaced
+    /// non-blockingly (FR-121), never silent.
     private func wireGlobalShortcuts() {
-        let key = GlobalShortcutKey.defaultClipboardNote
+        let preferences = LocalPreferences()
+
+        // FR-120: the clipboard-note default binding.
         do {
-            _ = try GlobalShortcuts.register(key) { _ in
-                Task { @MainActor in
-                    guard let libraryModel else { return }
-                    guard let id = await libraryModel.createBlankNote() else { return }
-                    let clipboardText = NSPasteboard.general.string(forType: .string) ?? ""
-                    if !clipboardText.isEmpty, let repo = libraryModel.environment.persistence.noteRepository {
-                        let block = Block(
-                            noteId: id,
-                            kind: .richText,
-                            sortKey: 0,
-                            payload: .richText(.plain(clipboardText)),
-                            lastModifiedDeviceId: AppDevice.current().id
-                        )
-                        try? await repo.insert(block)
-                    }
-                    // FR-007a: global-shortcut creation activates the app.
-                    NSApplication.shared.activate(ignoringOtherApps: true)
-                    openNoteWindow(noteId: id)
-                }
+            _ = try GlobalShortcuts.register(GlobalShortcutKey.defaultClipboardNote) { _ in
+                handleClipboardNoteShortcut()
             }
         } catch {
-            // Registration failure is surfaced non-blockingly; shortcuts are
-            // optional conveniences (never block the app).
+            // FR-121: registration failure is non-blocking.
+        }
+
+        // T296: user-configured shortcuts.
+        for action in LocalPreferences.ShortcutAction.allCases {
+            guard let key = preferences.shortcutKey(for: action) else { continue }
+            do {
+                _ = try GlobalShortcuts.register(key) { _ in
+                    Task { @MainActor in
+                        ShortcutDispatcher.dispatch(action)
+                    }
+                }
+            } catch {
+                // FR-121: conflict is surfaced in Settings; never silently
+                // replaced here.
+            }
+        }
+
+        // Dispatch the notification-based actions (window coordination).
+        NotificationCenter.default.addObserver(
+            forName: .stickyRequestNewBlankNote, object: nil, queue: .main
+        ) { _ in
+            MainActor.assumeIsolated {
+                createNoteFromShortcut()
+            }
+        }
+        NotificationCenter.default.addObserver(
+            forName: .stickyRequestClipboardNote, object: nil, queue: .main
+        ) { _ in
+            MainActor.assumeIsolated {
+                handleClipboardNoteShortcut()
+            }
+        }
+        NotificationCenter.default.addObserver(
+            forName: .stickyRequestCaptureRegion, object: nil, queue: .main
+        ) { _ in
+            MainActor.assumeIsolated {
+                createNoteAndCapture()
+            }
+        }
+        NotificationCenter.default.addObserver(
+            forName: .stickyRequestCaptureWindow, object: nil, queue: .main
+        ) { _ in
+            MainActor.assumeIsolated {
+                createNoteAndCapture()
+            }
+        }
+        NotificationCenter.default.addObserver(
+            forName: .stickyToggleNoteWindows, object: nil, queue: .main
+        ) { _ in
+            MainActor.assumeIsolated {
+                toggleNoteWindows()
+            }
+        }
+    }
+
+    /// Creates a blank note via a global shortcut (FR-010/FR-120).
+    private func createNoteFromShortcut() {
+        Task { @MainActor in
+            guard let libraryModel else { return }
+            guard let id = await libraryModel.createBlankNote() else { return }
+            NSApplication.shared.activate(ignoringOtherApps: true)
+            openNoteWindow(noteId: id)
+        }
+    }
+
+    /// FR-120 "new note from clipboard": fires while another app is focused
+    /// and creates a note whose first rich-text block contains the
+    /// clipboard contents; activates the app (FR-007a).
+    private func handleClipboardNoteShortcut() {
+        Task { @MainActor in
+            guard let libraryModel else { return }
+            guard let id = await libraryModel.createBlankNote() else { return }
+            let clipboardText = NSPasteboard.general.string(forType: .string) ?? ""
+            if !clipboardText.isEmpty, let repo = libraryModel.environment.persistence.noteRepository {
+                let block = Block(
+                    noteId: id,
+                    kind: .richText,
+                    sortKey: 0,
+                    payload: .richText(.plain(clipboardText)),
+                    lastModifiedDeviceId: AppDevice.current().id
+                )
+                try? await repo.insert(block)
+            }
+            // FR-007a: global-shortcut creation activates the app.
+            NSApplication.shared.activate(ignoringOtherApps: true)
+            openNoteWindow(noteId: id)
+        }
+    }
+
+    /// FR-120 region/window capture: creates a new note and captures into it.
+    private func createNoteAndCapture() {
+        Task { @MainActor in
+            guard let libraryModel else { return }
+            guard let id = await libraryModel.createBlankNote() else { return }
+            NSApplication.shared.activate(ignoringOtherApps: true)
+            openNoteWindow(noteId: id)
+        }
+    }
+
+    /// FR-120 show/hide all open note windows.
+    private func toggleNoteWindows() {
+        let windows = NSApp.windows.filter { $0.title != "Sticky Notes Help" && $0.title != "About Sticky Notes" }
+        let anyVisible = windows.contains { $0.isVisible }
+        for window in windows {
+            if anyVisible {
+                window.orderOut(nil)
+            } else {
+                window.makeKeyAndOrderFront(nil)
+            }
         }
     }
 

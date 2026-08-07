@@ -115,12 +115,19 @@ public struct AppEnvironment: Sendable {
             backupPath: backupPath
         )
 
+        // T293: compose the asset store under the App Group container
+        // (originals/thumbnails/app-icons; never in SQLite).
+        let assetDirectory = baseURL.appendingPathComponent("Assets", isDirectory: true)
+        try FileManager.default.createDirectory(at: assetDirectory, withIntermediateDirectories: true)
+        let assetStore = try AssetStore(directoryURL: assetDirectory)
+
         // T284/T285: compose the sync root (vault config store + Keychain +
         // SyncEngine wiring). Loads the persisted configuration/state.
         let syncCoordinator = SyncCoordinator(
             store: store,
             secretStore: KeychainService(),
-            deviceId: DeviceIdentity.current.id
+            deviceId: DeviceIdentity.current.id,
+            assetStore: assetStore
         )
         await syncCoordinator.load()
 
@@ -128,7 +135,7 @@ public struct AppEnvironment: Sendable {
             domain: DomainServices(),
             persistence: PersistenceServices(store: store),
             editor: EditorServices(),
-            assets: AssetServices(),
+            assets: AssetServices(directoryURL: assetDirectory, store: assetStore),
             security: SecurityServices(),
             sync: SyncServices(),
             systemBridge: SystemBridgeServices(),
@@ -205,6 +212,13 @@ public struct PersistenceServices: Sendable {
         return SQLiteVaultConfigurationStore(store: store)
     }
 
+    /// Device-local file-locator repository (T291 — bookmark bytes never
+    /// sync, FR-105).
+    public var fileLocatorRepository: SQLiteFileLocatorRepository? {
+        guard let store else { return nil }
+        return SQLiteFileLocatorRepository(store: store)
+    }
+
     /// Fetches card projections for the given lifecycle state and sort order
     /// (bounded to 500 rows). When `noteIds` is non-nil (FTS search results),
     /// only those notes are fetched without the row bound (T283).
@@ -231,9 +245,14 @@ public struct EditorServices: Sendable {
 public struct AssetServices: Sendable {
     /// The asset byte store root (nil until composed with a container URL).
     public let directoryURL: URL?
+    /// The composed asset store (T293: T087 AssetStore — originals,
+    /// thumbnails, app icons; atomic writes + SHA-256 + dedup). Nil before
+    /// bootstrap.
+    public let store: AssetStore?
 
-    public init(directoryURL: URL? = nil) {
+    public init(directoryURL: URL? = nil, store: AssetStore? = nil) {
         self.directoryURL = directoryURL
+        self.store = store
     }
 
     public static let placeholder = AssetServices()

@@ -4,6 +4,7 @@ import Domain
 import Persistence
 import SecurityCore
 import SyncCore
+import AssetStore
 
 // MARK: - SyncCoordinator (T284/T285)
 //
@@ -56,6 +57,9 @@ public final class SyncCoordinator {
     private let configStore: SQLiteVaultConfigurationStore
     private let secretStore: any SecretStore
     private let deviceId: UUID
+    /// The composed asset store (T293): assets sync as independent encrypted
+    /// objects (FR-090a) — passed into every SyncEngine instance.
+    private let assetStore: AssetStore?
     private var engine: SyncEngine?
     private var debouncer: SyncDebouncer?
     /// The unlocked vault (FR-162a remember-unlock needs the master key).
@@ -67,12 +71,14 @@ public final class SyncCoordinator {
         store: DatabaseStore,
         secretStore: any SecretStore,
         deviceId: UUID,
+        assetStore: AssetStore? = nil,
         providerOverride: (@Sendable (VaultConfiguration, SyncProviderCredentials) -> any SyncProviderProtocol)? = nil
     ) {
         self.store = store
         self.configStore = SQLiteVaultConfigurationStore(store: store)
         self.secretStore = secretStore
         self.deviceId = deviceId
+        self.assetStore = assetStore
         self.providerOverride = providerOverride
     }
 
@@ -377,7 +383,7 @@ public final class SyncCoordinator {
                 store: store,
                 deviceId: deviceId,
                 conflictResolver: SyncConflictResolver(store: store),
-                assetStore: nil
+                assetStore: assetStore
             )
             self.engine = engine
             self.debouncer = SyncDebouncer(engine: engine)
