@@ -198,7 +198,9 @@ public struct CanonicalNote: Sendable, Codable, Equatable, Hashable {
     public var colorKey: NoteColorKey
     public var customColor: String?
     public var transparency: Double
-    public var textSize: TextSize
+    /// Per-note text size in points (FR-043a): 9–24 inclusive, 1-pt steps,
+    /// default 13.
+    public var textSize: Int
     public var alwaysOnTop: Bool
     public var widgetEligible: Bool
     public var coverScreenshotBlockId: UUID?
@@ -221,7 +223,7 @@ public struct CanonicalNote: Sendable, Codable, Equatable, Hashable {
         colorKey: NoteColorKey,
         customColor: String? = nil,
         transparency: Double,
-        textSize: TextSize,
+        textSize: Int,
         alwaysOnTop: Bool,
         widgetEligible: Bool,
         coverScreenshotBlockId: UUID? = nil,

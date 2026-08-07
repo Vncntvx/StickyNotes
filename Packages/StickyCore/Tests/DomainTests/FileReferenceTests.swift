@@ -124,7 +124,7 @@ import Domain
     @Test
     func availabilityStatesCoverLifecycle() {
         // available → stale → missing → relinked → available
-        #expect(FileAvailability.allCases.count == 4)
+        #expect(FileAvailability.allCases.count == 5)
         #expect(FileAvailability.allCases.contains(.available))
         #expect(FileAvailability.allCases.contains(.stale))
         #expect(FileAvailability.allCases.contains(.missing))

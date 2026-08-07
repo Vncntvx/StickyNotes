@@ -17,7 +17,7 @@ import Domain
             colorKey: .yellow,
             customColor: nil,
             transparency: 0.0,
-            textSize: .regular,
+            textSize: 13,
             alwaysOnTop: false,
             widgetEligible: widgetEligible,
             coverScreenshotBlockId: nil,

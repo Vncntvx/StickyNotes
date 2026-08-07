@@ -45,7 +45,7 @@ public enum WidgetDatabase {
     /// then shows privacy-safe placeholders (never crashes, never migrates).
     public static func isSchemaSupported(
         path: String,
-        supportedVersion: String = StickyMigrationId.v1
+        supportedVersion: String = StickyMigrationId.v2
     ) async -> Bool {
         guard let pool = try? openPool(path: path) else { return false }
         let version = await StickyMigrator.currentSchemaVersion(pool)

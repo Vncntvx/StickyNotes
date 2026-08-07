@@ -81,7 +81,7 @@ import AssetStore
             title: title,
             colorKey: .yellow,
             transparency: 0,
-            textSize: .regular,
+            textSize: 13,
             alwaysOnTop: false,
             widgetEligible: true,
             manualSortKey: 0,
@@ -303,7 +303,7 @@ import AssetStore
         let knownCreated = Date(timeIntervalSince1970: 1_700_000_000)
         let knownModified = Date(timeIntervalSince1970: 1_700_000_123)
         let note = Note(
-            id: UUID(), title: "dated", colorKey: .yellow, transparency: 0, textSize: .regular,
+            id: UUID(), title: "dated", colorKey: .yellow, transparency: 0, textSize: 13,
             alwaysOnTop: false, widgetEligible: true, manualSortKey: 0, lifecycleState: .active,
             versionId: UUID(), lastModifiedDeviceId: UUID(),
             createdAt: knownCreated, modifiedAt: knownModified

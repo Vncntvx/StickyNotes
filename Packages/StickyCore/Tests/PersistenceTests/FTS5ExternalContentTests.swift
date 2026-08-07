@@ -54,7 +54,7 @@ import Persistence
                     INSERT INTO note (id, title, colorKey, transparency, textSize, alwaysOnTop,
                                       widgetEligible, manualSortKey, lifecycleState, versionId,
                                       lastModifiedDeviceId, createdAt, modifiedAt)
-                    VALUES (?, ?, 'yellow', 0, 'regular', 0, 1, 0, 'active', ?, ?, ?, ?)
+                    VALUES (?, ?, 'yellow', 0, 13, 0, 1, 0, 'active', ?, ?, ?, ?)
                     """,
                 arguments: [noteId.uuidString, "searchable title", UUID().uuidString,
                             UUID().uuidString, Date(), Date()]
@@ -93,7 +93,7 @@ import Persistence
                     INSERT INTO note (id, title, colorKey, transparency, textSize, alwaysOnTop,
                                       widgetEligible, manualSortKey, lifecycleState, versionId,
                                       lastModifiedDeviceId, createdAt, modifiedAt)
-                    VALUES (?, 't', 'yellow', 0, 'regular', 0, 1, 0, 'active', ?, ?, ?, ?)
+                    VALUES (?, 't', 'yellow', 0, 13, 0, 1, 0, 'active', ?, ?, ?, ?)
                     """,
                 arguments: [noteId.uuidString, UUID().uuidString, UUID().uuidString, Date(), Date()]
             )
@@ -122,7 +122,7 @@ import Persistence
                     INSERT INTO note (id, title, colorKey, transparency, textSize, alwaysOnTop,
                                       widgetEligible, manualSortKey, lifecycleState, versionId,
                                       lastModifiedDeviceId, createdAt, modifiedAt)
-                    VALUES (?, 't', 'yellow', 0, 'regular', 0, 1, 0, 'active', ?, ?, ?, ?)
+                    VALUES (?, 't', 'yellow', 0, 13, 0, 1, 0, 'active', ?, ?, ?, ?)
                     """,
                 arguments: [noteId.uuidString, UUID().uuidString, UUID().uuidString, Date(), Date()]
             )

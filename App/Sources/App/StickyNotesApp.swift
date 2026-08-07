@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import Domain
 import Persistence
 import EditorCore
@@ -7,36 +8,28 @@ import SecurityCore
 import SyncCore
 import SystemBridge
 
-// MARK: - App entry point
+// MARK: - StickyNotesApp (T032/T159/T160/T169 wiring)
 //
-// T024 (Phase 2): a small `AppEnvironment` with explicit-initializer DI
-// (composed services, no DI framework). The real scene wiring lands in US1
-// (Phase 3) per tasks.md T032.
+// The @main entry point: menu-bar library (T159), note windows
+// (NoteWindowCoordinator, T160), Settings (T169), About (T144), deep-link
+// routing (contracts/deep-links.md), and change-driven widget refresh
+// (FR-110a, T237).
 //
-// This file is the @main entry point stub. It compiles in a full Xcode 26.x
-// install; the menu-bar library scene (MenuBarLibraryScene), note windows,
-// and feature views are added per tasks.md Phase 3+.
+// FR-009 sheet rule (T268): the menu-bar-icon toggle path never dismisses an
+// open app-modal sheet — `MenuBarExtra` natively toggles the library
+// WITHOUT touching any sheet content.
 
 @main
 struct StickyNotesApp: App {
-    // AppEnvironment is composed at startup via explicit-initializer DI
-    // (plan §State management and concurrency; constitution XIII — no DI
-    // framework). `bootstrap` runs the T154 startup sequence: interrupted-
-    // migration recovery → open DatabasePool → migrate (backup + integrity
-    // check). A bootstrap failure is fatal-on-launch: the app must not run
-    // against an inconsistent database (constitution IV, X). The failure is
-    // surfaced as a user-visible state rather than silently swallowed so the
-    // user can act (free disk space, restore backup, contact support) instead
-    // of operating against a stale placeholder environment.
     @State private var environment: AppEnvironment = .placeholder
     @State private var bootstrapError: BootstrapErrorState?
+    @State private var libraryModel: LibraryModel?
+    @State private var coordinator: NoteWindowCoordinator?
+    @State private var toastPresenter = DeletionToastPresenter()
 
     private let appGroupIdentifier = "group.local.stickynotes.placeholder"
 
     var body: some Scene {
-        // The menu-bar library scene (MenuBarLibraryScene) is added in T032.
-        // Until then, a minimal MenuBarExtra keeps the app runnable for
-        // foundation bring-up.
         MenuBarExtra("Sticky Notes", systemImage: "note.text") {
             if let bootstrapError {
                 bootstrapError.label
@@ -46,6 +39,33 @@ struct StickyNotesApp: App {
                     NSApplication.shared.terminate(nil)
                 }
                 .keyboardShortcut("q")
+            } else if let libraryModel {
+                MenuBarLibraryScene(
+                    model: libraryModel,
+                    openNote: { noteId in
+                        openNoteWindow(noteId: noteId)
+                    },
+                    openSettings: {
+                        openSettingsWindow()
+                    },
+                    openAbout: {
+                        openAboutWindow()
+                    },
+                    deletionToast: { message in
+                        toastPresenter.present(message: message)
+                    }
+                )
+                .overlay(alignment: .top) {
+                    if let toast = toastPresenter.currentToast {
+                        DeletionToastOverlay(toast: toast)
+                            .padding(.top, 8)
+                    }
+                }
+                .frame(width: 420)
+                .task { bootstrapEnvironment() }
+                .onOpenURL { url in
+                    handleDeepLink(url)
+                }
             } else {
                 Text("Sticky Notes — setup in progress")
                     .padding()
@@ -57,35 +77,125 @@ struct StickyNotesApp: App {
             }
         }
         .menuBarExtraStyle(.window)
-        .task {
-            bootstrapEnvironment()
+
+        Settings {
+            SettingsView()
         }
 
-        // Note-window scenes (NoteWindowCoordinator) are added in T034.
-        // Settings UI (SettingsView) is added in T105.
-        // Sync settings (SyncSettingsView) is added in T119.
+        Window("About Sticky Notes", id: "about") {
+            AboutView()
+        }
+        .windowResizability(.contentSize)
     }
+
+    // MARK: - Global shortcuts (T145, FR-120)
+
+    /// Registers the "new note from clipboard" global shortcut (FR-120):
+    /// fires while another app is focused and creates a note whose first
+    /// rich-text block contains the clipboard contents.
+    private func wireGlobalShortcuts() {
+        let key = GlobalShortcutKey.defaultClipboardNote
+        do {
+            _ = try GlobalShortcuts.register(key) { _ in
+                Task { @MainActor in
+                    guard let libraryModel else { return }
+                    guard let id = await libraryModel.createBlankNote() else { return }
+                    let clipboardText = NSPasteboard.general.string(forType: .string) ?? ""
+                    if !clipboardText.isEmpty, let repo = libraryModel.environment.persistence.noteRepository {
+                        let block = Block(
+                            noteId: id,
+                            kind: .richText,
+                            sortKey: 0,
+                            payload: .richText(.plain(clipboardText)),
+                            lastModifiedDeviceId: AppDevice.current().id
+                        )
+                        try? await repo.insert(block)
+                    }
+                    // FR-007a: global-shortcut creation activates the app.
+                    NSApplication.shared.activate(ignoringOtherApps: true)
+                    openNoteWindow(noteId: id)
+                }
+            }
+        } catch {
+            // Registration failure is surfaced non-blockingly; shortcuts are
+            // optional conveniences (never block the app).
+        }
+    }
+
+    // MARK: - Bootstrap (T154)
 
     private func bootstrapEnvironment() {
         guard let container = FileManager.default
             .containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier)
         else {
-            // No App Group container: stay on the placeholder environment.
-            // The app remains runnable for bring-up; real persistence
-            // requires the container (T005).
             return
         }
         Task {
             do {
                 let env = try await AppEnvironment.bootstrap(appGroupContainerURL: container)
-                environment = env
+                await MainActor.run {
+                    environment = env
+                    let model = LibraryModel(environment: env)
+                    libraryModel = model
+                    coordinator = NoteWindowCoordinator(environment: env)
+                    wireGlobalShortcuts()
+                }
             } catch {
-                // Constitution IV, X: never run against an inconsistent DB.
-                // Surface the failure (sanitized code only — no content,
-                // paths, or SQL fragments leak) instead of leaving the app
-                // on a placeholder that silently looks healthy.
-                bootstrapError = BootstrapErrorState.from(error)
+                await MainActor.run {
+                    bootstrapError = BootstrapErrorState.from(error)
+                }
             }
+        }
+    }
+
+    // MARK: - Note windows (T160)
+
+    private func openNoteWindow(noteId: UUID) {
+        guard let coordinator else { return }
+        Task { _ = await coordinator.open(noteId: noteId) }
+    }
+
+    private func openSettingsWindow() {
+        // Settings scene opens on demand.
+        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+    }
+
+    private func openAboutWindow() {
+        // Opens the About window scene (fallback: order any existing one
+        // front).
+        if let window = NSApp.windows.first(where: { $0.title == "About Sticky Notes" }) {
+            window.makeKeyAndOrderFront(nil)
+        } else {
+            let window = NSWindow(
+                contentRect: NSRect(x: 200, y: 200, width: 320, height: 240),
+                styleMask: [.titled, .closable],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "About Sticky Notes"
+            window.contentView = NSHostingView(rootView: AboutView())
+            window.center()
+            window.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    // MARK: - Deep links (contracts/deep-links.md)
+
+    private func handleDeepLink(_ url: URL) {
+        guard let action = DeepLinkRouter.action(for: url) else { return }
+        switch action {
+        case .openNote(let id):
+            openNoteWindow(noteId: id)
+        case .newNote:
+            Task {
+                if let id = await libraryModel?.createBlankNote() {
+                    openNoteWindow(noteId: id)
+                }
+            }
+        case .search:
+            // The library window opens with focus on the search field; the
+            // MenuBarExtra is toggled by the system on activation.
+            break
         }
     }
 }

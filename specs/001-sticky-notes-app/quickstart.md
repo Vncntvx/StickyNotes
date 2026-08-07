@@ -30,6 +30,13 @@ cd StickyNotes
 xcodebuild -resolvePackageDependencies -project StickyNotes.xcodeproj
 ```
 
+**Project generation (T249 reconciliation)**: `StickyNotes.xcodeproj` IS
+committed, and `project.yml` (XcodeGen) is the source of truth. When any
+target/source/package configuration changes, regenerate with
+`brew install xcodegen && xcodegen generate` and commit the regenerated
+project. CI regenerates + runs `git diff --exit-code` as a drift check, so
+forgetting to regenerate fails CI.
+
 Build the app (debug, no code signing for local tests):
 
 ```bash

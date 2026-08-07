@@ -1,39 +1,53 @@
 import Foundation
 
-// MARK: - NoteAppearance (T050)
+// MARK: - NoteAppearance (T050 / T234 / T257)
 //
-// Per tasks.md T050 and data-model.md §Note / spec FR-031..FR-042:
-// - Built-in colors: Yellow/Pink/Purple/Blue/Green/Gray + custom hex.
-// - Transparency (0.0 opaque .. 1.0).
-// - Per-note text size (small/regular/large/extraLarge).
+// Per tasks.md T050/T234/T257 and data-model.md §Note / spec FR-031..FR-043a:
+// - Built-in colors: Yellow/Pink/Purple/Blue/Green/Gray + custom hex. Each
+//   built-in has ONE canonical sRGB hex shared across light/dark (FR-040a,
+//   clarified 2026-08-07): yellow #FFE08A, pink #F9A8C4, purple #C9A8E8,
+//   blue #A8CFF9, green #A8E8B8, gray #D8D8DC. Any change to a canonical
+//   value must update the FR-042 contrast matrix tests in the same change.
+// - Opacity (FR-041a): constrained to 0.40–1.00 inclusive in 0.05 steps,
+//   default 1.00. The persisted `Note.transparency` field name is retained
+//   but its semantic is opacity. Below 1.00 the contrast logic validates
+//   against the effective composited background (note color at the chosen
+//   opacity over the desktop).
+// - Per-note text size (FR-043a): integer point size 9–24 inclusive, 1-pt
+//   steps, default 13; ≥18 pt is large text for the FR-042 thresholds.
 // - Per-note Always-on-Top (FR-036).
-// - Custom colors failing contrast are adjusted or rejected (FR-042, plan
-//   §Accessibility). The contrast check lives here (Domain) so it's testable
-//   without UI; the App layer applies the foreground color the check selects.
+// - Custom colors failing contrast are adjusted or rejected (FR-042). The
+//   contrast check lives here (Domain) so it's testable without UI; the App
+//   layer applies the foreground color the check selects.
 //
 // The `Note` struct (Models.swift) carries the raw persisted appearance
 // fields; `NoteAppearance` is the *projection + rules* layer that derives a
 // concrete background RGB and a readable foreground.
 
-// MARK: - Built-in note colors
-//
-// Per spec FR-031. The hex values are the classic macOS sticky-note palette
-// tuned for readability with dark foreground text. They are intentionally
-// not localized (constitution XIV — colors are stable identifiers).
+// MARK: - Built-in note colors (FR-040a canonical sRGB hexes)
 
 public extension NoteColorKey {
-    /// The concrete RGB for this built-in color. Returns `nil` for
-    /// `.custom` (the caller consults `Note.customColor`).
-    var builtinRGB: RGBColor? {
+    /// The canonical sRGB hex for this built-in color (FR-040a, clarified
+    /// 2026-08-07). Returns `nil` for `.custom` (the caller consults
+    /// `Note.customColor`). These exact values are the deterministic input
+    /// for the FR-042 contrast matrix tests; changing one requires updating
+    /// `NoteAppearanceBindingTests` in the same change (constitution IV).
+    var canonicalHex: String? {
         switch self {
-        case .yellow: return RGBColor(red: 1.00, green: 0.94, blue: 0.56)  // #FFF18F
-        case .pink:   return RGBColor(red: 1.00, green: 0.74, blue: 0.83)  // #FFBDD4
-        case .purple: return RGBColor(red: 0.90, green: 0.78, blue: 0.96)  // #E6C7F5
-        case .blue:   return RGBColor(red: 0.78, green: 0.90, blue: 1.00)  // #C7E6FF
-        case .green:  return RGBColor(red: 0.80, green: 0.95, blue: 0.78)  // #CCF2C7
-        case .gray:   return RGBColor(red: 0.90, green: 0.90, blue: 0.90)  // #E6E6E6
+        case .yellow: return "#FFE08A"
+        case .pink:   return "#F9A8C4"
+        case .purple: return "#C9A8E8"
+        case .blue:   return "#A8CFF9"
+        case .green:  return "#A8E8B8"
+        case .gray:   return "#D8D8DC"
         case .custom: return nil
         }
+    }
+
+    /// The concrete RGB for this built-in color (parsed from the canonical
+    /// hex). Returns `nil` for `.custom`.
+    var builtinRGB: RGBColor? {
+        canonicalHex.flatMap { RGBColor(hex: $0) }
     }
 }
 
@@ -93,11 +107,6 @@ public struct RGBColor: Sendable, Equatable, Hashable {
 }
 
 // MARK: - Contrast + readable foreground (FR-042)
-//
-// Per WCAG 2.1 relative luminance + contrast ratio. The Domain layer decides
-// black-vs-white foreground based on the background's luminance; custom
-// colors below the contrast threshold are flagged so the App layer can
-// adjust or reject them (FR-042).
 
 public enum NoteAppearanceContrast {
     /// WCAG 2.1 relative luminance of an sRGB color.
@@ -118,8 +127,18 @@ public enum NoteAppearanceContrast {
     }
 
     /// The minimum contrast ratio the foreground must achieve against the
-    /// note background. WCAG AA for normal text is 4.5; we use the same.
+    /// note background. WCAG AA for normal text is 4.5; large text
+    /// (≥18 pt, FR-043a) requires 3:1 per WCAG 2.2 AA.
     public static let minimumContrastRatio: Double = 4.5
+    public static let largeTextContrastRatio: Double = 3.0
+
+    /// The contrast threshold for the given text size (FR-043a: text ≥18 pt
+    /// is large text and uses the 3:1 threshold).
+    public static func minimumContrastRatio(forTextSize points: Int) -> Double {
+        points >= NoteAppearance.TextSizeBounds.largeTextSize
+            ? largeTextContrastRatio
+            : minimumContrastRatio
+    }
 
     /// Returns the foreground (black or white) that achieves the higher
     /// contrast against the given background.
@@ -130,9 +149,14 @@ public enum NoteAppearanceContrast {
     }
 
     /// Returns `true` if `foreground` meets the minimum contrast against
-    /// `background`. Used to validate custom colors (FR-042).
-    public static func meetsMinimumContrast(foreground: RGBColor, background: RGBColor) -> Bool {
-        contrastRatio(foreground, background) >= minimumContrastRatio
+    /// `background` for the given text size. Used to validate custom colors
+    /// (FR-042).
+    public static func meetsMinimumContrast(
+        foreground: RGBColor,
+        background: RGBColor,
+        textSizePoints: Int = NoteAppearance.TextSizeBounds.defaultSize
+    ) -> Bool {
+        contrastRatio(foreground, background) >= minimumContrastRatio(forTextSize: textSizePoints)
     }
 }
 
@@ -140,28 +164,95 @@ public enum NoteAppearanceContrast {
 
 /// A derived, ready-to-render appearance for a note. Carries the concrete
 /// background RGB (built-in or custom), the chosen foreground (black or
-/// white per contrast), the transparency, text size, and Always-on-Top.
+/// white per contrast), the opacity (FR-041a), text size (FR-043a), and
+/// Always-on-Top.
 ///
 /// This is a *projection* of `Note`'s persisted fields — it is never stored.
 public struct NoteAppearance: Sendable, Equatable {
+    /// Text-size bounds (FR-043a): 9–24 pt inclusive, 1-pt steps.
+    public enum TextSizeBounds {
+        public static let minSize = 9
+        public static let maxSize = 24
+        public static let defaultSize = 13
+        /// Text ≥18 pt is large text for the FR-042 thresholds.
+        public static let largeTextSize = 18
+
+        /// The full set of discrete text sizes (16 steps).
+        public static let allSizes: [Int] = Array(minSize...maxSize)
+
+        /// Clamps + validates a raw value into the allowed range.
+        public static func clamped(_ value: Int) -> Int {
+            min(max(value, minSize), maxSize)
+        }
+    }
+
+    /// Opacity bounds (FR-041a): 0.40–1.00 inclusive, 0.05 steps.
+    public enum OpacityBounds {
+        public static let minOpacity = 0.40
+        public static let maxOpacity = 1.00
+        public static let step = 0.05
+
+        /// The full set of discrete opacity values (13 steps).
+        public static let allSteps: [Double] = {
+            // Integer-percent arithmetic (40..100 step 5) so each value is
+            // the exact same Double as the literal (e.g. 0.60).
+            let startPercent = Int(minOpacity * 100)   // 40
+            let endPercent = Int(maxOpacity * 100)     // 100
+            let stepPercent = Int(step * 100)          // 5
+            return stride(from: startPercent, through: endPercent, by: stepPercent)
+                .map { Double($0) / 100.0 }
+        }()
+
+        /// Clamps a raw value into the allowed discrete steps.
+        public static func clamped(_ value: Double) -> Double {
+            let raw = min(max(value, minOpacity), maxOpacity)
+            let steps = Int((raw / step).rounded())
+            return min(max(Double(steps) * step, minOpacity), maxOpacity)
+        }
+    }
+
     public var background: RGBColor
     public var foreground: RGBColor
-    public var transparency: Double
-    public var textSize: TextSize
+    /// Effective opacity 0.40–1.00 in 0.05 steps (FR-041a). The persisted
+    /// field is named `transparency`; this is its semantic value.
+    public var opacity: Double
+    /// Per-note text size in points, 9–24 (FR-043a).
+    public var textSize: Int
     public var alwaysOnTop: Bool
 
-    public init(background: RGBColor, foreground: RGBColor, transparency: Double, textSize: TextSize, alwaysOnTop: Bool) {
+    public init(background: RGBColor, foreground: RGBColor, opacity: Double, textSize: Int, alwaysOnTop: Bool) {
         self.background = background
         self.foreground = foreground
-        self.transparency = transparency
-        self.textSize = textSize
+        self.opacity = OpacityBounds.clamped(opacity)
+        self.textSize = TextSizeBounds.clamped(textSize)
         self.alwaysOnTop = alwaysOnTop
+    }
+
+    /// Composites a note background over a desktop sample at the given
+    /// opacity. Used for FR-042 contrast validation below 100% opacity
+    /// (FR-041a: the effective composited background is
+    /// noteColor@opacity over the desktop).
+    public static func compositedBackground(
+        noteColor: RGBColor,
+        opacity: Double,
+        desktopSample: RGBColor
+    ) -> RGBColor {
+        let o = OpacityBounds.clamped(opacity)
+        return RGBColor(
+            red:   noteColor.red   * o + desktopSample.red   * (1 - o),
+            green: noteColor.green * o + desktopSample.green * (1 - o),
+            blue:  noteColor.blue  * o + desktopSample.blue  * (1 - o)
+        )
     }
 
     /// Derives the appearance from a `Note`. For `.custom` colors, the
     /// `customColor` hex is parsed; if it's malformed, the note falls back
     /// to the default yellow background (the App layer surfaces a warning).
-    public static func projecting(from note: Note) -> NoteAppearance {
+    /// The opacity is clamped to the FR-041a discrete range; the text size
+    /// is clamped to the FR-043a range. Foreground contrast is computed
+    /// against the effective composited background (note color at the
+    /// chosen opacity over a default desktop sample) when opacity < 1.0.
+    public static func projecting(from note: Note, desktopSample: RGBColor? = nil) -> NoteAppearance {
         let bg: RGBColor
         if let builtin = note.colorKey.builtinRGB {
             bg = builtin
@@ -171,23 +262,35 @@ public struct NoteAppearance: Sendable, Equatable {
             // `.custom` with missing/invalid hex → fall back to yellow.
             bg = NoteColorKey.yellow.builtinRGB ?? RGBColor(red: 1, green: 1, blue: 1)
         }
-        let fg = NoteAppearanceContrast.readableForeground(forBackground: bg)
+        let opacity = OpacityBounds.clamped(note.transparency)
+        let effectiveBG: RGBColor
+        if opacity < OpacityBounds.maxOpacity {
+            // Below 100% opacity: validate against the effective composited
+            // background (note color at chosen opacity over the desktop).
+            let sample = desktopSample ?? RGBColor(red: 0.45, green: 0.45, blue: 0.45)
+            effectiveBG = compositedBackground(noteColor: bg, opacity: opacity, desktopSample: sample)
+        } else {
+            effectiveBG = bg
+        }
+        let fg = NoteAppearanceContrast.readableForeground(forBackground: effectiveBG)
         return NoteAppearance(
-            background: bg,
+            background: effectiveBG,
             foreground: fg,
-            transparency: note.transparency,
+            opacity: opacity,
             textSize: note.textSize,
             alwaysOnTop: note.alwaysOnTop
         )
     }
 
-    /// Returns `true` if the background achieves minimum contrast with at
-    /// least one of black/white foreground. If `false`, the App layer must
-    /// adjust the color or reject it with an explanation (FR-042).
+    /// Returns `true` if the effective background achieves the minimum
+    /// contrast for the note's text size with at least one of black/white
+    /// foreground. If `false`, the App layer must adjust the color or
+    /// reject it with an explanation (FR-042).
     public var meetsMinimumContrast: Bool {
         let black = RGBColor(red: 0, green: 0, blue: 0)
         let white = RGBColor(red: 1, green: 1, blue: 1)
-        return NoteAppearanceContrast.meetsMinimumContrast(foreground: black, background: background)
-            || NoteAppearanceContrast.meetsMinimumContrast(foreground: white, background: background)
+        let threshold = NoteAppearanceContrast.minimumContrastRatio(forTextSize: textSize)
+        return NoteAppearanceContrast.contrastRatio(black, background) >= threshold
+            || NoteAppearanceContrast.contrastRatio(white, background) >= threshold
     }
 }

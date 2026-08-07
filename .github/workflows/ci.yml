@@ -58,6 +58,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Select Xcode
         run: sudo xcode-select -switch /Applications/Xcode_$XCODE_VERSION.app
+      - name: Regenerate project + drift check (T249)
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          git diff --exit-code -- StickyNotes.xcodeproj
       - name: Build (Debug, no code signing)
         run: |
           xcodebuild build \

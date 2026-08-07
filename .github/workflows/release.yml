@@ -1,0 +1,90 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v1.0.0)"
+        required: true
+  push:
+    tags: [ "v*" ]
+
+permissions:
+  contents: write
+
+env:
+  XCODE_VERSION: "26.x"
+  PROJECT: StickyNotes.xcodeproj
+  SCHEME: StickyNotes
+  PRODUCT_NAME: StickyNotes
+
+jobs:
+  release:
+    name: Developer ID build + notarize + GitHub release
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -switch /Applications/Xcode_$XCODE_VERSION.app
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Regenerate project + drift check
+        run: |
+          xcodegen generate
+          git diff --exit-code -- StickyNotes.xcodeproj
+
+      # Secrets live in GitHub encrypted secrets ONLY — never in repo files
+      # or fork PR workflows (T137). The archive step requires the Apple
+      # Developer ID cert + notary credentials from secrets.
+      - name: Archive (Release)
+        env:
+          DEVELOPER_ID_CERT_NAME: ${{ secrets.DEVELOPER_ID_CERT_NAME }}
+          DEVELOPER_ID_APPLICATION_ID: ${{ secrets.DEVELOPER_ID_APPLICATION_ID }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+        run: |
+          xcodebuild archive \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -archivePath "build/$PRODUCT_NAME.xcarchive" \
+            -configuration Release \
+            -destination "platform=macOS" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="$DEVELOPER_ID_CERT_NAME" \
+            DEVELOPMENT_TEAM="$DEVELOPER_ID_APPLICATION_ID"
+
+      - name: Export notarized app
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath "build/$PRODUCT_NAME.xcarchive" \
+            -exportPath "dist" \
+            -exportOptionsPlist <(cat <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>developer-id</string>
+            <key>teamID</key>
+            <string>${{ secrets.DEVELOPER_ID_APPLICATION_ID }}</string>
+          </dict>
+          </plist>
+          PLIST
+          )
+
+      - name: Create zip artifact
+        run: |
+          cd dist
+          zip -r "$PRODUCT_NAME.zip" "$PRODUCT_NAME.app"
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          files: |
+            dist/${{ env.PRODUCT_NAME }}.zip
+          draft: true

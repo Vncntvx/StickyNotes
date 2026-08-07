@@ -28,13 +28,10 @@ public enum NoteColorKey: String, Sendable, Codable, CaseIterable {
     case custom
 }
 
-/// Per-note text size per spec FR-040.
-public enum TextSize: String, Sendable, Codable, CaseIterable {
-    case small
-    case regular
-    case large
-    case extraLarge
-}
+// FR-043a (clarified 2026-08-07): per-note text size is the integer point
+// size (9–24 inclusive, 1-pt steps, default 13). The legacy
+// small/regular/large/extraLarge enum was superseded; see NoteAppearance.swift
+// (`NoteAppearance.TextSizeBounds`) and Note.textSize: Int.
 
 /// Note lifecycle state per data-model.md §Note lifecycle. Distinguishes
 /// active, trashed (30-day recovery), permanentlyDeleted (tombstone only),
@@ -47,12 +44,24 @@ public enum NoteLifecycleState: String, Sendable, Codable, CaseIterable {
 }
 
 /// File-reference availability per data-model.md §File reference availability.
-/// Drives the relink UX (FR-103). Device-local only; never synced.
+/// Drives the relink UX (FR-103) and the card indicator (FR-100). Device-local
+/// only; never synced.
+///
+/// FR-100 (clarified 2026-08-07) — the indicator MUST distinguish four
+/// states by more than color alone (FR-044):
+/// - `available`: bookmark resolves to an existing file.
+/// - `missing`: file unavailable; relink offered (FR-103).
+/// - `stale`: bookmark unresolved but the file may still exist (e.g. the
+///   last resolved path no longer matches).
+/// - `onAnotherDevice`: synchronized generic metadata with no local file
+///   (FR-104) — never implies the file is missing.
+/// `relinked` is a transient post-relink state before the next verification.
 public enum FileAvailability: String, Sendable, Codable, CaseIterable {
     case available
     case stale
     case missing
     case relinked
+    case onAnotherDevice
 }
 
 /// Per-entity sync lineage state per data-model.md §SyncVersionState.

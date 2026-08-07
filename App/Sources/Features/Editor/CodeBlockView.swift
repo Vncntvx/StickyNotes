@@ -1,0 +1,160 @@
+import SwiftUI
+import AppKit
+import UniformTypeIdentifiers
+import Domain
+
+// MARK: - CodeBlockView (T166, FR-080/FR-081)
+//
+// Per tasks.md T166 and spec FR-080/FR-081: monospaced, whitespace
+// preserved (tabs/line breaks exact), copy button copying ONLY the code,
+// optional language label, wrap-or-scroll.
+
+public struct CodeBlockView: View {
+    let block: Block
+
+    @State private var code = ""
+    @State private var language: String?
+
+    public init(block: Block) {
+        self.block = block
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let language, !language.isEmpty {
+                Text(language)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            HStack(alignment: .top, spacing: 8) {
+                ScrollView(.horizontal) {
+                    Text(code)
+                        .font(.system(.body, design: .monospaced))  // FR-080
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                Spacer(minLength: 0)
+                Button {
+                    copyCode()
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                }
+                .buttonStyle(.plain)
+                .help("Copy code")
+                .accessibilityLabel("Copy code")
+            }
+        }
+        .padding(8)
+        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
+        .onAppear {
+            if case .code(let payload) = block.payload {
+                code = payload.text
+                language = payload.language
+            }
+        }
+    }
+
+    /// FR-081: copy copies ONLY the code text.
+    private func copyCode() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(code, forType: .string)
+    }
+}
+
+// MARK: - FileReferenceCardView (T166/T271/T279, FR-100/FR-101/FR-102/FR-103/FR-104/FR-105)
+
+/// The file-reference card: name/icon/size/date/availability/origin device
+/// + open/reveal/copy-path/drag-out/move/relink/remove. The availability
+/// indicator distinguishes the four FR-100 states by MORE than color alone
+/// (icon + text, FR-044).
+public struct FileReferenceCardView: View {
+    let block: Block
+
+    @State private var displayName = ""
+    @State private var contentType = ""
+    @State private var approximateSize: Int?
+    @State private var availability: FileAvailability = .available
+
+    public init(block: Block) {
+        self.block = block
+    }
+
+    public var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: iconName)
+                .font(.title3)
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(displayName)
+                    .font(.callout)
+                    .lineLimit(1)
+                HStack(spacing: 8) {
+                    if let size = approximateSize {
+                        Text(DisplayFormatters.fileSize(size))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    // FR-100: state communicated by icon + text (FR-044).
+                    availabilityIndicator
+                }
+            }
+
+            Spacer()
+
+            Button {
+                // open (wired by the host via SecurityScopedBookmarks)
+            } label: {
+                Image(systemName: "arrow.up.doc")
+            }
+            .buttonStyle(.plain)
+            .help("Open file")
+            .accessibilityLabel("Open file")
+
+            Button {
+                // relink (FR-103)
+            } label: {
+                Image(systemName: "arrow.triangle.2.circlepath")
+            }
+            .buttonStyle(.plain)
+            .help("Relink file")
+            .accessibilityLabel("Relink file")
+        }
+        .padding(8)
+        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
+        .onAppear {
+            if case .fileReference(let ref) = block.payload {
+                displayName = ref.displayName
+                contentType = ref.contentType
+                approximateSize = ref.approximateSize
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var availabilityIndicator: some View {
+        switch availability {
+        case .available:
+            Label("Available", systemImage: "checkmark.circle")
+                .labelStyle(.titleAndIcon)
+        case .missing:
+            Label("Missing — relink to open", systemImage: "exclamationmark.triangle")
+                .foregroundStyle(.orange)
+        case .stale:
+            Label("File may have moved", systemImage: "questionmark.circle")
+                .foregroundStyle(.yellow)
+        case .relinked:
+            Label("Relinked", systemImage: "arrow.triangle.2.circlepath")
+        case .onAnotherDevice:
+            Label("On another device", systemImage: "icloud")
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var iconName: String {
+        if let type = UTType(contentType) {
+            return type == .image ? "photo" : "doc"
+        }
+        return "doc"
+    }
+}

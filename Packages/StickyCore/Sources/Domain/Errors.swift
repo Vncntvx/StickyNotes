@@ -62,6 +62,9 @@ public enum PersistenceError: Error, Sendable {
     case recoveryFailed
     case recordNotFound
     case invalidPayload
+    /// FR-090b: note structured content exceeds `ScaleLimits.maxNoteContentBytes`
+    /// (5 MB). The write was refused; the last valid saved state is preserved.
+    case contentTooLarge
 
     public var sanitizedCode: String {
         switch self {
@@ -72,6 +75,7 @@ public enum PersistenceError: Error, Sendable {
         case .recoveryFailed: return "recoveryFailed"
         case .recordNotFound: return "recordNotFound"
         case .invalidPayload: return "invalidPayload"
+        case .contentTooLarge: return "contentTooLarge"
         }
     }
 }

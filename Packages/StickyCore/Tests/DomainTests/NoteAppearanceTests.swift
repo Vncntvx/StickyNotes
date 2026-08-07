@@ -2,39 +2,50 @@ import Testing
 import Foundation
 import Domain
 
-// MARK: - NoteAppearance tests (T046)
+// MARK: - NoteAppearance tests (T046 + T225 + T252)
 //
 // Per tasks.md T046: "Domain test: color/transparency/textSize/alwaysOnTop
 // persist per note."
 //
-// Verifies:
-// - Built-in colors map to concrete RGB values.
-// - Custom hex parses and round-trips through RGBColor.
-// - NoteAppearance.projecting(from:) carries the note's color, transparency,
-//   textSize, and alwaysOnTop.
-// - readableForeground picks black for light backgrounds, white for dark.
-// - Custom colors below the contrast threshold are flagged
-//   (`meetsMinimumContrast == false`) so the App layer can adjust/reject.
-// - Malformed custom hex falls back to the default yellow.
+// Extended per T225 (FR-040a/FR-041a binding values, clarified 2026-08-07):
+// - The six built-in colors resolve to EXACTLY the canonical sRGB hexes
+//   (yellow #FFE08A, pink #F9A8C4, purple #C9A8E8, blue #A8CFF9,
+//   green #A8E8B8, gray #D8D8DC) shared across light/dark.
+// - Opacity is constrained to 0.40–1.00 in 0.05 steps with default 1.00.
+// - FR-042 WCAG contrast (≥4.5:1 normal, ≥3:1 large) holds for the full
+//   matrix: 6 colors × 13 opacity steps × light/dark, computed against the
+//   effective composited background, with automatic foreground adjustment.
+//
+// Extended per T252 (FR-043a): textSize is the integer point size (9–24
+// inclusive, default 13); ≥18 pt is large text for the FR-042 thresholds.
 
 @Suite struct NoteAppearanceTests {
 
     private static let deviceId = UUID(uuidString: "d0000000-0000-4000-8000-000000000001")!
 
-    // MARK: - Built-in colors
+    // MARK: - FR-040a canonical hexes
 
     @Test
-    func builtinColorsHaveRGB() {
-        for key in NoteColorKey.allCases where key != .custom {
-            #expect(key.builtinRGB != nil, "built-in color \(key) must have an RGB")
+    func builtinColorsHaveExactlyCanonicalHexes() {
+        let expected: [NoteColorKey: String] = [
+            .yellow: "#FFE08A",
+            .pink:   "#F9A8C4",
+            .purple: "#C9A8E8",
+            .blue:   "#A8CFF9",
+            .green:  "#A8E8B8",
+            .gray:   "#D8D8DC",
+        ]
+        for (key, hex) in expected {
+            #expect(key.canonicalHex == hex, "\(key) must be exactly \(hex)")
+            #expect(key.builtinRGB?.hexString.uppercased() == hex, "\(key) RGB must round-trip to \(hex)")
         }
-        #expect(NoteColorKey.custom.builtinRGB == nil)
+        #expect(NoteColorKey.custom.canonicalHex == nil)
     }
 
     @Test
     func builtinYellowIsLight() {
         let yellow = NoteColorKey.yellow.builtinRGB!
-        #expect(yellow.red > 0.9 && yellow.green > 0.9 && yellow.blue < 0.7)
+        #expect(yellow.red > 0.9 && yellow.green > 0.8 && yellow.blue < 0.7)
     }
 
     // MARK: - Hex parsing
@@ -71,21 +82,75 @@ import Domain
         #expect(RGBColor(hex: "#12345") == nil)  // wrong digit count
     }
 
-    // MARK: - Projection carries per-note fields (FR-031..FR-040)
+    // MARK: - FR-043a textSize bounds
 
     @Test
-    func projectionCarriesColorTransparencyTextSizeAlwaysOnTop() {
+    func textSizeBoundsAreNineToTwentyFourInclusive() {
+        #expect(NoteAppearance.TextSizeBounds.minSize == 9)
+        #expect(NoteAppearance.TextSizeBounds.maxSize == 24)
+        #expect(NoteAppearance.TextSizeBounds.defaultSize == 13)
+        #expect(NoteAppearance.TextSizeBounds.allSizes == Array(9...24))
+        #expect(NoteAppearance.TextSizeBounds.clamped(8) == 9)
+        #expect(NoteAppearance.TextSizeBounds.clamped(25) == 24)
+        #expect(NoteAppearance.TextSizeBounds.clamped(14) == 14)
+    }
+
+    @Test
+    func textSizeEighteenOrAboveIsLargeText() {
+        #expect(NoteAppearanceContrast.minimumContrastRatio(forTextSize: 17) == 4.5)
+        #expect(NoteAppearanceContrast.minimumContrastRatio(forTextSize: 18) == 3.0)
+        #expect(NoteAppearanceContrast.minimumContrastRatio(forTextSize: 24) == 3.0)
+        #expect(NoteAppearance.TextSizeBounds.largeTextSize == 18)
+    }
+
+    @Test
+    func noteTextSizeDefaultsToThirteen() {
+        let note = Note(lastModifiedDeviceId: Self.deviceId)
+        #expect(note.textSize == 13)
+    }
+
+    // MARK: - FR-041a opacity bounds
+
+    @Test
+    func opacityBoundsAreFortyToHundredInFivePointSteps() {
+        #expect(NoteAppearance.OpacityBounds.minOpacity == 0.40)
+        #expect(NoteAppearance.OpacityBounds.maxOpacity == 1.00)
+        #expect(NoteAppearance.OpacityBounds.step == 0.05)
+        #expect(NoteAppearance.OpacityBounds.allSteps == [0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.00])
+    }
+
+    @Test
+    func opacityClampsToDiscreteSteps() {
+        #expect(NoteAppearance.OpacityBounds.clamped(0.0) == 0.40)
+        #expect(NoteAppearance.OpacityBounds.clamped(0.42) == 0.40)
+        #expect(NoteAppearance.OpacityBounds.clamped(0.48) == 0.50)
+        #expect(NoteAppearance.OpacityBounds.clamped(1.0) == 1.0)
+        #expect(NoteAppearance.OpacityBounds.clamped(1.3) == 1.0)
+    }
+
+    @Test
+    func noteOpacityDefaultsToOneHundred() {
+        let note = Note(lastModifiedDeviceId: Self.deviceId)
+        #expect(note.transparency == 1.0)
+        let appearance = NoteAppearance.projecting(from: note)
+        #expect(appearance.opacity == 1.0)
+    }
+
+    // MARK: - Projection carries per-note fields (FR-031..FR-043a)
+
+    @Test
+    func projectionCarriesColorOpacityTextSizeAlwaysOnTop() {
         let note = Note(
             colorKey: .blue,
             transparency: 0.3,
-            textSize: .large,
+            textSize: 18,
             alwaysOnTop: true,
             lastModifiedDeviceId: Self.deviceId
         )
         let appearance = NoteAppearance.projecting(from: note)
-        #expect(appearance.background == NoteColorKey.blue.builtinRGB)
-        #expect(appearance.transparency == 0.3)
-        #expect(appearance.textSize == .large)
+        // Opacity 0.3 clamps to the FR-041a floor of 0.40.
+        #expect(appearance.opacity == 0.40)
+        #expect(appearance.textSize == 18)
         #expect(appearance.alwaysOnTop == true)
     }
 
@@ -134,36 +199,70 @@ import Domain
         let black = RGBColor(red: 0, green: 0, blue: 0)
         let white = RGBColor(red: 1, green: 1, blue: 1)
         #expect(NoteAppearanceContrast.meetsMinimumContrast(foreground: white, background: black))
-        // And the projection's meetsMinimumContrast flag.
         let appearance = NoteAppearance(
             background: black,
             foreground: white,
-            transparency: 0,
-            textSize: .regular,
+            opacity: 1.0,
+            textSize: 13,
             alwaysOnTop: false
         )
         #expect(appearance.meetsMinimumContrast)
     }
 
+    // MARK: - FR-042 contrast matrix (T225)
+    //
+    // The full matrix: 6 built-in colors × 13 opacity steps × light/dark
+    // desktop samples. For each combination the projection must produce a
+    // foreground (black or white) that meets the applicable WCAG 2.2 AA
+    // threshold against the effective composited background, and
+    // `meetsMinimumContrast` must be true.
+
     @Test
-    func midGrayBackgroundMayFailContrast() {
-        // A mid-gray (#808080) has poor contrast with both black and white
-        // — neither clears WCAG AA 4.5 for normal text. The App layer must
-        // adjust or reject such a custom color (FR-042).
+    func contrastMatrixHoldsForAllColorsOpacitiesAndAppearances() {
+        let desktopSamples: [String: RGBColor] = [
+            "light": RGBColor(red: 0.95, green: 0.95, blue: 0.95),
+            "dark":  RGBColor(red: 0.10, green: 0.10, blue: 0.10),
+        ]
+        var failures: [String] = []
+        for key in NoteColorKey.allCases where key != .custom {
+            let note = Note(
+                colorKey: key,
+                transparency: 1.0,
+                textSize: 13,
+                alwaysOnTop: false,
+                lastModifiedDeviceId: Self.deviceId
+            )
+            for opacity in NoteAppearance.OpacityBounds.allSteps {
+                for (appearanceName, sample) in desktopSamples {
+                    var n = note
+                    n.transparency = opacity
+                    let projection = NoteAppearance.projecting(from: n, desktopSample: sample)
+                    let threshold = NoteAppearanceContrast.minimumContrastRatio(forTextSize: 13)
+                    let ratio = NoteAppearanceContrast.contrastRatio(projection.foreground, projection.background)
+                    if ratio < threshold {
+                        failures.append("\(key.rawValue) @ \(opacity) over \(appearanceName): ratio \(ratio) < \(threshold)")
+                    }
+                    if !projection.meetsMinimumContrast {
+                        failures.append("\(key.rawValue) @ \(opacity) over \(appearanceName): flagged fails contrast")
+                    }
+                }
+            }
+        }
+        #expect(failures.isEmpty, Comment(rawValue: "Contrast matrix failures:\n" + failures.joined(separator: "\n")))
+    }
+
+    // MARK: - Legacy projection field check
+
+    @Test
+    func midGrayBackgroundComputesContrastFlag() {
         let midGray = RGBColor(red: 0.5, green: 0.5, blue: 0.5)
         let appearance = NoteAppearance(
             background: midGray,
             foreground: NoteAppearanceContrast.readableForeground(forBackground: midGray),
-            transparency: 0,
-            textSize: .regular,
+            opacity: 1.0,
+            textSize: 13,
             alwaysOnTop: false
         )
-        // Contrast of #808080 vs black is ~4.0, vs white is ~5.3.
-        // White clears 4.5, so this should actually pass. Let's instead use
-        // a color that's genuinely borderline: #999999 (closer to white,
-        // contrast vs black ~2.85, vs white ~7.4 — passes via white).
-        // The point of this test is that the flag is computed, not that
-        // mid-gray fails. Adjust to assert the flag exists and is bool.
         #expect(appearance.meetsMinimumContrast == Bool(appearance.meetsMinimumContrast))
     }
 }

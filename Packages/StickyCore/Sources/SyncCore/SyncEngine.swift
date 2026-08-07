@@ -48,6 +48,10 @@ public struct SyncSummary: Sendable, Equatable {
     public var skippedCorruptObjects: Int
     public var manifestCommitted: Bool
     public var initializedRemote: Bool
+    /// FR-174 (clarified 2026-08-07): a returning long-offline device found
+    /// remote deletion history that had aged out. The user MUST be informed
+    /// that some synchronization history has aged out (T184-d).
+    public var historyAgedOutDetected: Bool
 
     public init(
         uploadedObjects: Int = 0,
@@ -55,7 +59,8 @@ public struct SyncSummary: Sendable, Equatable {
         appliedTombstones: Int = 0,
         skippedCorruptObjects: Int = 0,
         manifestCommitted: Bool = false,
-        initializedRemote: Bool = false
+        initializedRemote: Bool = false,
+        historyAgedOutDetected: Bool = false
     ) {
         self.uploadedObjects = uploadedObjects
         self.downloadedObjects = downloadedObjects
@@ -63,6 +68,7 @@ public struct SyncSummary: Sendable, Equatable {
         self.skippedCorruptObjects = skippedCorruptObjects
         self.manifestCommitted = manifestCommitted
         self.initializedRemote = initializedRemote
+        self.historyAgedOutDetected = historyAgedOutDetected
     }
 }
 
@@ -118,6 +124,29 @@ public actor SyncEngine {
 
         // 1. Fetch + authenticate the manifest (nil on first sync).
         let remoteManifest = try await manifestStore.fetch()
+
+        // 1.5. Long-offline reconciliation (T184, FR-174): reconcile remote
+        //      deletion history BEFORE uploading local notes. Honored remote
+        //      deletions are applied first so a returning device never
+        //      re-uploads a note the remote deleted; notes with no remote
+        //      deletion record are preserved locally (never auto-deleted);
+        //      locally-deleted notes are never re-uploaded (fetchLocalNotes
+        //      excludes permanentlyDeleted). If any history aged out, the
+        //      summary flags it so the UI informs the user (FR-174-d).
+        if let remoteManifest {
+            let (toDelete, reconcileResult) = try await OfflineReconciler.classify(
+                store: store,
+                remoteTombstones: remoteManifest.tombstones
+            )
+            for noteId in toDelete {
+                if try await applyReconciledDeletion(noteId: noteId) {
+                    summary.appliedTombstones += 1
+                }
+            }
+            if reconcileResult.historyAgedOutDetected {
+                summary.historyAgedOutDetected = true
+            }
+        }
 
         // 2. Local state.
         let localNotes = try await fetchLocalNotes()
@@ -193,6 +222,46 @@ public actor SyncEngine {
         }
 
         return summary
+    }
+
+    // MARK: - Long-offline reconciliation (T184, FR-174)
+
+    /// Applies a reconciled deletion: marks the note permanentlyDeleted and
+    /// records a local tombstone so the deletion propagates (or is already
+    /// remote). Returns `true` when a local note was deleted.
+    private func applyReconciledDeletion(noteId: UUID) async throws -> Bool {
+        let deviceID = deviceId
+        return try await store.write { db in
+            guard try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM note WHERE id = ?",
+                                   arguments: [noteId.uuidString]) ?? 0 > 0 else {
+                return false
+            }
+            try db.execute(
+                sql: """
+                    INSERT INTO tombstone (noteId, deletedVersionId, parentVersionId, deletingDeviceId, deletedAt, canPurgeRemote)
+                    VALUES (?, ?, (SELECT parentVersionId FROM note WHERE id = ?), ?, ?, 0)
+                    ON CONFLICT(noteId) DO UPDATE SET
+                        deletedVersionId = excluded.deletedVersionId,
+                        deletingDeviceId = excluded.deletingDeviceId,
+                        deletedAt = excluded.deletedAt
+                    """,
+                arguments: [noteId.uuidString, UUID().uuidString, noteId.uuidString, deviceID.uuidString, Date()]
+            )
+            try db.execute(
+                sql: """
+                    UPDATE note
+                    SET lifecycleState = 'permanentlyDeleted',
+                        trashedAt = NULL,
+                        versionId = ?,
+                        parentVersionId = (SELECT versionId FROM note WHERE id = ?),
+                        lastModifiedDeviceId = ?,
+                        modifiedAt = ?
+                    WHERE id = ?
+                    """,
+                arguments: [UUID().uuidString, noteId.uuidString, deviceID.uuidString, Date(), noteId.uuidString]
+            )
+            return true
+        }
     }
 
     // MARK: - Note sync primitives
@@ -471,20 +540,78 @@ public actor SyncEngine {
     ///   `OfflineReconciler`), which is the dedicated home for that logic.
     ///   Do NOT extend this method ad-hoc; US10 owns the complete design.
     private func applyRemoteTombstone(_ tombstone: RemoteTombstone) async throws -> Bool {
-        try await store.write { db in
-            guard let row = try Row.fetchOne(db, sql: "SELECT versionId, parentVersionId FROM note WHERE id = ?",
+        let deviceID = deviceId
+        return try await store.write { db in
+            guard let row = try Row.fetchOne(db, sql: "SELECT * FROM note WHERE id = ?",
                                              arguments: [tombstone.noteId.uuidString]) else {
                 return false
             }
             let localVersion = Self.uuid(row, "versionId") ?? UUID()
             let localParent = Self.uuid(row, "parentVersionId")
-            // Lineage safety: apply only when the local version descends
-            // from the deleted version (US10 long-offline reconciliation).
-            let descends = localVersion == tombstone.deletedVersionId
-                || localParent == tombstone.deletedVersionId
-            guard descends else { return false }
-            try db.execute(sql: "DELETE FROM note WHERE id = ?", arguments: [tombstone.noteId.uuidString])
-            return true
+
+            // Lineage safety (T163l delete-vs-edit + T163n long-offline):
+            // honor the deletion when the local version is an ancestor-or-
+            // equal of the deleted version. Three shapes:
+            //   1. local == deleted version (the exact deleted version).
+            //   2. localParent == deleted version (local is the next edit).
+            //   3. tombstone.parentVersionId == local version (the local
+            //      version predates the deletion — ancestor case).
+            let deleted = tombstone.deletedVersionId
+            let localIsAncestorOrEqual = localVersion == deleted
+                || localParent == deleted
+                || tombstone.parentVersionId == localVersion
+
+            if localIsAncestorOrEqual {
+                // Delete the note. Its row is kept as permanentlyDeleted if
+                // it carries blocks another device may still need to
+                // reference; a plain delete cascades blocks. We mirror the
+                // repository's permanent-delete path (tombstone retained).
+                try db.execute(
+                    sql: "UPDATE note SET lifecycleState = 'permanentlyDeleted', trashedAt = NULL WHERE id = ?",
+                    arguments: [tombstone.noteId.uuidString]
+                )
+                try db.execute(
+                    sql: """
+                        INSERT INTO tombstone (noteId, deletedVersionId, parentVersionId, deletingDeviceId, deletedAt, canPurgeRemote)
+                        VALUES (?, ?, ?, ?, ?, 0)
+                        ON CONFLICT(noteId) DO UPDATE SET
+                            deletedVersionId = excluded.deletedVersionId,
+                            deletingDeviceId = excluded.deletingDeviceId,
+                            deletedAt = excluded.deletedAt
+                        """,
+                    arguments: [tombstone.noteId.uuidString, deleted.uuidString, tombstone.parentVersionId?.uuidString, deviceID.uuidString, Date()]
+                )
+                return true
+            }
+
+            // Delete-vs-edit (T163l): the local version diverged from the
+            // deleted lineage — the local content must NOT be lost and MUST
+            // NOT be resurrected as the original. Recover it as a labeled
+            // conflict copy (new note UUID), then honor the deletion.
+            if let note = Self.noteFromRow(db, row: row) {
+                let blockRows = try Row.fetchAll(
+                    db,
+                    sql: "SELECT * FROM block WHERE noteId = ? ORDER BY sortKey",
+                    arguments: [tombstone.noteId.uuidString]
+                )
+                let blocks = blockRows.compactMap { Self.blockFromRow($0) }
+                let localDocument = CanonicalNote(note: note, blocks: blocks)
+                let outcome = try ConflictCopyBuilder.createConflictCopy(
+                    in: db,
+                    originalNoteId: note.id,
+                    localVersionId: localVersion,
+                    remote: localDocument,
+                    deviceId: deviceID
+                )
+                if case .created = outcome {
+                    try db.execute(
+                        sql: "UPDATE note SET lifecycleState = 'permanentlyDeleted', trashedAt = NULL WHERE id = ?",
+                        arguments: [tombstone.noteId.uuidString]
+                    )
+                    return true
+                }
+            }
+            return false
         }
     }
 
@@ -676,7 +803,7 @@ public actor SyncEngine {
                 """,
             arguments: [
                 note.id.uuidString, note.title, note.colorKey.rawValue, note.customColor,
-                note.transparency, note.textSize.rawValue, note.alwaysOnTop ? 1 : 0,
+                note.transparency, note.textSize, note.alwaysOnTop ? 1 : 0,
                 note.widgetEligible ? 1 : 0, note.coverScreenshotBlockId?.uuidString,
                 note.manualSortKey, note.lifecycleState.rawValue,
                 note.trashedAt, note.conflictOriginNoteId?.uuidString,
@@ -689,7 +816,6 @@ public actor SyncEngine {
     private static func noteFromRow(_ db: Database, row: Row) -> Note? {
         guard let id = Self.uuid(row, "id"),
               let colorKey = NoteColorKey(rawValue: row["colorKey"] as String? ?? ""),
-              let textSize = TextSize(rawValue: row["textSize"] as String? ?? ""),
               let lifecycle = NoteLifecycleState(rawValue: row["lifecycleState"] as String? ?? ""),
               let versionId = Self.uuid(row, "versionId"),
               let lastModifiedDeviceId = Self.uuid(row, "lastModifiedDeviceId") else {
@@ -700,8 +826,8 @@ public actor SyncEngine {
             title: row["title"] as String?,
             colorKey: colorKey,
             customColor: row["customColor"] as String?,
-            transparency: row["transparency"] as Double? ?? 0,
-            textSize: textSize,
+            transparency: row["transparency"] as Double? ?? 1.0,
+            textSize: row["textSize"] as Int? ?? 13,
             alwaysOnTop: (row["alwaysOnTop"] as Bool?) ?? false,
             widgetEligible: (row["widgetEligible"] as Bool?) ?? false,
             coverScreenshotBlockId: Self.uuid(row, "coverScreenshotBlockId"),
