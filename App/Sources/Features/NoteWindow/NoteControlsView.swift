@@ -22,12 +22,18 @@ public struct NoteControlsView: View {
     let onCopyAsMarkdown: () -> Void
     let onExport: () -> Void
     let onMoveToTrash: () -> Void
+    /// FR-031 upper-area media entries (T290/T293): add a screenshot /
+    /// add a file reference.
+    let onAddScreenshot: () -> Void
+    let onAddFileReference: () -> Void
 
     @State private var isVisible = false
 
     public init(
         note: Note,
         onChanged: @escaping (Note) -> Void,
+        onAddScreenshot: @escaping () -> Void = {},
+        onAddFileReference: @escaping () -> Void = {},
         onDuplicate: @escaping () -> Void = {},
         onCopyAsMarkdown: @escaping () -> Void = {},
         onExport: @escaping () -> Void = {},
@@ -35,6 +41,8 @@ public struct NoteControlsView: View {
     ) {
         self.note = note
         self.onChanged = onChanged
+        self.onAddScreenshot = onAddScreenshot
+        self.onAddFileReference = onAddFileReference
         self.onDuplicate = onDuplicate
         self.onCopyAsMarkdown = onCopyAsMarkdown
         self.onExport = onExport
@@ -64,6 +72,24 @@ public struct NoteControlsView: View {
                     opacityPicker
                     textSizePicker
                     alwaysOnTopToggle
+                    // FR-031 (T293): add screenshot / file reference.
+                    Button {
+                        onAddScreenshot()
+                    } label: {
+                        Image(systemName: "camera")
+                    }
+                    .buttonStyle(.plain)
+                    .help("Add screenshot")
+                    .accessibilityLabel("Add screenshot")
+
+                    Button {
+                        onAddFileReference()
+                    } label: {
+                        Image(systemName: "paperclip")
+                    }
+                    .buttonStyle(.plain)
+                    .help("Add file reference")
+                    .accessibilityLabel("Add file reference")
                 }
 
                 Button {

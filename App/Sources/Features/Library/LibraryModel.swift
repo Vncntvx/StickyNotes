@@ -174,6 +174,7 @@ public final class LibraryModel {
             try await repo.create(note)
             preferences.markFirstNoteCreated()
             await reload()
+            notifyWidgetsOfNoteChange()
             return note.id
         } catch {
             statusMessage = String(localized: "Could not create a note.")
@@ -190,6 +191,7 @@ public final class LibraryModel {
             let title = try await repo.fetch(id: noteId)?.title
             try await repo.trash(id: noteId, deviceId: DeviceIdentity.current.id)
             await reload()
+            notifyWidgetsOfNoteChange()
             return title
         } catch {
             statusMessage = String(localized: "Could not move the note to Trash.")
@@ -204,6 +206,7 @@ public final class LibraryModel {
         do {
             try await repo.restore(id: noteId, deviceId: DeviceIdentity.current.id)
             await reload()
+            notifyWidgetsOfNoteChange()
         } catch {
             statusMessage = String(localized: "Could not restore the note.")
             isError = true
@@ -217,6 +220,7 @@ public final class LibraryModel {
             let title = try await repo.fetch(id: noteId)?.title
             try await repo.permanentlyDelete(id: noteId, deviceId: DeviceIdentity.current.id)
             await reload()
+            notifyWidgetsOfNoteChange()
             return title
         } catch {
             statusMessage = String(localized: "Could not delete the note.")
@@ -233,12 +237,19 @@ public final class LibraryModel {
         do {
             let ids = try await repo.emptyTrash(deviceId: DeviceIdentity.current.id)
             await reload()
+            notifyWidgetsOfNoteChange()
             return ids.count
         } catch {
             statusMessage = String(localized: "Could not empty Trash.")
             isError = true
             return 0
         }
+    }
+
+    /// FR-110a (T294): widget-affecting library mutations trigger the
+    /// change-driven widget refresh (WidgetRefreshCoordinator).
+    private func notifyWidgetsOfNoteChange() {
+        WidgetRefreshCoordinator.reload(for: .noteCreatedEditedDeletedTrashedRestored)
     }
 
     public func dismissStatusMessage() {

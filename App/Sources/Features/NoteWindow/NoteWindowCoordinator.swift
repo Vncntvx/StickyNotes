@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 import Domain
 import Persistence
 import SystemBridge
@@ -261,6 +262,12 @@ public struct NoteWindowContent: View {
                         onChanged: { updated in
                             host.updateAppearance(updated)
                         },
+                        onAddScreenshot: {
+                            captureScreenshot()
+                        },
+                        onAddFileReference: {
+                            pickAndInsertFileReference()
+                        },
                         onDuplicate: {
                             duplicateNote(host: host)
                         },
@@ -283,9 +290,83 @@ public struct NoteWindowContent: View {
                         },
                         onStructuralBlocksChanged: { newBlocks in
                             host.updateBlocks(newBlocks, isStructural: true)
+                        },
+                        onInsertTodo: {
+                            Task { await host.insertTodoBlock() }
+                        },
+                        onInsertCode: {
+                            Task { await host.insertCodeBlock() }
+                        },
+                        onInsertFileReference: {
+                            pickAndInsertFileReference()
+                        },
+                        onCaptureScreenshot: {
+                            captureScreenshot()
+                        },
+                        todoProvider: { blockId in
+                            await host.todoItem(forBlock: blockId)
+                        },
+                        onToggleTodo: { blockId in
+                            // Completion flips from the CURRENT state.
+                            if let item = await host.todoItem(forBlock: blockId) {
+                                await host.setTodoComplete(blockId: blockId, isComplete: !item.isComplete)
+                            }
+                        },
+                        onDeleteTodo: { blockId in
+                            await host.deleteTodo(blockId: blockId)
+                        },
+                        onIndentTodo: { blockId in
+                            await host.indentTodo(blockId: blockId)
+                        },
+                        onOutdentTodo: { blockId in
+                            await host.outdentTodo(blockId: blockId)
+                        },
+                        onMoveTodo: { blockId, direction in
+                            await host.reorderTodo(blockId: blockId, direction: direction)
+                        },
+                        onFileAction: { blockId, action in
+                            await host.performFileAction(blockId: blockId, action: action)
+                        },
+                        onSetCover: { blockId, isCover in
+                            await host.setCover(blockId: blockId, isCover: isCover)
+                        },
+                        onUpdateCaption: { blockId, caption in
+                            await host.updateCaption(blockId: blockId, caption: caption)
+                        },
+                        onOpenViewer: {
+                            MediaPresenters.presentScreenshotViewer(
+                                noteId: noteId,
+                                screenshots: host.screenshotPayloads()
+                            )
+                        },
+                        onEmbeddedImageAction: { blockId, action in
+                            await host.performEmbeddedImageAction(blockId: blockId, action: action)
                         }
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                // FR-100 (T290): Finder drag-drop inserts a file-reference
+                // block (references, never copies — FR-102).
+                .onDrop(of: [UTType.fileURL.identifier], isTargeted: nil) { providers in
+                    guard let provider = providers.first else { return false }
+                    _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                        if let url {
+                            Task { @MainActor in
+                                await host.insertFileReferenceBlock(url: url)
+                            }
+                        }
+                    }
+                    return true
+                }
+                // FR-091 capture choices (FR-131: permission on invocation).
+                .confirmationDialog("Add Screenshot", isPresented: $showCaptureMenu, titleVisibility: .visible) {
+                    Button("Capture Region…") {
+                        Task { await host.captureRegion() }
+                    }
+                    Button("Capture Window…") {
+                        Task { await host.captureWindow() }
+                    }
+                    Button("Cancel", role: .cancel) {}
                 }
                 .background(ReadableTheme.background(for: note))
             } else {
@@ -302,6 +383,27 @@ public struct NoteWindowContent: View {
         let model = NoteWindowHostModel(noteId: noteId, environment: environment)
         await model.load()
         host = model
+    }
+
+    // MARK: - FR-031 upper-area capture + file entries (T293/T290)
+
+    @State private var showCaptureMenu = false
+
+    /// Captures a screenshot (region or window, user choice).
+    private func captureScreenshot() {
+        guard host != nil else { return }
+        showCaptureMenu = true
+    }
+
+    /// Picks a file (NSOpenPanel) and inserts a file-reference block.
+    private func pickAndInsertFileReference() {
+        guard let host else { return }
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task { await host.insertFileReferenceBlock(url: url) }
     }
 
     // MARK: - FR-031 note-level actions (T282)

@@ -31,6 +31,24 @@ public struct RichTextBlockView: View {
     /// immediately per FR-141a (T281).
     let onStructuralBlocksChanged: ([Block]) -> Void
 
+    // T290: block-editing affordances (insertion + per-block actions),
+    // wired by the note-window host.
+    let onInsertTodo: () -> Void
+    let onInsertCode: () -> Void
+    let onInsertFileReference: () -> Void
+    let onCaptureScreenshot: () -> Void
+    let todoProvider: (UUID) async -> TodoItem?
+    let onToggleTodo: (UUID) async -> Void
+    let onDeleteTodo: (UUID) async -> Void
+    let onIndentTodo: (UUID) async -> Void
+    let onOutdentTodo: (UUID) async -> Void
+    let onMoveTodo: (UUID, Int) async -> Void
+    let onFileAction: (UUID, FileReferenceAction) async -> Void
+    let onSetCover: (UUID?, Bool) async -> Void
+    let onUpdateCaption: (UUID, String?) async -> Void
+    let onOpenViewer: () -> Void
+    let onEmbeddedImageAction: (UUID, EmbeddedImageAction) async -> Void
+
     @State private var attributedText = AttributedString("")
     @State private var isIMEComposing = false
 
@@ -38,12 +56,42 @@ public struct RichTextBlockView: View {
         note: Note,
         blocks: [Block],
         onBlocksChanged: @escaping ([Block]) -> Void,
-        onStructuralBlocksChanged: @escaping ([Block]) -> Void = { _ in }
+        onStructuralBlocksChanged: @escaping ([Block]) -> Void = { _ in },
+        onInsertTodo: @escaping () -> Void = {},
+        onInsertCode: @escaping () -> Void = {},
+        onInsertFileReference: @escaping () -> Void = {},
+        onCaptureScreenshot: @escaping () -> Void = {},
+        todoProvider: @escaping (UUID) async -> TodoItem? = { _ in nil },
+        onToggleTodo: @escaping (UUID) async -> Void = { _ in },
+        onDeleteTodo: @escaping (UUID) async -> Void = { _ in },
+        onIndentTodo: @escaping (UUID) async -> Void = { _ in },
+        onOutdentTodo: @escaping (UUID) async -> Void = { _ in },
+        onMoveTodo: @escaping (UUID, Int) async -> Void = { _, _ in },
+        onFileAction: @escaping (UUID, FileReferenceAction) async -> Void = { _, _ in },
+        onSetCover: @escaping (UUID?, Bool) async -> Void = { _, _ in },
+        onUpdateCaption: @escaping (UUID, String?) async -> Void = { _, _ in },
+        onOpenViewer: @escaping () -> Void = {},
+        onEmbeddedImageAction: @escaping (UUID, EmbeddedImageAction) async -> Void = { _, _ in }
     ) {
         self.note = note
         self.blocks = blocks
         self.onBlocksChanged = onBlocksChanged
         self.onStructuralBlocksChanged = onStructuralBlocksChanged
+        self.onInsertTodo = onInsertTodo
+        self.onInsertCode = onInsertCode
+        self.onInsertFileReference = onInsertFileReference
+        self.onCaptureScreenshot = onCaptureScreenshot
+        self.todoProvider = todoProvider
+        self.onToggleTodo = onToggleTodo
+        self.onDeleteTodo = onDeleteTodo
+        self.onIndentTodo = onIndentTodo
+        self.onOutdentTodo = onOutdentTodo
+        self.onMoveTodo = onMoveTodo
+        self.onFileAction = onFileAction
+        self.onSetCover = onSetCover
+        self.onUpdateCaption = onUpdateCaption
+        self.onOpenViewer = onOpenViewer
+        self.onEmbeddedImageAction = onEmbeddedImageAction
     }
 
     public var body: some View {
@@ -65,6 +113,28 @@ public struct RichTextBlockView: View {
                         commit(newValue)
                         StickyLogger.editor.signpostEnd(state, op: "editor.keystroke")
                     }
+
+                // FR-050 block insertion (T290): todos, code blocks, file
+                // references (Finder drag-drop handled at the window level).
+                HStack(spacing: 10) {
+                    Menu {
+                        Button("Add Todo", action: onInsertTodo)
+                            .keyboardShortcut("t", modifiers: [.command, .shift])
+                        Button("Add Code Block", action: onInsertCode)
+                            .keyboardShortcut("c", modifiers: [.command, .shift])
+                        Divider()
+                        Button("Add File Reference…", action: onInsertFileReference)
+                        Button("Capture Screenshot…", action: onCaptureScreenshot)
+                    } label: {
+                        Label("Add Block", systemImage: "plus.circle")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .accessibilityLabel("Add block")
+
+                    Spacer()
+                }
+                .padding(.bottom, 2)
 
                 // Special blocks rendered beneath (todo/code/file/image/
                 // screenshot) with the unified container (FR-050b).
@@ -92,18 +162,38 @@ public struct RichTextBlockView: View {
     private func blockView(_ block: Block, index: Int) -> some View {
         switch block.kind {
         case .todo:
-            TodoBlockView(block: block, onChanged: { updated in
-                // FR-141a: todo completion persists immediately (structural).
-                replaceBlock(updated, at: index, structural: true)
-            })
+            TodoBlockView(
+                block: block,
+                onChanged: { updated in
+                    // FR-141a: text edits debounce; completion/structural
+                    // ops go through the repository directly (T290).
+                    replaceBlock(updated, at: index)
+                },
+                todoProvider: todoProvider,
+                onToggleComplete: onToggleTodo,
+                onDelete: onDeleteTodo,
+                onIndent: onIndentTodo,
+                onOutdent: onOutdentTodo,
+                onMove: onMoveTodo
+            )
         case .code:
             CodeBlockView(block: block)
         case .fileRef:
-            FileReferenceCardView(block: block)
+            FileReferenceCardView(block: block, onAction: { action in
+                Task { await onFileAction(block.id, action) }
+            })
         case .screenshot:
-            ScreenshotBlockView(block: block)
+            ScreenshotBlockView(block: block, onSetCover: { isCover in
+                Task { await onSetCover(block.id, isCover) }
+            }, onUpdateCaption: { caption in
+                Task { await onUpdateCaption(block.id, caption) }
+            }, onViewLarger: {
+                onOpenViewer()
+            })
         case .image:
-            EmbeddedImageBlockView(block: block)
+            EmbeddedImageBlockView(block: block, onAction: { action in
+                Task { await onEmbeddedImageAction(block.id, action) }
+            })
         case .richText:
             EmptyView()
         }

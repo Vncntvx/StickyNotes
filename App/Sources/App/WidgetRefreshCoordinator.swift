@@ -25,11 +25,41 @@ public enum WidgetRefreshCoordinator {
         case quickCreate = "StickyWidgetQuickCreate"
     }
 
+    /// The kind of local change that may affect widgets (FR-110a).
+    public enum Change: Sendable {
+        case noteCreatedEditedDeletedTrashedRestored
+        case todoToggled
+        case eligibilityChanged
+        case conflictCopyCreated
+    }
+
     /// Reloads only the affected kinds (never a blanket reload of
-    /// unaffected kinds — FR-110a).
+    /// unaffected kinds — FR-110a). Tests may override the reload sink.
+    /// `nonisolated(unsafe)`: a test-only seam; production code never
+    /// mutates it (main-actor access pattern).
+    public nonisolated(unsafe) static var reloadOverride: (([Kind]) -> Void)?
+
     public static func reload(_ kinds: [Kind]) {
+        if let reloadOverride {
+            reloadOverride(kinds)
+            return
+        }
         for kind in kinds {
             WidgetCenter.shared.reloadTimelines(ofKind: kind.rawValue)
+        }
+    }
+
+    /// Routes a change to the affected widget kinds.
+    public static func reload(for change: Change) {
+        switch change {
+        case .noteCreatedEditedDeletedTrashedRestored:
+            reload(kindsAffectedByNoteChange())
+        case .todoToggled:
+            reload(kindsAffectedByTodoToggle())
+        case .eligibilityChanged:
+            reload(kindsAffectedByEligibilityChange())
+        case .conflictCopyCreated:
+            reload(kindsAffectedByConflictCopy())
         }
     }
 

@@ -61,22 +61,45 @@ public struct CodeBlockView: View {
     }
 }
 
-// MARK: - FileReferenceCardView (T166/T271/T279, FR-100/FR-101/FR-102/FR-103/FR-104/FR-105)
+// MARK: - FileReferenceCardView (T166/T271/T279/T291, FR-100/FR-101/FR-102/FR-103/FR-104/FR-105)
+
+/// The file-reference card actions (T291) — resolved by the host through
+/// SecurityScopedBookmarks / FileDragOutBridge / the repositories.
+public enum FileReferenceAction: Sendable {
+    case open
+    case reveal
+    case copyPath
+    case relink
+    case remove
+    case move  // explicit move: the host presents the destination picker
+}
 
 /// The file-reference card: name/icon/size/date/availability/origin device
 /// + open/reveal/copy-path/drag-out/move/relink/remove. The availability
 /// indicator distinguishes the four FR-100 states by MORE than color alone
-/// (icon + text, FR-044).
+/// (icon + text, FR-044). Availability is evaluated from the device-local
+/// FileLocator bookmark (FR-105) — the pre-Phase-27 version hardcoded
+/// `.available`.
 public struct FileReferenceCardView: View {
     let block: Block
+    let onAction: (FileReferenceAction) -> Void
+    /// Evaluates the FR-100 availability from the device-local locator
+    /// (bookmark resolution — FR-105). Loaded on appear (T291).
+    let availabilityProvider: (UUID) async -> FileAvailability
 
     @State private var displayName = ""
     @State private var contentType = ""
     @State private var approximateSize: Int?
-    @State private var availability: FileAvailability = .available
+    @State private var availability: FileAvailability = .onAnotherDevice
 
-    public init(block: Block) {
+    public init(
+        block: Block,
+        onAction: @escaping (FileReferenceAction) -> Void = { _ in },
+        availabilityProvider: @escaping (UUID) async -> FileAvailability = { _ in .onAnotherDevice }
+    ) {
         self.block = block
+        self.onAction = onAction
+        self.availabilityProvider = availabilityProvider
     }
 
     public var body: some View {
@@ -103,26 +126,42 @@ public struct FileReferenceCardView: View {
             Spacer()
 
             Button {
-                // open (wired by the host via SecurityScopedBookmarks)
+                onAction(.open)
             } label: {
                 Image(systemName: "arrow.up.doc")
             }
             .buttonStyle(.plain)
             .help("Open file")
             .accessibilityLabel("Open file")
+            .disabled(availability == .missing || availability == .onAnotherDevice)
 
-            Button {
-                // relink (FR-103)
+            Menu {
+                Button("Reveal in Finder") { onAction(.reveal) }
+                Button("Copy Path") { onAction(.copyPath) }
+                Button("Relink…") { onAction(.relink) }
+                Button("Move File…") { onAction(.move) }
+                Divider()
+                Button("Remove Reference", role: .destructive) { onAction(.remove) }
             } label: {
-                Image(systemName: "arrow.triangle.2.circlepath")
+                Image(systemName: "ellipsis.circle")
             }
             .buttonStyle(.plain)
-            .help("Relink file")
-            .accessibilityLabel("Relink file")
+            .help("File actions")
+            .accessibilityLabel("More file actions")
         }
         .padding(8)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
-        .onAppear {
+        .task {
+            if case .fileReference(let ref) = block.payload {
+                displayName = ref.displayName
+                contentType = ref.contentType
+                approximateSize = ref.approximateSize
+            }
+            // FR-100: availability evaluated from the device-local locator
+            // by the host (bookmark resolution — FR-105).
+            availability = await availabilityProvider(block.id)
+        }
+        .onChange(of: block.id) { _, _ in
             if case .fileReference(let ref) = block.payload {
                 displayName = ref.displayName
                 contentType = ref.contentType
