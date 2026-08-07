@@ -28,11 +28,6 @@ log is archived in `history/clarifications.md` for audit purposes.
 - Q: How should in-progress async operations provide visual feedback? → A: Silent for background operations (autosave, search, thumbnail generation); explicit, non-blocking status for user-initiated operations (screenshot capture, manual sync, export/import), surfaced as status text/indicator per FR-151 (FR-153).
 - Q: Which exception/failure scenarios should the spec cover for the library and search surfaces? → A: A general resilience guarantee (no crash, no data loss, non-blocking status) plus explicit rules for search no-results (FR-014c empty-state) and note-window-open failure (FR-011a); sort/reorder failures are covered by the general guarantee and FR-022a persistence rules (FR-011a).
 - Q: Should the spec require VoiceOver labels/announcements for every interactive element, or rely on platform defaults plus a scoped set of custom requirements? → A: Platform defaults for standard controls; explicit enumerated custom-label requirements for custom-built controls (file-reference card, screenshot viewer, upper-area hover controls, editor block affordances) and required VoiceOver announcements for the deletion toast and user-initiated operation completion (FR-180b).
-- Q: Where should the widget-eligibility setting (per-note "may appear in widgets" control per FR-112) live in the note UI? → A: A note-level toggle in the note's contextual menu alongside the other note-level actions (duplicate, export as JSON, copy as Markdown, move to Trash per FR-031); the upper-area control bar stays uncluttered (FR-112; FR-031).
-- Q: What should a widget show when no eligible note exists (all notes widget-excluded, or the configured note is gone)? → A: Reuse the sanitized "temporarily unavailable" placeholder per FR-140a — localized, no content, no title; the widget never implies an excluded note exists (FR-112; FR-140a).
-- Q: When two different notes start with byte-identical first lines, should the spec define how cards stay distinguishable? → A: Identical generated summaries are accepted; cards remain distinguishable via the existing deterministic card fields — last-modified time, note color, and the 2-line body preview (FR-020a). No summary disambiguation rule (FR-021; FR-020a).
-- Q: Should the file-reference card's visual design (icon size, metadata layout, availability-status indicator) be pinned in the spec? → A: Card layout and icon size stay implementation choices per FR-050b; the spec pins only the availability-status indicator semantics — enumerated states (available / missing / stale / on-another-device), communicated by more than color alone (FR-044) (FR-100; FR-103; FR-104; FR-050b).
-- Q: Should the spec add a VoiceOver response-time target for navigating a large note, or leave accessibility performance unquantified? → A: Leave VoiceOver traversal latency unquantified; SC-004a (keystroke-to-glyph <16 ms) and SC-006 (no sustained CPU) remain the accessibility performance guarantees, since traversal latency is dominated by the system accessibility engine (SC-004a; SC-006).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -713,11 +708,7 @@ cited FR.
   FR-002a card dimensions.
 - **FR-021**: When a note has no manual title, the first meaningful content MAY
   be shown as a temporary summary, but it MUST NOT silently become a permanent
-  manual title. When two different notes have byte-identical first meaningful
-  content, their generated summaries MAY be identical; cards remain
-  distinguishable through the other deterministic card fields (last-modified
-  time, note color, and the 2-line body preview per FR-020a). No summary
-  disambiguation rule is required.
+  manual title.
 - **FR-022**: The user MUST be able to switch sorting among Recently Modified,
   Recently Created, Title order, and Manual order.
 - **FR-022a**: Under Manual order, each note's sort position MUST be
@@ -1076,11 +1067,6 @@ cited FR.
   copied into the application and not uploaded as attachments; the card MUST
   display file name, file icon/type, approximate size when available, date
   added, availability status, and the Mac where the reference was created.
-  The card's icon size and metadata layout are implementation choices per
-  FR-050b. The availability-status indicator MUST distinguish the states
-  available, missing, stale (bookmark unresolved but file may exist), and
-  on-another-device (synchronized metadata without a local file per FR-104),
-  and MUST communicate each state by more than color alone (FR-044).
 - **FR-101**: The user MUST be able to open the referenced file when available,
   reveal it in Finder, copy its path when available, drag it from the note into
   Finder or another application, relink it when the original cannot be found,
@@ -1125,14 +1111,7 @@ cited FR.
 - **FR-112**: Each note MUST have a setting controlling whether it may appear in
   widgets; when excluded, its title, body, todo text, images, screenshots, and
   summaries MUST NOT appear in widget timelines, previews, placeholders, or
-  snapshots. The widget-eligibility toggle MUST be a note-level action in the
-  note's contextual menu alongside the other note-level actions (duplicate,
-  export as JSON, copy as Markdown, move to Trash per FR-031), MUST be
-  keyboard-accessible (FR-181), and MUST NOT occupy the upper-area control
-  bar. When no eligible note exists for a widget (every note excluded, or the
-  configured note deleted/trashed/conflicted), the widget MUST present the
-  sanitized "temporarily unavailable" placeholder per FR-140a — localized, no
-  content, no note title — and MUST NOT imply that an excluded note exists.
+  snapshots.
 
 **Global shortcuts**
 
@@ -1506,9 +1485,7 @@ cited FR.
   results within 200 milliseconds as the query changes.
 - **SC-006**: While the application is idle with no user action, it shows no
   sustained processor use and no high-frequency polling when synchronization is
-  inactive. VoiceOver traversal latency is not separately quantified: it is
-  dominated by the system accessibility engine; SC-004a and SC-006 remain the
-  accessibility performance guarantees.
+  inactive.
 - **SC-007**: During a network outage, the user can create, edit, search,
   delete, and restore notes with no degradation relative to online use.
 - **SC-008**: Opening a note containing large screenshots does not freeze the
@@ -1549,4 +1526,6 @@ cited FR.
   user-supplied WebDAV or S3-compatible endpoint over HTTPS; there is no
   dependency on any developer-operated service (FR-143, FR-190).
 
-<!-- token-budget: compacted (level=medium) on 2026-08-07T08:49:44Z; original at spec.full.md -->
+<!-- token-budget: compacted (level=medium) on 2026-08-07; original at spec.full.md -->
+<!-- token-budget: backup-refreshed on 2026-08-07 (session-2 FRs FR-011a/014c/050b/141b/180b); prior backup in git history -->
+

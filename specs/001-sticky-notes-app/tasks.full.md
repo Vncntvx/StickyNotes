@@ -800,3 +800,4 @@ All paths repository-relative.
 - SC-006 VoiceOver note (not quantified): ⚠ spec-only note; test docs must not assert traversal targets — T277 verify alignment
 
 <!-- token-budget: compacted (level=medium) on 2026-08-07T08:56:41Z; original at tasks.full.md -->
+<!-- token-budget: backup-refreshed on 2026-08-07 (Phase 25 session-3 FRs T274–T280); prior backup in git history -->

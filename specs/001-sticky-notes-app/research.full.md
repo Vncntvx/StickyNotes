@@ -2,15 +2,17 @@
 
 **Feature**: 001-sticky-notes-app | **Date**: 2026-08-06 | **Plan**: [plan.md](./plan.md)
 
-Records each major technical decision with rationale, alternatives considered,
-rejected alternatives, risks, a validation plan, and constitution impact;
-resolves every `NEEDS CLARIFICATION` from the plan's Technical Context.
+This document records each major technical decision with rationale, alternatives
+considered, rejected alternatives, risks, a validation plan, and constitution
+impact. It resolves every `NEEDS CLARIFICATION` from the plan's Technical
+Context.
 
-> **Verification caveat**: Generated in a CLT-only environment (no full Xcode;
-> network unavailable). **[VERIFY IN M0]** decisions are directions based on
-> established Apple-platform knowledge, confirmed by a Milestone 0 prototype in
-> a networked, full-Xcode environment; the Argon2id selection is a *process*
-> with acceptance criteria, not a pre-verified choice. (Snapshot archived in
+> **Verification caveat**: This plan was generated in a CLT-only environment
+> (no full Xcode; network unavailable). Decisions marked **[VERIFY IN M0]** are
+> directions based on established Apple-platform knowledge that must be
+> confirmed by a Milestone 0 prototype in a networked, full-Xcode environment;
+> the Argon2id selection is a selection *process* with acceptance criteria, not
+> a pre-verified choice. (Original environment snapshot archived in
 > `history/plan-superseded.md`.)
 
 ## R0. Toolchain availability (Xcode / Swift / CI)
@@ -19,8 +21,8 @@ resolves every `NEEDS CLARIFICATION` from the plan's Technical Context.
   Xcode 26.x (preferred 26.6), Swift 6.3 in Swift 6 language mode with strict
   concurrency. CI uses a stable macOS GitHub Actions runner with the selected
   Xcode 26.x.
-- **Rationale**: The user-supplied baseline; macOS 26 is the constitution's
-  minimum (Principle II); Swift 6 strict concurrency enforces the data-race
+- **Rationale**: The user-supplied baseline. macOS 26 is the constitution's
+  minimum (Principle II). Swift 6 strict concurrency enforces the data-race
   safety the architecture relies on (Principles XI, XIII).
 - **Alternatives considered**: Building against the local CLT-only Swift 6.4 /
   macOS 27 SDK. Rejected as the project baseline because there is no GUI/Widget
@@ -157,8 +159,8 @@ resolves every `NEEDS CLARIFICATION` from the plan's Technical Context.
   Main app owns migrations; widget performs only short reads and small atomic
   todo-toggle writes. Widget detects an unsupported schema version and falls
   back to privacy-safe read-only placeholders.
-- **Rationale**: WAL allows concurrent readers + one writer across processes;
-  widgets must not run migrations or initialize sync (Principles VI, XI).
+- **Rationale**: WAL allows concurrent readers + one writer across processes.
+  Widgets must not run migrations or initialize sync (Principles VI, XI).
 - **Alternatives considered**: `DatabaseQueue` (serial) for the widget only.
   Rejected: WAL pool is needed for app+widget concurrency and app
   read-during-write responsiveness.
@@ -386,11 +388,11 @@ resolves every `NEEDS CLARIFICATION` from the plan's Technical Context.
   diverges from the last known common ancestor, it creates a conflict copy on
   next sync (per the conflict model).
 - **Rationale**: Principle VIII (tombstones prevent resurrection; non-
-  destructive; 30-day retention); the clarification closes the highest-risk
-  tombstone edge case (research.md R15 / security.md CHK042) — getting it
-  wrong either resurrects a deleted note (violates VIII) or silently deletes
-  local content the user still wants. Fail-safe direction: preserve locally;
-  never auto-delete; let the user decide.
+  destructive; 30-day retention). The clarification closes the highest-risk
+  tombstone edge case (research.md R15 / security.md CHK042): getting it wrong
+  either resurrects a deleted note (violates VIII) or silently deletes local
+  content the user still wants. The fail-safe direction is "preserve locally;
+  never auto-delete; let the user decide."
 - **Alternatives considered**: Permanent tombstones. Rejected: unbounded growth.
   Hard 30-day cutoff ignoring sync safety. Rejected: could resurrect. Treating
   absence of a remote tombstone as "note was never deleted" and re-uploading
@@ -398,9 +400,9 @@ resolves every `NEEDS CLARIFICATION` from the plan's Technical Context.
   Purging all local content older than 30 days to match remote state. Rejected:
   silently destroys local content the user may still want.
 - **Validation**: Sync tests "long-offline device," "tombstone expiration,"
-  "delete versus edit," "device returning after remote object cleanup"; a
+  "delete versus edit," "device returning after remote object cleanup." A
   specific test asserts: returning device with a locally-deleted note whose
-  remote tombstone was purged → note NOT re-uploaded; user informed; no
+  remote tombstone was purged → note is NOT re-uploaded; user is informed; no
   auto-delete of any local content.
 - **Constitution impact**: Principle VIII (non-destructive sync, tombstones,
   no resurrection). The clarification strengthens, not weakens, VIII.
@@ -467,10 +469,10 @@ resolves every `NEEDS CLARIFICATION` from the plan's Technical Context.
   MUST NOT automatically delete the prior repository's remote data — server-side
   cleanup of the old vault remains a manual user responsibility.
 - **Rationale**: Principle III (local notes preserved regardless of sync state)
-  and VIII (non-destructive sync; never silently delete remote data); the app
-  must not destructively touch a remote vault the user may still want (rollback
-  or mistaken replacement). Fail-safe direction: leave old remote intact; let
-  the user clean up.
+  and VIII (non-destructive sync; never silently delete remote data). The
+  application has no business destructively touching a remote vault the user
+  may still want (e.g., for rollback, or because the "replacement" was a
+  mistake). Fail-safe direction: leave old remote intact; let the user clean up.
 - **Alternatives considered**: Reject the new config and force a separate
   "Remove" step first. Rejected: clunkier UX with no safety gain, since the
   single confirmed replace already preserves local notes and never touches old
@@ -540,12 +542,14 @@ resolves every `NEEDS CLARIFICATION` from the plan's Technical Context.
   vault or the application exits. The application MUST NOT force a re-prompt
   merely because the setting was toggled off.
 - **Rationale**: Balances convenience against exfiltration risk (security.md
-  CHK064): persisting across normal launches avoids daily password re-entry,
-  while reboot/logoff forces re-entry, limiting the window if the device is
-  stolen unattended; "not a login-item daemon" prevents silent re-unlock on
-  every system start; toggle-off-preserves-current-session avoids surprising
-  re-prompts for a future-affecting setting; boot-timestamp comparison makes
-  restart detection testable without login-item or daemon behavior.
+  CHK064). Persisting across normal app launches means users aren't re-entering
+  the password daily, but a reboot/logoff forces re-entry, limiting the window
+  if the device is stolen while unattended. "Not a login-item daemon" prevents
+  the vault from being silently re-unlocked on every system start. The
+  toggle-off-preserves-current-session rule avoids surprising the user with a
+  re-prompt for an action that feels like it should only affect future
+  behavior; the boot-timestamp comparison makes restart detection testable
+  without relying on login-item or daemon behavior.
 - **Implementation direction [VERIFY IN M0]**: store the wrapped/unwrapped key
   material in a Keychain item marked `kSecAttrSynchronizable = false` (iCloud
   Keychain sync disabled for this item) and clear it on explicit lock. Detect
@@ -617,7 +621,7 @@ resolves every `NEEDS CLARIFICATION` from the plan's Technical Context.
   non-violation in FR-160b.
 - **Rationale**: Principle VII requires encrypting all "meaningful metadata,"
   but without a positive enumeration a future contributor could accidentally
-  upload an unencrypted meaningful field (security.md CHK002/CHK013); the
+  upload an unencrypted meaningful field (security.md CHK002/CHK013). The
   observable-leakage bound prevents reviewers from treating inherent protocol
   metadata as a privacy gap (security.md CHK011).
 - **Validation**: SecurityCore test asserts every field in the FR-160a
@@ -638,7 +642,7 @@ resolves every `NEEDS CLARIFICATION` from the plan's Technical Context.
   corresponding fail-closed input and test vector in the same change.
 - **Rationale**: Principle VII mandates "fail closed" but did not enumerate the
   triggering inputs, leaving the encryption correctness boundary untestable
-  (security.md CHK012/CHK028/CHK029); a positive list makes each input a
+  (security.md CHK012/CHK028/CHK029). A positive list makes each input a
   machine-checkable test vector.
 - **Validation**: SecurityCore test suite includes one deterministic test
   vector per FR-160d input; each asserts the object is rejected without writing
@@ -657,12 +661,12 @@ resolves every `NEEDS CLARIFICATION` from the plan's Technical Context.
   transaction (FR-022a); (4) Todo nesting depth is bounded at 6 levels,
   indent disabled at depth 6, validation rejects deeper (FR-072a).
 - **Rationale**: Constitution IV (explicit durable data) and XII (testing)
-  require these values to be concrete and testable, not illustrative:
-  external-content FTS5 guarantees the index cannot drift from canonical data
-  (deletions cascade); the 256px thumbnail guarantees no full-res decode in
-  the card grid (SC-008); sort-key gap + renormalization threshold make
-  reordering deterministic; the todo depth bound prevents unbounded recursion
-  (data.md CHK011/CHK012/CHK013/CHK014).
+  require these values to be concrete and testable, not illustrative. The
+  external-content FTS5 mode guarantees the index cannot drift from canonical
+  data (deletions cascade). The 256px thumbnail guarantees no full-res decode
+  in the card grid (SC-008). The sort-key gap and renormalization threshold
+  make reordering deterministic. The todo depth bound prevents unbounded
+  recursion (data.md CHK011/CHK012/CHK013/CHK014).
 - **Validation**: AssetStore test asserts thumbnail generation produces 256px
   longest edge. Persistence test asserts FTS5 index is external-content,
   deletion cascades, and drift triggers rebuild. Persistence test asserts
@@ -679,10 +683,10 @@ resolves every `NEEDS CLARIFICATION` from the plan's Technical Context.
   enough to complete within the timeout; on timeout the widget reports a
   sanitized "temporarily unavailable" status and retries on next refresh.
 - **Rationale**: The app and widget share the SQLite DB in the App Group
-  container; without a concrete timeout concurrent WAL access could block
-  indefinitely or report spurious errors (data.md CHK015/CHK016/CHK035); 5 s
-  gives the widget's short reads headroom to wait out an app write while still
-  failing fast enough to surface real contention.
+  container; without a concrete timeout, concurrent WAL access could block
+  indefinitely or report spurious errors (data.md CHK015/CHK016/CHK035). Five
+  seconds gives the widget's short reads enough headroom to wait out an app
+  write while still failing fast enough to surface real contention.
 - **Validation**: Persistence test suite runs app + widget concurrently under
   WAL with the 5s timeout; asserts widget reads complete within the timeout
   under normal load and report "temporarily unavailable" (not a crash or raw
@@ -704,9 +708,9 @@ resolves every `NEEDS CLARIFICATION` from the plan's Technical Context.
   note metadata.
 - **Rationale**: Bundling assets inside note envelopes would make large-asset
   sync non-resumable and block note metadata sync on a single failed upload
-  (data.md CHK034, security.md CHK005); independent objects with per-object
+  (data.md CHK034, security.md CHK005). Independent objects with per-object
   retry match Constitution IV (atomic asset writes + hash-based dedup) and
-  VIII (partial upload/download resistance).
+  Constitution VIII (resistant to partial upload/download).
 - **Validation**: SyncCore test injects a mid-asset-upload failure; asserts
   note metadata syncs successfully, asset state is `partialAssetSyncFailure`,
   and a subsequent sync run retries the asset independently without
@@ -759,10 +763,10 @@ resolves every `NEEDS CLARIFICATION` from the plan's Technical Context.
   disabled by default and carry no note content (Principle VI — no content in
   logs/signposts; only timing).
 - **Rationale**: SC-004 "no visible lag" was not machine-checkable; SC-004a
-  pins the bound and measurement technique; the editor's input path is the
-  same SwiftUI `TextEditor`/`AttributedString` path validated in M0 (R1/R2);
-  IME composition must not introduce re-decoding or full-document re-layout
-  per keystroke.
+  pins the bound and the measurement technique. The editor's input path is
+  the same SwiftUI `TextEditor`/`AttributedString` path validated in M0
+  (R1/R2); IME composition must not introduce re-decoding or full-document
+  re-layout per keystroke.
 - **Alternatives considered**: Instruments-only manual measurement without a
   test. Rejected: not automated (Principle XII). Measuring in production code
   with content-bearing logs. Rejected: privacy (Principle VI).
@@ -787,11 +791,12 @@ resolves every `NEEDS CLARIFICATION` from the plan's Technical Context.
 - **Rationale**: FR-012/FR-013 used the undefined term "meaningful text,"
   leaving the auto-removal decision untestable and risking silent data loss
   if a user typed a single character and closed the window (ux.md CHK023,
-  CHK032); a one-non-whitespace-character threshold is the safest, simplest,
-  most objectively testable definition, aligning with Constitution III
+  CHK032). A one-non-whitespace-character threshold is the safest, simplest,
+  most objectively testable definition; it aligns with Constitution III
   (local-first; never silently lose content) and Principle X (non-
-  destructive); treating any structural block (todo/image/etc.) as meaningful
-  regardless of text length covers empty todos and pasted images.
+  destructive). Treating any structural block (todo/image/etc.) as
+  meaningful regardless of text length covers the cases where a user adds
+  an empty todo or pastes an image without typing.
 - **Alternatives considered**: Require ≥3 characters (Option B). Rejected:
   arbitrary, still loses a 1-2 character note. Require letters/digits/CJK
   only — punctuation/emoji not meaningful (Option C). Rejected: a user
@@ -818,13 +823,14 @@ resolves every `NEEDS CLARIFICATION` from the plan's Technical Context.
   make each attempt computationally expensive. The application MUST NOT
   introduce account-lockout, timed backoff, or attempt-counting
   mechanisms.
-- **Rationale**: In a local-first, no-account architecture, lockout or
-  attempt-counting could be used to DoS a legitimate user (an attacker who
-  knows the endpoint could trigger lockouts); the Argon2id KDF cost is the
-  rate limiter — at ≥19 MiB memory and ≥2 iterations each attempt takes
-  hundreds of milliseconds to seconds, making remote brute-force infeasible
-  while never blocking a user who simply mistypes (standard PBE pattern,
-  security.md CHK028).
+- **Rationale**: In a local-first, no-account architecture, any lockout or
+  attempt-counting mechanism could be used to denial-of-service a
+  legitimate user (an attacker who knows the endpoint could trigger
+  lockouts). The Argon2id KDF cost itself serves as the rate limiter: at
+  ≥19 MiB memory and ≥2 iterations, each attempt takes hundreds of
+  milliseconds to seconds, making remote brute-force infeasible while
+  never blocking a legitimate user who simply mistypes. This is the
+  standard pattern for password-based encryption (security.md CHK028).
 - **Alternatives considered**: Lockout after N attempts (Option A).
   Rejected: DoS vector; unnecessary given KDF cost. Timed backoff
   (Option A variant). Rejected: same DoS concern. Require app restart
@@ -846,14 +852,15 @@ resolves every `NEEDS CLARIFICATION` from the plan's Technical Context.
   `manualSortKey` MUST be reset to (current maximum sort-key among active
   notes) + 1024, placing it at the end of Manual order (FR-022a,
   clarified 2026-08-07). The pre-deletion sort-key MUST NOT be retained.
-- **Rationale**: During the note's absence other notes may have been
-  inserted or reordered, so the original position is no longer semantically
-  valid and the old key could collide with a new note's key or jump to a
-  stale position; appending is the most predictable, conflict-free behavior
-  (new key strictly greater than all existing keys, so restore alone never
-  triggers renormalization), matching the intuition that a restored note
-  rejoins the list rather than returning to a remembered spot (data.md
-  CHK038).
+- **Rationale**: During the note's absence, other notes may have been
+  inserted or reordered, so the original position is no longer
+  semantically valid and retaining the old key could collide with a new
+  note's key or produce a surprising jump to a stale position. Appending
+  to the end is the most predictable, conflict-free behavior: the new
+  key is strictly greater than all existing keys, so restore alone never
+  triggers renormalization. This matches the user intuition that a
+  restored note is "rejoining" the list rather than "returning to a
+  remembered spot" (data.md CHK038).
 - **Alternatives considered**: Retain pre-deletion sort-key; renormalize
   on collision (Option A). Rejected: collisions possible; position
   surprise. Insert at nearest-neighbor position with gap check
@@ -935,10 +942,10 @@ resolves every `NEEDS CLARIFICATION` from the plan's Technical Context.
   Whole-library bulk export/import is a declared non-goal (clarified
   2026-08-07).
 - **Rationale**: One schema = one format contract for sync, export, and
-  import (Constitution IV); reusing the envelope avoids a second portable
-  format and lets round-trip tests reuse canonical serialization tests; bulk
-  export was rejected to keep scope focused — sync serves as the multi-device
-  redundancy path (Constitution I).
+  import (Constitution IV); reusing the envelope avoids maintaining a second
+  portable format and lets round-trip tests reuse canonical serialization
+  tests. Bulk export was rejected to keep scope focused; sync serves as the
+  multi-device redundancy path (Constitution I).
 - **Implementation direction**: `Persistence`/`Domain` serializes a Note +
   its Blocks + referenced Asset payloads into the canonical document; the
   UI layer writes the file via an NSSavePanel (sandbox user-selected
@@ -1058,8 +1065,8 @@ resolves every `NEEDS CLARIFICATION` from the plan's Technical Context.
   line survives while you keep typing; it disappears when you leave it)
   while keeping the block model canonical and Undo-consistent (Constitution
   V). (2) Batch empty matches macOS conventions and satisfies X's
-  reversibility via an explicit, explanatory confirmation (contrast with
-  silent bulk delete).
+  reversibility requirement via an explicit, explanatory confirmation
+  (contrast with silent bulk delete).
 - **Implementation direction**: (1) editor block-merge operation on cursor
   exit (one undo group); block model never contains persistent empty
   blocks after merge. (2) one transaction: trashed → permanentlyDeleted
@@ -1264,5 +1271,3 @@ item requires another `/speckit.clarify` run.
    prototype (R7).
 6. Build environment: this plan was generated without a full Xcode install; all
    UI/Widget/capture assumptions are M0-validated (R0).
-
-<!-- token-budget: compacted (level=medium) on 2026-08-07T08:51:10Z; original at research.full.md -->
