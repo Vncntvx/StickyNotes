@@ -1120,6 +1120,128 @@ Context.
   bilingual UI), II (macOS conventions incl. system-language switch). No
   weakening.
 
+## R40. Menu-bar library positioning and card rendering rules (FR-001a / FR-020a)
+
+- **Decision**: (1) **Library window placement (FR-001a)** — the menu-bar
+  library window's left edge is aligned with the menu-bar icon's left edge,
+  clamped to the visible screen frame, and positioned 4 points below the
+  bottom of the menu bar; opening and dismissing are instant with no
+  animation. (2) **Card rendering (FR-020a)** — the body preview is truncated
+  at 2 rendered lines with a trailing ellipsis, counted at the card's current
+  width (line-level, not character-level), and drawn from the note's first
+  rich-text block so it never duplicates the generated summary title; the
+  last-modified time is relative (e.g. "5 min ago") within the last 7 days
+  and absolute (e.g. "Aug 1", with the year when in a previous calendar year)
+  beyond that (both clarified 2026-08-07).
+- **Rationale**: (1) Left-edge alignment matches menu-bar-app anchoring
+  conventions, and animation-free open/dismiss keeps the SC-001 ≤150 ms
+  warm-presentation measurement deterministic (Constitution XI) — an animated
+  reveal would race the measurement. (2) Fixed 2-line truncation and a
+  relative/absolute time switch make card content deterministic and
+  locale-aware (FR-180a) without per-character guessing; preview-from-first-
+  block avoids duplicating the FR-021 temporary summary.
+- **Implementation direction**: (1) window-frame computation in SystemBridge
+  (menu-bar height + icon frame via the status item, screen-visible-frame
+  clamping, 4 pt offset; no NSAnimationContext for open/dismiss);
+  (2) card view model in App (2-line line-fragment truncation, relative/abs
+  date formatters keyed off the active locale, <7-day threshold constant).
+- **Alternatives considered**: Centered-under-icon placement (rejected —
+  moves with menu-bar layout and is less conventional); character-count
+  truncation (rejected — width-dependent and fragile with CJK/long words);
+  always-relative time (rejected — ambiguous after days); open animation
+  (rejected — conflicts with the SC-001 measurement).
+- **Validation**: SystemBridgeTests window-frame cases (icon at various x,
+  near screen edges); card-view snapshot/tests for 1-line vs 2-line vs CJK
+  truncation and time-format boundary at exactly 7 days.
+- **Constitution impact**: X (consistent, accessible UX), XI (bounded,
+  measurable performance), II (macOS menu-bar conventions). No weakening.
+
+## R41. Bounded per-note text size range (FR-043a)
+
+- **Decision**: Per-note text size is adjustable between 9 and 24 points
+  inclusive, in steps of 1 point, default 13 points (clarified 2026-08-07).
+  The canonical JSON schema and the data model store the integer point size
+  (replacing the earlier illustrative small/regular/large/extraLarge enum —
+  no released schema exists, so no migration is required). Text ≥18 pt is
+  "large text" for the FR-042 contrast thresholds (≥3:1).
+- **Rationale**: A finite 16-step space makes the FR-042 contrast guarantee
+  testable at every step (Constitution X/XI), keeps the upper-area control
+  simple (a compact menu/stepper), and 13 pt matches the macOS 26 default
+  body size used by the FR-002a card tuning.
+- **Implementation direction**: `NoteAppearance.textSizePoints: Int` in
+  Domain with range validation; upper-area control exposes 9–24 in 1-pt
+  steps; contrast tests iterate the full range where large-text behavior
+  applies (≥18 pt).
+- **Alternatives considered**: Named-size enum (rejected — untestable
+  mapping to point sizes, no product value); unbounded slider (rejected —
+  untestable contrast and layout bounds).
+- **Validation**: range-validation tests at 8/9/24/25; contrast tests at
+  17 vs 18 pt boundary; schema round-trip tests.
+- **Constitution impact**: X (readable text at every size), XI (bounded,
+  tested appearance space), IV (explicit durable representation). No
+  weakening.
+
+## R42. Screenshot viewer interaction model (FR-095a)
+
+- **Decision**: The screenshot viewer (FR-095) opens in an independent,
+  borderless, note-style window matching the FR-030a style family — not a
+  sheet, popover, or panel. Zoom is bounded 25%–400% in 25% steps, adjustable
+  by scroll wheel or pinch, with ⌘+/- keyboard equivalents; double-click
+  toggles actual size (100%) ↔ fit-to-window. The arrow keys navigate between
+  the screenshots of the same note; Return (or double-click on a screenshot)
+  enters caption-editing mode (clarified 2026-08-07).
+- **Rationale**: A standalone window matches the FR-005 multi-window model
+  (several viewers open at once, drag-out works), gives each viewer a normal
+  window lifecycle, and keeps keyboard access (FR-181) simple — arrow keys
+  for navigation and Return for caption edit are discoverable, low-complexity
+  mappings. A fixed 25% step set makes zoom state a small testable lattice.
+- **Implementation direction**: viewer scene registered with
+  NoteWindowCoordinator-style coordination (per-screenshot window identity),
+  zoom state as an enum of steps (25%…400%), magnification applied off the
+  main actor where decoding is involved (FR-094a thumbnails/full-res decode
+  rules still apply); caption edit reuses the block caption editing path.
+- **Alternatives considered**: Sheet (rejected — modal blocks multi-viewer
+  and drag-out); popover (rejected — too small for large images and
+  ephemeral); free-range zoom (rejected — untestable).
+- **Validation**: viewer tests for step bounds (24%→clamped, 400% max),
+  double-click toggle, arrow-key navigation across multiple screenshot
+  blocks, Return caption edit entry; accessibility test that all viewer
+  actions are reachable by keyboard.
+- **Constitution impact**: X (accessible, reversible UX), II (macOS window
+  conventions), XI (bounded zoom work). No weakening.
+
+## R43. Cross-block selection semantics (FR-054)
+
+- **Decision**: Text selection MAY span block boundaries (paragraphs, list
+  items, todo items, headings). Copying a spanning selection places both
+  plain-text and rich-text (RTF/HTML) representations on the clipboard, the
+  rich representation containing only application-supported formatting
+  (FR-053). Deleting a spanning selection removes only the selected
+  characters; any block emptied by the deletion is merged away per the
+  FR-050a rules and a single Undo restores. The trailing empty padding
+  paragraph is never selectable (clarified 2026-08-07).
+- **Rationale**: Continuous-text editing is the product's core feel
+  (Constitution V — the editor must not resemble a page builder); stopping
+  selection at block boundaries would make copy/delete behavior visibly
+  blocky. Reusing FR-050a's merge rule for emptied blocks keeps ONE
+  block-merge implementation (no second code path), and restricting rich
+  clipboard output to supported marks automatically satisfies FR-053.
+- **Implementation direction**: the editor's selection model spans a block
+  range with per-block character offsets (RichTextAdapter + block selection
+  map); clipboard writer emits plain + RTF/HTML from the canonical
+  representation; delete maps to a range-delete op that delegates empty-block
+  merging to the existing FR-050a operation (one undo group). Never include
+  the trailing padding paragraph in the selectable range.
+- **Alternatives considered**: Block-bounded selection (rejected — feels
+  blocky, complicates copy expectations); plain-text-only copy (rejected —
+  loses supported formatting for paste into other apps); whole-block delete
+  on spanning selection (rejected — destroys more than the user selected).
+- **Validation**: EditorCoreTests for spanning selection ranges, clipboard
+  plain+rich output parity, range-delete with merge + single-Undo restore,
+  and padding-paragraph exclusion.
+- **Constitution impact**: V (seamless block editor), X (predictable,
+  reversible editing), XII (tests). No weakening.
+
 ## Resolved NEEDS CLARIFICATION
 
 The plan's Technical Context had no product-level `NEEDS CLARIFICATION` markers
@@ -1202,6 +1324,24 @@ item requires another `/speckit.clarify` run.
 > technical decisions.
 >
 > None of the fourth/fifth batches alter the architecture; all add testable
+> acceptance criteria. No item requires another `/speckit-clarify` run.
+>
+> **2026-08-07 sixth `/speckit-clarify` session propagation** (targeted at
+> remaining `checklists/ux.md` coverage gaps): FR-001a (menu-bar library
+> window: left-edge-aligned with the icon, clamped to the screen frame, 4 pt
+> below the menu bar, no open/dismiss animation), FR-020a (card preview
+> truncated at 2 rendered lines; last-modified time relative within 7 days,
+> then absolute with the year when in a previous calendar year), FR-043a
+> (per-note text size 9–24 pt in 1-pt steps, default 13 pt — the canonical
+> JSON schema and data model now store the integer point size, replacing the
+> illustrative small/regular/large/extraLarge enum), FR-095a (screenshot
+> viewer: independent note-style window, zoom 25%–400% in 25% steps, ⌘+/-
+> and double-click actual-size/fit-to-window, arrow-key navigation, Return
+> caption edit), FR-054 (cross-block selection: spanning selection, plain +
+> rich copy with supported formatting only, delete removes only selected
+> characters and merges emptied blocks per FR-050a, trailing padding
+> paragraph never selectable). Research entries R40, R41, R42, R43 capture
+> the technical decisions. None alter the architecture; all add testable
 > acceptance criteria. No item requires another `/speckit-clarify` run.
 
 ## Remaining risks (summary)

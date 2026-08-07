@@ -11,7 +11,8 @@
 ## Clarifications
 
 The product-behavior clarifications confirmed in the 2026-08-07 sessions are
-encoded directly in the sections below: FR-012a, FR-014b, FR-022a, FR-022b,
+encoded directly in the sections below: FR-001a, FR-012a, FR-014b, FR-022a,
+FR-022b,
 FR-023a, FR-031a, FR-040a, FR-041a, FR-050a, FR-072a, FR-072b, FR-090a,
 FR-090b, FR-094a, FR-110a, FR-140a, FR-141a, FR-152a, FR-154,
 FR-160a–FR-160e, FR-162a, FR-174, FR-180a, FR-191,
@@ -41,6 +42,11 @@ log is preserved in the feature branch history.
 - Q: 笔记背景透明度的可调范围、步长与默认值是什么？ → A: 不透明度默认 100%，可调范围 40%–100%，步长 5%；低于 100% 时按 FR-042 自动调整前景色（编码为 FR-041a）。
 - Q: 编辑器中的 block 被清空时应如何处置？ → A: 光标停留时保留空 block 继续输入；光标移出后自动移除（合并入相邻块），最后一块保留为新的空段落；移除必须可 Undo（编码为 FR-050a）。
 - Q: 首发是否需要「清空回收站」批量永久删除动作？ → A: 需要，弹确认并明确说明立即永久删除、不再有 30 天恢复期（编码为 FR-014b）。
+- Q: 每笔记文本大小（FR-043）的可调范围、步长与默认值是什么？ → A: 9–24 pt，1 pt 步长，默认 13 pt（与 macOS 正文默认一致），共 16 档（编码为 FR-043a）。
+- Q: 卡片网格中笔记卡的正文预览截断规则与最后修改时间的显示格式是什么？ → A: 预览截断为 2 行 + 省略号；时间用相对格式（如"5 分钟前"），超过 7 天显示绝对日期（如"8月1日"），跨年含年份（编码为 FR-020a）。
+- Q: 截图查看器（FR-095）应使用什么窗口类型，缩放步长与键盘导航如何定义？ → A: 独立无边框便签风格窗口（与笔记窗口同风格族）；缩放 25%–400%、25% 步长，滚轮/捏合与 ⌘+/- 调整，双击切换实际大小/适应窗口；方向键在同笔记截图间导航；Return 或双击进入标题编辑（编码为 FR-095a）。
+- Q: 菜单栏库窗口（FR-001）相对菜单栏的精确定位规则是什么？ → A: 左缘与菜单栏图标左缘对齐（受屏幕边界钳制），距菜单栏下缘 4 pt；打开/关闭无动画（瞬时），与 SC-001 的 150 ms 目标一致（编码为 FR-001a）。
+- Q: 编辑器中选择文本跨越多个 block 时，选择、复制与删除的行为如何定义？ → A: 选区可跨 block 边界；复制产生纯文本 + 仅含受支持属性的富文本（RTF/HTML）；Delete 只删选中字符，删空后相邻 block 合并（复用 FR-050a 规则）（编码为 FR-054）。
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -574,6 +580,14 @@ cited FR.
 - **FR-001**: The application MUST live primarily in the macOS menu bar, and
   clicking the menu-bar icon MUST open the note-library window directly beneath
   and visually attached to the menu bar.
+- **FR-001a**: The menu-bar library window (FR-001) MUST be positioned with the
+  left edge of the window aligned with the left edge of the menu-bar icon,
+  clamped so the window stays fully within the visible screen frame, and MUST
+  be placed 4 points below the bottom of the menu bar. Opening and dismissing
+  the library MUST happen instantly with no animation, so the FR-001
+  "visually attached" relationship and the SC-001 warm-presentation target
+  (≤150 ms) are objectively testable without animation interference. This
+  makes menu-bar window positioning deterministic (CHK001).
 - **FR-002**: The library MUST display notes as a compact card grid inspired by
   the Windows 11 Sticky Notes experience while following macOS interaction
   conventions.
@@ -685,6 +699,21 @@ cited FR.
   completion progress, indicators for screenshots/images/file references, a
   selected screenshot thumbnail as cover, and a conflict or synchronization
   warning when applicable.
+- **FR-020a**: The "short body preview" and "last-modified time" on note cards
+  (FR-020) MUST be rendered by deterministic rules: the body preview MUST be
+  truncated at 2 lines with a trailing ellipsis; the last-modified time MUST
+  use a relative format (e.g. "5 min ago") while the note was modified within
+  the last 7 days, and MUST switch to an absolute date (e.g. "Aug 1") for
+  older modifications, including the year when the modification is in a
+  previous calendar year. The time-format boundary is deterministic: a note
+  whose age is at most 7 days MUST render relative time; older notes MUST
+  render absolute time (age = exactly 7 days still renders relative).
+  Truncation MUST count rendered lines at the card's
+  current width (line-level, not character-level), and the preview MUST use
+  the note's first rich-text content, not the generated summary title
+  (FR-021), so a card never duplicates its title as its preview. This makes
+  card rendering objectively testable (CHK007/CHK019) and consistent with the
+  FR-002a card dimensions.
 - **FR-021**: When a note has no manual title, the first meaningful content MAY
   be shown as a temporary summary, but it MUST NOT silently become a permanent
   manual title.
@@ -825,6 +854,12 @@ cited FR.
 - **FR-043**: The user MUST choose one global font preference for Chinese and
   English text; all notes MUST use that preference with appropriate fallback for
   unsupported characters; each note MAY use its own text size.
+- **FR-043a**: Per-note text size (FR-043) MUST be adjustable within a bounded
+  range: 9 to 24 points inclusive, in steps of 1 point, with a default of
+  13 points (matching the macOS 26 default body text size). This makes the
+  adjustment space finite (16 steps) and the large-text contrast threshold
+  in FR-042 (≥18 pt text → ≥3:1) objectively testable at every step
+  (Constitution X/XI).
 - **FR-044**: Color MUST NEVER be the only way to communicate state.
 
 **Editor experience**
@@ -859,6 +894,19 @@ cited FR.
 - **FR-053**: Rich text MUST store only formatting capabilities explicitly
   supported by the application; unsupported or private attributed-string
   properties MUST NOT silently enter the durable format.
+- **FR-054**: Text selection in the editor MUST be able to span block
+  boundaries (paragraphs, list items, todo items, headings), so the user can
+  select and operate on a contiguous range of text across blocks. Copying
+  such a selection MUST place both a plain-text and a rich-text (RTF/HTML)
+  representation on the clipboard, where the rich representation contains
+  only formatting capabilities explicitly supported by the application
+  (FR-053). Deleting such a selection MUST remove only the selected
+  characters; when a block is emptied by the deletion, the resulting empty
+  block MUST be merged away following the FR-050a rules (single Undo
+  restores). Selection must never encompass the empty padding paragraph that
+  follows the last block. This makes cross-block selection behavior
+  objectively testable (CHK114) and keeps the block model seamless
+  (Constitution V).
 
 **Markdown input shortcuts**
 
@@ -996,6 +1044,17 @@ cited FR.
   actual size, fit-to-window, copy, drag out, Save As, delete association, edit
   caption, and navigation between screenshots of the same note; the viewer MUST
   NOT automatically start, switch to, or control the original application.
+- **FR-095a**: The screenshot viewer (FR-095) MUST open in an independent,
+  borderless, note-style window matching the FR-030a note-window style family
+  (consistent with the multi-window model of FR-005, so several viewers MAY
+  be open at once and images MAY be dragged out). The viewer MUST support a
+  bounded zoom range of 25% to 400% in steps of 25%, adjustable by scroll
+  wheel or pinch, with ⌘+/- as keyboard equivalents and a double-click toggling
+  between actual size (100%) and fit-to-window. The arrow keys MUST navigate
+  between the screenshots of the same note, and Return (or double-click on a
+  screenshot) MUST enter the caption-editing mode. This makes the viewer's
+  interaction model objectively testable (CHK008) and keyboard-accessible
+  (FR-181).
 - **FR-096**: Drawing, annotation, arrows, highlighting, and image markup MUST
   NOT be in scope.
 
