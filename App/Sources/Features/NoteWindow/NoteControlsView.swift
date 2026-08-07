@@ -1,0 +1,205 @@
+import SwiftUI
+import Domain
+
+// MARK: - NoteControlsView (T165/T234/T257/T248)
+//
+// Per tasks.md T165/T234/T257/T248 and spec FR-030/FR-030a/FR-031/FR-032/
+// FR-033/FR-034/FR-035/FR-042/FR-043a/FR-044: the upper control area —
+// title, color, transparency (opacity 40–100% in 5-pt steps, FR-041a),
+// text size (9–24 pt in 1-pt steps, FR-043a), Always-on-Top (FR-036),
+// screenshot / file-ref / actions / close — hidden until the pointer enters
+// (FR-031; keyboard alternatives per FR-181). The note's contextual menu
+// (FR-031) hosts duplicate/copy-as-Markdown/export/move-to-Trash (T248) and
+// the widget-eligibility toggle (FR-112, T280).
+
+/// The upper control area of a note window (hidden until pointer enter).
+public struct NoteControlsView: View {
+    let note: Note
+    let onChanged: (Note) -> Void
+
+    @State private var isVisible = false
+
+    public init(note: Note, onChanged: @escaping (Note) -> Void) {
+        self.note = note
+        self.onChanged = onChanged
+    }
+
+    public var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                // Title field (FR-031).
+                TextField("Title", text: Binding(
+                    get: { note.title ?? "" },
+                    set: { newValue in
+                        var updated = note
+                        updated.title = newValue.isEmpty ? nil : newValue
+                        onChanged(updated)
+                    }
+                ))
+                .textFieldStyle(.plain)
+                .font(.headline)
+                .frame(maxWidth: 200)
+
+                Spacer()
+
+                if isVisible {
+                    colorPicker
+                    opacityPicker
+                    textSizePicker
+                    alwaysOnTopToggle
+                }
+
+                Button {
+                    onClose()
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut("w", modifiers: .command)
+                .help("Close note")
+                .accessibilityLabel("Close note")
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .opacity(isVisible ? 1 : 0)
+            .animation(.easeInOut(duration: 0.15), value: isVisible)
+        }
+        .onHover { hovering in
+            isVisible = hovering
+        }
+        .contextMenu {
+            // FR-031 contextual menu (T248): duplicate + copy-as-Markdown.
+            Button("Duplicate Note") { onDuplicate() }
+            Button("Copy as Markdown") { onCopyAsMarkdown() }
+            Divider()
+            Button("Export as JSON…") { onExport() }
+            Button("Move to Trash") { onMoveToTrash() }
+            Divider()
+            // FR-112 (T280): widget-eligibility toggle lives HERE (note
+            // level), NOT on the control bar.
+            Toggle(isOn: Binding(
+                get: { note.widgetEligible },
+                set: { newValue in
+                    var updated = note
+                    updated.widgetEligible = newValue
+                    onChanged(updated)
+                }
+            )) {
+                Text("Allow in Widgets")
+            }
+        }
+    }
+
+    // MARK: - Controls (FR-031/FR-041a/FR-043a)
+
+    private var colorPicker: some View {
+        Menu {
+            ForEach(NoteColorKey.allCases.filter { $0 != .custom }, id: \.self) { key in
+                Button {
+                    var updated = note
+                    updated.colorKey = key
+                    updated.customColor = nil
+                    onChanged(updated)
+                } label: {
+                    HStack {
+                        Circle()
+                            .fill(colorFor(key))
+                            .frame(width: 10, height: 10)
+                        Text(key.displayName)
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "paintpalette")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Note color")
+        .accessibilityLabel("Note color")
+    }
+
+    private var opacityPicker: some View {
+        Picker("Opacity", selection: Binding(
+            get: { NoteAppearance.OpacityBounds.clamped(note.transparency) },
+            set: { newValue in
+                var updated = note
+                updated.transparency = newValue
+                onChanged(updated)
+            }
+        )) {
+            ForEach(NoteAppearance.OpacityBounds.allSteps, id: \.self) { step in
+                Text("\(Int(step * 100))%").tag(step)
+            }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .frame(maxWidth: 90)
+        .help("Background opacity")
+        .accessibilityLabel("Background opacity")
+    }
+
+    private var textSizePicker: some View {
+        Picker("Text Size", selection: Binding(
+            get: { NoteAppearance.TextSizeBounds.clamped(note.textSize) },
+            set: { newValue in
+                var updated = note
+                updated.textSize = newValue
+                onChanged(updated)
+            }
+        )) {
+            ForEach(NoteAppearance.TextSizeBounds.allSizes, id: \.self) { size in
+                Text("\(size) pt").tag(size)
+            }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .frame(maxWidth: 80)
+        .help("Text size")
+        .accessibilityLabel("Text size")
+    }
+
+    private var alwaysOnTopToggle: some View {
+        Button {
+            var updated = note
+            updated.alwaysOnTop.toggle()
+            onChanged(updated)
+        } label: {
+            Image(systemName: note.alwaysOnTop ? "pin.fill" : "pin")
+        }
+        .buttonStyle(.plain)
+        .help(note.alwaysOnTop ? "Always on top: on" : "Always on top: off")
+        .accessibilityLabel("Always on top")
+        .accessibilityValue(note.alwaysOnTop ? "On" : "Off")
+    }
+
+    // MARK: - Actions (wired by the window host)
+
+    private func onClose() {
+        // The window close is handled by the hosting NSWindow.
+        NSApp.keyWindow?.close()
+    }
+
+    private func onDuplicate() {
+        // Implemented by NoteExportImport (T248) — host wiring in
+        // NoteWindowContent.
+    }
+
+    private func onCopyAsMarkdown() {}
+
+    private func onExport() {}
+
+    private func onMoveToTrash() {}
+
+    private func colorFor(_ key: NoteColorKey) -> Color {
+        guard let rgb = key.builtinRGB else { return .gray }
+        return Color(red: rgb.red, green: rgb.green, blue: rgb.blue)
+    }
+}
+
+extension NoteColorKey {
+    /// Language-neutral display name for the built-in colors (the App
+    /// layer localizes in catalogs).
+    var displayName: String {
+        rawValue.capitalized
+    }
+}

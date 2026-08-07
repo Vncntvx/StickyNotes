@@ -58,6 +58,10 @@ public enum AssetStoreError: Error, Sendable, Equatable {
     case alreadyExists
     case corruptedFile
     case cleanupFailed
+    /// FR-090b: the asset exceeds `ScaleLimits.maxAssetBytes` (50 MB) or the
+    /// image's longest edge exceeds `ScaleLimits.maxAssetLongestEdge`
+    /// (16,384 px). The insertion was rejected; no partial write occurred.
+    case assetTooLarge
 }
 
 /// The atomic-write, hash-verified asset store. One actor serializes all
@@ -122,6 +126,11 @@ public actor AssetStore {
         kind: AssetKind,
         contentType: String
     ) async throws -> StoredAsset {
+        // FR-090b scale limit (T236): oversize assets are rejected with NO
+        // partial write — no temp file, no record (verified by T227).
+        if ScaleLimits.assetBytesError(byteCount: data.count) != nil {
+            throw AssetStoreError.assetTooLarge
+        }
         let hash = Self.sha256Hex(data)
         if let existing = filenameByContentKey[Self.contentKey(kind: kind, contentType: contentType, hash: hash)] {
             // Dedup: same bytes, same kind+contentType → reuse the record.

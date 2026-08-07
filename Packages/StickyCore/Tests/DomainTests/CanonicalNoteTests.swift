@@ -134,7 +134,7 @@ import Foundation
             colorKey: .custom,
             customColor: "#FF8800",
             transparency: 0.15,
-            textSize: .large,
+            textSize: 18,
             alwaysOnTop: true,
             widgetEligible: true,
             coverScreenshotBlockId: blocks[5].id,

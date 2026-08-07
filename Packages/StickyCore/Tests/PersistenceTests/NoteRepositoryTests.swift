@@ -54,7 +54,7 @@ import Domain
             colorKey: .pink,
             customColor: nil,
             transparency: 0.25,
-            textSize: .large,
+            textSize: 18,
             alwaysOnTop: true,
             widgetEligible: true,
             manualSortKey: 1024,
@@ -71,7 +71,7 @@ import Domain
         #expect(fetched?.title == "Hello")
         #expect(fetched?.colorKey == .pink)
         #expect(fetched?.transparency == 0.25)
-        #expect(fetched?.textSize == .large)
+        #expect(fetched?.textSize == 18)
         #expect(fetched?.alwaysOnTop == true)
         #expect(fetched?.manualSortKey == 1024)
         #expect(fetched?.lifecycleState == .active)

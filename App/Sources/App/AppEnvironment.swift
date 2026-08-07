@@ -141,6 +141,39 @@ public struct PersistenceServices: Sendable {
     }
 
     public static let placeholder = PersistenceServices(store: nil)
+
+    // MARK: - Repositories (concrete services composed at startup)
+
+    /// The note + block repository (nil before bootstrap). UI depends on
+    /// the `NoteRepository`/`BlockRepository` protocols (plan §Module
+    /// boundaries).
+    public var noteRepository: (any NoteRepository & BlockRepository)? {
+        guard let store else { return nil }
+        return SQLiteNoteRepository(store: store, fullTextSearch: FullTextSearch(dbPool: store.dbPool))
+    }
+
+    /// The todo repository (nil before bootstrap).
+    public var todoRepository: (any TodoRepository)? {
+        guard let store else { return nil }
+        return SQLiteTodoRepository(store: store)
+    }
+
+    /// The tombstone repository (nil before bootstrap).
+    public var tombstoneRepository: (any TombstoneRepositoryProtocol)? {
+        guard let store else { return nil }
+        return SQLiteTombstoneRepository(store: store)
+    }
+
+    /// Card projections (lazy card-grid loading, T134/T172).
+    public var cardProjection: CardProjection.Type? {
+        store != nil ? CardProjection.self : nil
+    }
+
+    /// Fetches active card projections (empty before bootstrap).
+    public func fetchCards(lifecycle: NoteLifecycleState, sort: NoteSortKey) async throws -> [NoteCardProjection] {
+        guard let store else { return [] }
+        return try await CardProjection.fetchCardProjections(store: store, lifecycle: lifecycle, sort: sort)
+    }
 }
 
 public struct EditorServices: Sendable {
@@ -149,7 +182,13 @@ public struct EditorServices: Sendable {
 }
 
 public struct AssetServices: Sendable {
-    public init() {}
+    /// The asset byte store root (nil until composed with a container URL).
+    public let directoryURL: URL?
+
+    public init(directoryURL: URL? = nil) {
+        self.directoryURL = directoryURL
+    }
+
     public static let placeholder = AssetServices()
 }
 

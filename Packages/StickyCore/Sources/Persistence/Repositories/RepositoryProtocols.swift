@@ -49,6 +49,22 @@ public protocol NoteRepository: Sendable {
     /// responsible for normalizing sort keys via `ManualSortKeys.normalize`
     /// when gaps become too small.
     func updateSortKey(id: UUID, sortKey: Int, deviceId: UUID) async throws
+
+    /// Empty Trash (FR-014b, clarified 2026-08-07): transitions EVERY trashed
+    /// note to permanentlyDeleted in a single transaction (no intermediate
+    /// observable state), following the permanent-deletion path (readable
+    /// local content removed when safe; tombstones retained for sync per
+    /// FR-174). The caller MUST confirm with the user first (the confirmation
+    /// states immediate permanent deletion + loss of the 30-day guarantee).
+    func emptyTrash(deviceId: UUID) async throws -> [UUID]
+
+    /// FR-090b (clarified 2026-08-07): computes the note's structured content
+    /// byte count (canonical envelope of note + blocks, before asset
+    /// payloads) and throws `StickyError.persistence(.invalidPayload)` when
+    /// it exceeds `ScaleLimits.maxNoteContentBytes` (5 MB). Call BEFORE
+    /// committing a content change so the last valid saved state is
+    /// preserved (refused, not clobbered).
+    func validateNoteContentSize(noteId: UUID) async throws
 }
 
 /// Sort keys for fetching notes (FR-015).

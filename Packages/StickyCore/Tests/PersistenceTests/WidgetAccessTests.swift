@@ -26,7 +26,7 @@ import Domain
                     INSERT INTO note (id, colorKey, transparency, textSize, alwaysOnTop, widgetEligible,
                                       manualSortKey, lifecycleState, versionId, lastModifiedDeviceId,
                                       createdAt, modifiedAt)
-                    VALUES (?, 'yellow', 0.0, 'regular', 0, 1, 0, 'active', ?, ?, ?, ?)
+                    VALUES (?, 'yellow', 0.0, 13, 0, 1, 0, 'active', ?, ?, ?, ?)
                     """,
                 arguments: [noteId.uuidString, UUID().uuidString, UUID().uuidString,
                             Date().timeIntervalSince1970, Date().timeIntervalSince1970]

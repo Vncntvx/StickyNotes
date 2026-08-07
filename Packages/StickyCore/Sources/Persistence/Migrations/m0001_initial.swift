@@ -18,6 +18,7 @@ import Domain
 
 public enum StickyMigrationId {
     public static let v1 = "v1_initial_schema"
+    public static let v2 = "v2_conflict_records"
 }
 
 // MARK: - The v1 migrator
@@ -38,6 +39,9 @@ public enum InitialSchema {
 
         migrator.registerMigration(StickyMigrationId.v1) { db in
             try createV1Schema(in: db)
+        }
+        migrator.registerMigration(StickyMigrationId.v2) { db in
+            try ConflictRecordSchema.migrateV2(db)
         }
 
         return migrator
@@ -64,7 +68,7 @@ public enum InitialSchema {
                 colorKey TEXT NOT NULL,
                 customColor TEXT,
                 transparency DOUBLE NOT NULL,
-                textSize TEXT NOT NULL,
+                textSize INTEGER NOT NULL,
                 alwaysOnTop BOOLEAN NOT NULL,
                 widgetEligible BOOLEAN NOT NULL,
                 coverScreenshotBlockId TEXT REFERENCES block(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED,

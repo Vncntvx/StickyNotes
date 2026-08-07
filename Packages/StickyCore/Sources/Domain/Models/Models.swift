@@ -31,11 +31,13 @@ public struct Note: Sendable, Identifiable, Equatable, Hashable {
     /// Hex color (e.g. #RRGGBB) when `colorKey == .custom`; otherwise nil.
     public var customColor: String?
 
-    /// Background transparency, 0.0 (opaque) .. 1.0.
+    /// Background transparency (field name retained from v1; semantic is
+    /// opacity per FR-041a): 0.40–1.00 inclusive, 0.05 steps, default 1.00.
     public var transparency: Double
 
-    /// Per-note text size (FR-040).
-    public var textSize: TextSize
+    /// Per-note text size in points (FR-043a): 9–24 inclusive, 1-pt steps,
+    /// default 13. Text ≥18 pt is large text for the FR-042 thresholds.
+    public var textSize: Int
 
     /// Per-note floating state (FR-036).
     public var alwaysOnTop: Bool
@@ -73,8 +75,8 @@ public struct Note: Sendable, Identifiable, Equatable, Hashable {
         title: String? = nil,
         colorKey: NoteColorKey = .yellow,
         customColor: String? = nil,
-        transparency: Double = 0.0,
-        textSize: TextSize = .regular,
+        transparency: Double = 1.0,
+        textSize: Int = NoteAppearance.TextSizeBounds.defaultSize,
         alwaysOnTop: Bool = false,
         widgetEligible: Bool = true,
         coverScreenshotBlockId: UUID? = nil,

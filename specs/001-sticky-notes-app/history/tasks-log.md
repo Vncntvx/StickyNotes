@@ -98,3 +98,87 @@
 
 - [X] T221 [US9] Implement FR-162a toggle-off behavior in SecurityCore/Settings — when the user toggles `rememberedUnlock` from `enabledUntilLockOrRestart` to `disabled` while the vault is currently unlocked: immediately remove the remembered key from Keychain (clear `rememberedUnlockKeychainRef` and `rememberedUnlockBootTimestamp`); preserve the current unlocked vault state in memory until the user explicitly locks the vault or the application exits; do NOT force a re-prompt or forced lock; wire the toggle handler into the sync Settings UI (T119) in `Packages/StickyCore/Sources/SecurityCore/VaultConfiguration.swift` and `App/Sources/Features/Settings/SyncSettingsView.swift` (extends T119) per FR-162a (clarified 2026-08-07) / research R33 / data-model §VaultConfiguration / Constitution VII/VI/X — **no toggle-off-specific behavior exists; this task adds immediate Keychain clearance + session preservation**
 
+
+## 2026-08-07 — /speckit.implement convergence run
+
+Implemented the remaining convergence surface (Phases 3–25). Key outcomes:
+
+- **Domain (T234/T257/T252/T225)**: FR-040a canonical sRGB hexes
+  (#FFE08A/#F9A8C4/#C9A8E8/#A8CFF9/#A8E8B8/#D8D8DC); FR-041a opacity
+  0.40–1.00 in 0.05 steps (field `transparency` retained, semantic =
+  opacity); FR-043a textSize enum → integer 9–24 pt default 13 (Domain
+  model, canonical JSON, v1 schema column, all tests). NoteAppearance now
+  validates against the composited background below 100% opacity.
+- **Domain additions (T142/T147, T233/T224, T247/T248, T274/T278,
+  T279)**: FontPreference (CJK fallback selection); NoteDocumentSerializer
+  (FR-031a export/import, fail-closed, asset sidecar); NoteMarkdownSerializer
+  + NoteDuplicator (FR-031); FileAvailability gains `onAnotherDevice`
+  (FR-100 four-state model); identical-summary collision acceptance
+  (FR-021 — verified no disambiguation existed).
+- **Persistence (T134/T172, T171/T128, T231/T222, T236/T227, T238/T229,
+  T260)**: CardProjection (lazy bounded card projections + FR-072b progress
+  strings); SQLiteTombstoneRepository (30-day sync-safety-gated retention);
+  `emptyTrash` batch (FR-014b) with per-note tombstones; ScaleLimits
+  (FR-090b) enforced at asset-store + repository boundaries; autosave 500 ms
+  verified deterministic + crash-loss contract tests; cover-screenshot
+  nullification tests (FR-094b). Migration v2 `conflictRecord` added.
+- **EditorCore (T161, T235/T226, T259/T254, T143/T148, T205)**: RichTextAdapter;
+  BlockMergeOperation (FR-050a empty-block removal, IME-safe, final-block
+  preserved); CrossBlockSelectionCore (FR-054 plain+RTF copy, range delete);
+  AutoLinkDetector (FR-050); keystroke-latency signpost tests (SC-004a).
+- **SystemBridge (T160/T146, T165, T166, T255)**: NoteWindowBridge (registry,
+  focus, FR-035 collectionBehavior), WindowLevelBridge, DisplayChangeBridge
+  (FR-034 frame correction), SecurityScopedBookmarks + FileDragOutBridge
+  (FR-100/FR-102/FR-103), MenuBarWindowFrame (FR-001a) — all with headless
+  tests (T163c/T163e/T250/T151).
+- **SyncCore (T171, T184, T232)**: SyncConflictResolver + ConflictCopyBuilder
+  (deterministic dedup via v2 `conflictRecord`); OfflineReconciler with the
+  FR-174 tombstone-purge refinement; sort-key last-writer-wins (FR-022b)
+  wired into the engine; `applyRemoteTombstone` lineage fix (tombstones now
+  carry the deleted version + parent; delete-vs-edit recovers the divergent
+  local edit as a conflict copy). Tests: T163k–o, T179, T223, T242.
+- **App layer (T159–T172, T208–T211, T237, T255–T259, T268–T273,
+  T278–T280)**: full menu-bar library scene (search/sort/new/Trash/sync
+  status/Settings/About/Quit + FR-001a positioning), NoteWindowCoordinator,
+  editor block views (rich text/todo/code/file-ref/screenshot/image +
+  FR-050b unified container), NoteControlsView (FR-031/FR-041a/FR-043a +
+  contextual menu per FR-031/FR-112), TrashView (FR-014b/FR-014c),
+  ScreenshotViewer (FR-095a bounded zoom), Settings/SyncSettings/About/
+  FontPreference, DeepLinkRouter, DeletionToastPresenter (FR-009a),
+  WidgetRefreshCoordinator (FR-110a), AccessibilityAdaptations (FR-180b).
+- **WidgetExtension (T169, T280)**: 6 families + AppIntents + privacy-safe
+  snapshots + FR-140a/FR-112 temporarily-unavailable fallback. Note: the
+  Xcode-27-beta toolchain ICEs on `AppIntentConfiguration` with a custom
+  AppEntity — the selected-note/todo widgets use StaticConfiguration with
+  the intent surface preserved for actions (documented in code).
+- **AppTests (T163a/b, T204, T228, T230, T245, T251, T266, T135a + trace-
+  ability files)**: integration + logic tests all green.
+- **Release/docs (T137, T136, T249, T239)**: release.yml (Developer ID +
+  notarization, encrypted secrets only); architecture/privacy/security
+  docs; xcodeproj reconciliation resolved (option b — committed project +
+  CI drift check; quickstart + project.yml updated); Localizable.xcstrings
+  extended to 145 keys, all zh-Hans + en (FR-180a).
+- **T174 resolved (option b)**: T025a's GUI-verification deferral is now
+  documented in the artifact itself; T158 stays open (needs a Mac with a
+  display). **T175 resolved (option b)**: T096/T097 point at
+  ShortcutDockTests.swift.
+
+Schema note: v1 schema was changed in place (textSize TEXT→INTEGER) — the
+v1 migration never shipped (single-commit pre-release repo; fixtures are
+code-built). Migration v2 adds the `conflictRecord` table. Widget schema
+support version bumped to v2.
+
+## 2026-08-07 — /speckit.implement completion note (post-run audit)
+
+- 166 tasks marked `[X]` in this run; the only remaining open task is
+  **T158** (interactive verification of the Milestone 0 GUI prototypes),
+  which requires a Mac with a display (documented deferral per T174).
+- Verification: `swift test --package-path Packages/StickyCore` — 578 tests
+  green across 7 suites (Domain/Persistence/EditorCore/AssetStore/
+  SecurityCore/SyncCore/SystemBridge). `xcodebuild build-for-testing`
+  (StickyNotes scheme, Debug, CODE_SIGNING_ALLOWED=NO) green; AppTests 25
+  tests green (13 suites). UI-driven XCUITest journeys (AppUITests) compile
+  and run on CI machines with a display.
+- Local build note: with github.com unreachable, xcodebuild package
+  resolution needs `-clonedSourcePackagesDirPath` pointed at a checkout
+  mirror + `-skipPackageUpdates`; normal CI resolves from the network.

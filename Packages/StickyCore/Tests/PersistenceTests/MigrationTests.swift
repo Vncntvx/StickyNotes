@@ -54,6 +54,7 @@ import Domain
             "screenshotAssociation", "fileReference", "fileLocator",
             "windowState", "tombstone", "syncState",
             "deviceIdentity", "vaultConfiguration",
+            "conflictRecord",  // v2 (US10 conflict-copy dedup)
             "note_fts_content", "notes_fts",
             // FTS5 shadow tables (created automatically by the virtual table)
             "notes_fts_config", "notes_fts_data", "notes_fts_docsize", "notes_fts_idx",
@@ -142,7 +143,7 @@ import Domain
                     INSERT INTO note (id, colorKey, transparency, textSize, alwaysOnTop, widgetEligible,
                                       manualSortKey, lifecycleState, versionId, lastModifiedDeviceId,
                                       createdAt, modifiedAt)
-                    VALUES (?, 'yellow', 0.0, 'regular', 0, 1, 0, 'active', ?, ?, ?, ?)
+                    VALUES (?, 'yellow', 0.0, 13, 0, 1, 0, 'active', ?, ?, ?, ?)
                     """,
                 arguments: [
                     noteId.uuidString,
@@ -244,7 +245,7 @@ import Domain
                     INSERT INTO note (id, colorKey, transparency, textSize, alwaysOnTop, widgetEligible,
                                       manualSortKey, lifecycleState, versionId, lastModifiedDeviceId,
                                       createdAt, modifiedAt)
-                    VALUES (?, 'yellow', 0.0, 'regular', 0, 1, 0, 'active', ?, ?, ?, ?)
+                    VALUES (?, 'yellow', 0.0, 13, 0, 1, 0, 'active', ?, ?, ?, ?)
                     """,
                 arguments: [noteId.uuidString, UUID().uuidString, deviceId.uuidString,
                             Date().timeIntervalSince1970, Date().timeIntervalSince1970]
@@ -366,7 +367,7 @@ import Domain
                     INSERT INTO note (id, colorKey, transparency, textSize, alwaysOnTop, widgetEligible,
                                       manualSortKey, lifecycleState, versionId, lastModifiedDeviceId,
                                       createdAt, modifiedAt)
-                    VALUES (?, 'yellow', 0.0, 'regular', 0, 1, 0, 'active', ?, ?, ?, ?)
+                    VALUES (?, 'yellow', 0.0, 13, 0, 1, 0, 'active', ?, ?, ?, ?)
                     """,
                 arguments: [noteId.uuidString, UUID().uuidString, deviceId.uuidString,
                             Date().timeIntervalSince1970, Date().timeIntervalSince1970]
@@ -440,7 +441,7 @@ import Domain
                     INSERT INTO note (id, colorKey, transparency, textSize, alwaysOnTop, widgetEligible,
                                       manualSortKey, lifecycleState, versionId, lastModifiedDeviceId,
                                       createdAt, modifiedAt)
-                    VALUES (?, 'yellow', 0.0, 'regular', 0, 1, 0, 'active', ?, ?, ?, ?)
+                    VALUES (?, 'yellow', 0.0, 13, 0, 1, 0, 'active', ?, ?, ?, ?)
                     """,
                 arguments: [
                     noteId.uuidString,
@@ -671,7 +672,7 @@ import Domain
             backupPath: dbPath + ".backup"
         )
         let version = await migrator.currentSchemaVersion(pool)
-        #expect(version == StickyMigrationId.v1, "expected \(StickyMigrationId.v1), got \(String(describing: version))")
+        #expect(version == StickyMigrationId.v2, "expected \(StickyMigrationId.v2), got \(String(describing: version))")
         try pool.close()
     }
 

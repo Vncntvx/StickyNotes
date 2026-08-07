@@ -121,8 +121,15 @@ public final class DatabaseStore: Sendable {
 public enum PersistenceErrorMapping {
     /// Maps a GRDB/SQLite error to a coarse `PersistenceError`. The mapping
     /// is intentionally lossy — fine-grained SQLite error codes are NOT
-    /// surfaced to logs (they could contain table/column names).
+    /// surfaced to logs (they could contain table/column names). Domain
+    /// `StickyError.persistence` values pass through untouched so callers
+    /// receive the typed error (e.g. FR-090b `.contentTooLarge`).
     public static func fromGRDB(_ error: Error) -> Domain.PersistenceError {
+        if let sticky = error as? StickyError {
+            if case .persistence(let e) = sticky {
+                return e
+            }
+        }
         if let dbError = error as? DatabaseError {
             switch dbError.resultCode {
             case .SQLITE_BUSY, .SQLITE_LOCKED:
