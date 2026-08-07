@@ -27,14 +27,23 @@ public struct RichTextBlockView: View {
     let note: Note
     let blocks: [Block]
     let onBlocksChanged: ([Block]) -> Void
+    /// Structural changes (todo toggle, block insert/delete/reorder) — saved
+    /// immediately per FR-141a (T281).
+    let onStructuralBlocksChanged: ([Block]) -> Void
 
     @State private var attributedText = AttributedString("")
     @State private var isIMEComposing = false
 
-    public init(note: Note, blocks: [Block], onBlocksChanged: @escaping ([Block]) -> Void) {
+    public init(
+        note: Note,
+        blocks: [Block],
+        onBlocksChanged: @escaping ([Block]) -> Void,
+        onStructuralBlocksChanged: @escaping ([Block]) -> Void = { _ in }
+    ) {
         self.note = note
         self.blocks = blocks
         self.onBlocksChanged = onBlocksChanged
+        self.onStructuralBlocksChanged = onStructuralBlocksChanged
     }
 
     public var body: some View {
@@ -84,7 +93,8 @@ public struct RichTextBlockView: View {
         switch block.kind {
         case .todo:
             TodoBlockView(block: block, onChanged: { updated in
-                replaceBlock(updated, at: index)
+                // FR-141a: todo completion persists immediately (structural).
+                replaceBlock(updated, at: index, structural: true)
             })
         case .code:
             CodeBlockView(block: block)
@@ -205,7 +215,7 @@ public struct RichTextBlockView: View {
         replaceBlock(richBlock, at: blocks.firstIndex(where: { $0.id == richBlock.id }) ?? 0)
     }
 
-    private func replaceBlock(_ block: Block, at index: Int) {
+    private func replaceBlock(_ block: Block, at index: Int, structural: Bool = false) {
         var updated = blocks
         let indices = blocks.indices.filter { blocks[$0].id == block.id }
         if let target = indices.first {
@@ -213,6 +223,10 @@ public struct RichTextBlockView: View {
         } else if blocks.indices.contains(index) {
             updated[index] = block
         }
-        onBlocksChanged(updated)
+        if structural {
+            onStructuralBlocksChanged(updated)
+        } else {
+            onBlocksChanged(updated)
+        }
     }
 }

@@ -89,7 +89,10 @@ public struct NoteCardView: View {
                 }
             }
             .padding(10)
-            .frame(maxWidth: .infinity, minHeight: 96, alignment: .leading)
+            // FR-002a: card height ≈ 160 pt (grid column count handled by
+            // LibraryCardGrid; the 2-line title + 2-line preview bounds the
+            // content so the height is stable).
+            .frame(maxWidth: .infinity, minHeight: 140, maxHeight: LibraryCardGrid.cardApproximateHeight, alignment: .leading)
             .background(cardColor, in: RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)

@@ -237,6 +237,10 @@ public enum CredentialsError: Error, Sendable {
     /// `vaultId`, or a bootstrap already exists under the chosen locator
     /// for a new vault. Fail-closed; no local/remote mutation.
     case wrongVault
+    /// The configured provider endpoint is malformed (app composition, T285).
+    case invalidEndpoint
+    /// No vault is currently configured (app composition, T285).
+    case notConfigured
 
     public var sanitizedCode: String {
         switch self {
@@ -245,6 +249,8 @@ public enum CredentialsError: Error, Sendable {
         case .saveFailed: return "saveFailed"
         case .deleteFailed: return "deleteFailed"
         case .wrongVault: return "wrongVault"
+        case .invalidEndpoint: return "invalidEndpoint"
+        case .notConfigured: return "notConfigured"
         }
     }
 }

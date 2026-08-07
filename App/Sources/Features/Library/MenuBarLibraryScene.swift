@@ -25,6 +25,7 @@ public struct MenuBarLibraryScene: View {
     let openNote: (UUID) -> Void
     let openSettings: () -> Void
     let openAbout: () -> Void
+    let openHelp: () -> Void
     /// FR-009a deletion toast presenter hook (T246): receives the localized
     /// deletion outcome message ("Moved to Trash" / "Permanently Deleted").
     let deletionToast: (String) -> Void
@@ -34,12 +35,14 @@ public struct MenuBarLibraryScene: View {
         openNote: @escaping (UUID) -> Void,
         openSettings: @escaping () -> Void = {},
         openAbout: @escaping () -> Void = {},
+        openHelp: @escaping () -> Void = {},
         deletionToast: @escaping (String) -> Void = { _ in }
     ) {
         self.model = model
         self.openNote = openNote
         self.openSettings = openSettings
         self.openAbout = openAbout
+        self.openHelp = openHelp
         self.deletionToast = deletionToast
     }
 
@@ -69,6 +72,10 @@ public struct MenuBarLibraryScene: View {
             footer
         }
         .frame(width: 420)
+        // FR-001a (T286): position the library window deterministically when
+        // it appears — left-edge aligned with the icon, clamped, 4 pt below
+        // the menu bar, no animation.
+        .background(MenuBarLibraryWindowProbe())
         .task { await model.reload() }
     }
 
@@ -109,12 +116,30 @@ public struct MenuBarLibraryScene: View {
 
     private var footer: some View {
         HStack(spacing: 6) {
+            // FR-004/FR-014a (T284): real sync state from the coordinator —
+            // "not configured" ONLY when sync is genuinely unconfigured;
+            // status/error + manual sync when configured.
+            let sync = model.syncCoordinator
             SyncStatusView(
-                isConfigured: false,  // wired by the app once a VaultConfiguration exists
-                manualSync: {}
+                isConfigured: sync?.isConfigured ?? false,
+                lastSuccessfulSyncAt: sync?.lastSuccessfulSyncAt,
+                lastErrorCode: sync?.lastErrorCode,
+                isInProgress: sync?.isInProgress ?? false,
+                manualSync: {
+                    Task { await sync?.manualSync() }
+                }
             )
 
             Spacer()
+
+            Button {
+                openHelp()
+            } label: {
+                Image(systemName: "questionmark.circle")
+            }
+            .buttonStyle(.plain)
+            .help("Help")
+            .accessibilityLabel("Help")
 
             Button {
                 openAbout()
@@ -142,6 +167,32 @@ public struct MenuBarLibraryScene: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+}
+
+// MARK: - FR-001a window placement probe (T286)
+
+/// Applies the FR-001a library-window frame as soon as the view gains its
+/// hosting window (MenuBarExtra presentation): left edge aligned with the
+/// status-item icon, clamped to the visible screen frame, 4 pt below the
+/// menu bar, NO animation.
+public struct MenuBarLibraryWindowProbe: NSViewRepresentable {
+    public init() {}
+
+    public func makeNSView(context: Context) -> NSView {
+        let view = ProbeView()
+        return view
+    }
+
+    public func updateNSView(_ nsView: NSView, context: Context) {}
+
+    private final class ProbeView: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let window {
+                MenuBarLibraryWindow.positionLibraryWindow(window)
+            }
+        }
     }
 }
 

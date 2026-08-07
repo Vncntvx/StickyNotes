@@ -69,6 +69,20 @@ public struct LibraryCardGrid: View {
     let onTrash: (UUID) -> Void
     let onRestore: (UUID) -> Void
 
+    /// FR-002a: card width ≈ 220 pt, height ≈ 160 pt, 12 pt inter-card
+    /// spacing.
+    public static let cardApproximateWidth: CGFloat = 220
+    public static let cardApproximateHeight: CGFloat = 160
+    public static let interCardSpacing: CGFloat = 12
+
+    /// FR-002a responsive breakpoints: 3 columns at ≥600 pt, 2 below 600,
+    /// 1 below 400.
+    public static func columnCount(forWidth width: CGFloat) -> Int {
+        if width >= 600 { return 3 }
+        if width >= 400 { return 2 }
+        return 1
+    }
+
     public init(
         model: LibraryModel,
         openNote: @escaping (UUID) -> Void,
@@ -96,24 +110,35 @@ public struct LibraryCardGrid: View {
                 }
             }
         } else {
-            ScrollView {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 220, maximum: 340), spacing: 10)], spacing: 10) {
-                    ForEach(model.cards) { card in
-                        NoteCardView(card: card) {
-                            openNote(card.noteId)
-                        }
-                        .contextMenu {
-                            if model.scope == .library {
-                                Button("Move to Trash") { onTrash(card.noteId) }
-                            } else {
-                                Button("Restore") { onRestore(card.noteId) }
-                                Button("Delete Forever", role: .destructive) { onTrash(card.noteId) }
+            GeometryReader { geometry in
+                ScrollView {
+                    LazyVGrid(
+                        columns: Self.columns(forWidth: geometry.size.width),
+                        spacing: Self.interCardSpacing
+                    ) {
+                        ForEach(model.cards) { card in
+                            NoteCardView(card: card) {
+                                openNote(card.noteId)
+                            }
+                            .contextMenu {
+                                if model.scope == .library {
+                                    Button("Move to Trash") { onTrash(card.noteId) }
+                                } else {
+                                    Button("Restore") { onRestore(card.noteId) }
+                                    Button("Delete Forever", role: .destructive) { onTrash(card.noteId) }
+                                }
                             }
                         }
                     }
+                    .padding(Self.interCardSpacing)
                 }
-                .padding(12)
             }
         }
+    }
+
+    /// FR-002a: 3 columns at ≥600 pt, 2 below 600, 1 below 400; 12 pt
+    /// inter-card spacing.
+    public static func columns(forWidth width: CGFloat) -> [GridItem] {
+        Array(repeating: GridItem(.flexible(), spacing: interCardSpacing), count: columnCount(forWidth: width))
     }
 }

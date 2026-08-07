@@ -90,13 +90,25 @@ public enum CardProjection {
     /// loading; plan §Performance).
     public static let maxRows = 500
 
+    /// SQL fragment restricting the query to the given note ids (FTS search
+    /// results, T283). Returns an empty string when nil.
+    public static func noteIdFilter(_ noteIds: Set<UUID>?) -> String {
+        guard let noteIds, !noteIds.isEmpty else { return "" }
+        let list = noteIds.map { "'\($0.uuidString)'" }.joined(separator: ",")
+        return "AND n.id IN (\(list))"
+    }
+
     /// Fetch card projections for the given lifecycle state and sort order.
     /// Bounded to `maxRows`; cheapest per-note aggregation queries only.
+    /// When `noteIds` is non-nil (e.g. FTS search results, T283), only those
+    /// notes are fetched and the row bound does not apply — a search result
+    /// beyond the first 500 cards must still appear (FR-023/SC-005).
     public static func fetchCardProjections(
         store: DatabaseStore,
         lifecycle: NoteLifecycleState,
         sort: NoteSortKey,
-        limit: Int = maxRows
+        limit: Int = maxRows,
+        noteIds: Set<UUID>? = nil
     ) async throws -> [NoteCardProjection] {
         try await store.read { db in
             let orderClause: String
@@ -195,10 +207,10 @@ public enum CardProjection {
                     SELECT n.*
                     FROM note n
                     WHERE n.lifecycleState = ?
-                    ORDER BY \(orderClause)
-                    LIMIT ?
+                    \(Self.noteIdFilter(noteIds))
+                    \(noteIds == nil ? "ORDER BY \(orderClause) LIMIT ?" : "ORDER BY \(orderClause)")
                     """,
-                arguments: [lifecycle.rawValue, limit]
+                arguments: noteIds == nil ? [lifecycle.rawValue, limit] : [lifecycle.rawValue]
             )
 
             return rows.compactMap { row -> NoteCardProjection? in

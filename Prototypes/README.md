@@ -59,19 +59,64 @@ swift run GlobalShortcutPrototype                # headless criteria 1–3
 swift run GlobalShortcutPrototype --wait 10      # interactive fire test
 swift run Argon2idPrototype                      # headless, exit 0 = PASS
 swift run WindowCoordinatorPrototype --selftest  # headless registry test
-swift run WindowCoordinatorPrototype             # GUI
-swift run RichTextIMEPrototype                   # GUI
-swift run ScreenCapturePrototype                 # GUI (permission prompt on first capture)
 ```
+
+### GUI prototypes — macOS 27 beta: use a `.app` bundle, NOT `swift run`
+
+On macOS 27 beta, launching a GUI prototype via `swift run` (or running the
+bare binary directly) shows NO window and the IME/keyboard cannot focus it —
+keyboard events stay in the launching terminal (`lsappinfo` reports
+`!cgsConnection`). This is a launch-mode limitation of unbundled GUI
+processes, NOT a product defect: production launches via LaunchServices
+from a real `.app` bundle, where everything works. Verified interactively in
+T158 (2026-08-07) — each GUI prototype PASSED when launched as a bundle.
+
+To run a GUI prototype, package it as a minimal `.app` and `open` it:
+
+```bash
+# one-time: build + package all GUI prototypes as .app bundles
+DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer swift build
+for name in WindowCoordinatorPrototype RichTextIMEPrototype ScreenCapturePrototype; do
+  APP="$name.app"
+  mkdir -p "$APP/Contents/MacOS"
+  cp ".build/out/Products/Debug/$name" "$APP/Contents/MacOS/"
+  cat > "$APP/Contents/Info.plist" << EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key><string>$name</string>
+    <key>CFBundleIdentifier</key><string>local.prototype.$name</string>
+    <key>CFBundleExecutable</key><string>$name</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>LSMinimumSystemVersion</key><string>26.0</string>
+</dict>
+</plist>
+EOF
+done
+
+open WindowCoordinatorPrototype.app      # GUI: one-window-per-note + floating
+open RichTextIMEPrototype.app            # GUI: type Chinese with IME, Round-trip check
+open ScreenCapturePrototype.app          # GUI: system picker + region capture (permission prompt on first capture)
+```
+
+Notes on the GUI session: the machine must have an active desktop login
+session (launch from a GUI-launched Terminal, not over SSH — SSH-spawned
+processes cannot connect to the window server). Each prototype shows its
+PASS/FAIL state in the window's status label (stdout is not visible when
+launched via `open`).
 
 ## Gate report summary (this machine: Xcode-beta 27.0, Swift 6.4, macOS 27 beta)
 
 - Headless criteria all PASS (verified via `DEVELOPER_DIR=… swift run …`).
-- GUI prototypes compile against the macOS 27 SDK; interactive verification
-  (real IME typing, window focus/floating, region-drag capture, hotkey
-  presses) requires running the executables on a Mac with a display — each
-  prints its own PASS/FAIL at the end of the interactive session. This
-  interactive verification is tracked as **T158** in `tasks.md`.
+- GUI prototypes PASS (T158, verified 2026-08-07 on a display-equipped Mac):
+  RichTextIMEPrototype (Chinese IME typing + NFC round-trip lossless),
+  WindowCoordinatorPrototype (one-window-per-note invariant, focus-to-
+  existing, Always-on-Top floating), ScreenCapturePrototype (system
+  content-sharing picker; screen-recording permission prompt fires ONLY on
+  first capture invocation per FR-131; region drag-capture succeeds). They
+  must be launched as `.app` bundles (see "How to run") — `swift run` cannot
+  activate windows/IME on macOS 27 beta.
 - `AppGroupGRDBPrototype` uses a temp directory (the literal App Group
   container path `~/Library/Group Containers/…` is entitlement-gated — an
   unsandboxed CLI cannot create it under macOS TCC; the entitlement path is

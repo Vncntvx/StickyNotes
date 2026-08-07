@@ -60,10 +60,18 @@ public final class LibraryModel {
     /// The composed services (internal — the App layer uses it for global
     /// shortcut wiring and window coordination).
     let environment: AppEnvironment
+    /// The sync composition root (T284): drives the library's sync-status
+    /// area with real configuration/state. Nil in tests without sync.
+    public let syncCoordinator: SyncCoordinator?
 
-    public init(environment: AppEnvironment, preferences: LocalPreferences = LocalPreferences()) {
+    public init(
+        environment: AppEnvironment,
+        preferences: LocalPreferences = LocalPreferences(),
+        syncCoordinator: SyncCoordinator? = nil
+    ) {
         self.environment = environment
         self.preferences = preferences
+        self.syncCoordinator = syncCoordinator ?? environment.syncCoordinator
     }
 
     // MARK: - Loading
@@ -73,12 +81,40 @@ public final class LibraryModel {
         defer { isLoading = false }
         do {
             let lifecycle: NoteLifecycleState = scope == .trash ? .trashed : .active
-            var fetched = try await environment.persistence.fetchCards(lifecycle: lifecycle, sort: sort)
             let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+            let noteIds: Set<UUID>?
             if !query.isEmpty {
-                // FR-024a prompt result updates: filter in-memory for the
-                // interactive query; the FTS SearchService backs full
-                // search (T042).
+                // FR-023/FR-023a (T283): search through the FTS SearchService
+                // (matches titles, body, todos, code, file display names,
+                // screenshot captions — FR-023) so results are NOT bounded by
+                // the 500-card row limit (SC-005) and privacy-excluded notes
+                // are never revealed (T042). Falls back to the in-memory
+                // filter only before bootstrap.
+                if let service = environment.persistence.searchService {
+                    let results = try await (scope == .trash
+                        ? service.searchTrashedNotes(query: query, limit: 1000)
+                        : service.searchActiveNotes(query: query, limit: 1000))
+                    noteIds = Set(results.map(\.id))
+                } else {
+                    noteIds = nil
+                }
+            } else {
+                noteIds = nil
+            }
+            // An empty FTS result set is an empty grid (FR-014c empty-state),
+            // never an unfiltered list.
+            if let noteIds, noteIds.isEmpty {
+                cards = []
+                return
+            }
+            var fetched = try await environment.persistence.fetchCards(
+                lifecycle: lifecycle,
+                sort: sort,
+                noteIds: noteIds
+            )
+            if !query.isEmpty && noteIds == nil {
+                // FR-024a prompt updates: in-memory fallback before the
+                // search service exists (pre-bootstrap only).
                 fetched = fetched.filter { card in
                     (card.title ?? "").localizedCaseInsensitiveContains(query)
                         || (card.generatedSummary ?? "").localizedCaseInsensitiveContains(query)
