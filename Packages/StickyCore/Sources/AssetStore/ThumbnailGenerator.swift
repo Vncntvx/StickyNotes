@@ -20,7 +20,12 @@ import Domain
 public enum ThumbnailGenerator {
 
     /// Default longest-edge size for card-grid thumbnails (points).
-    public static let defaultLongestEdge = 512
+    ///
+    /// Per FR-094a (clarified 2026-08-07): the single canonical thumbnail
+    /// size for card-grid and widget display is 256px on the longest edge.
+    /// Full-resolution screenshots and embedded images are NEVER decoded
+    /// for card-grid or widget rendering (SC-008).
+    public static let defaultLongestEdge = 256
 
     /// Whether a content type is "text-heavy" and should keep a lossless
     /// thumbnail. PNG (the ScreenshotKit default for window captures) and

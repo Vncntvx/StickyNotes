@@ -1,0 +1,838 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		08A3B71916C5E8ED34101E8A /* Domain in Frameworks */ = {isa = PBXBuildFile; productRef = 0E924C867EAA12FBA94B943D /* Domain */; };
+		291B0F0705855B01B173D037 /* Domain in Frameworks */ = {isa = PBXBuildFile; productRef = F70C2DB4F125716B9C4A4E22 /* Domain */; };
+		2C8062C347153AF1BFB1FF83 /* SyncCore in Frameworks */ = {isa = PBXBuildFile; productRef = 33ACDE522DDC6C590228CA92 /* SyncCore */; };
+		380FC9E9686FB601F597E1BF /* Persistence in Frameworks */ = {isa = PBXBuildFile; productRef = 685DD79A896646A6A66AF18F /* Persistence */; };
+		4712D2B8A75B68C6E3D85EBE /* EditorCore in Frameworks */ = {isa = PBXBuildFile; productRef = B3648445B9C8B8BAB042421A /* EditorCore */; };
+		5A542D6DB14A436A04142333 /* WidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C893B99213FD87B64D1DB1E9 /* WidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		6B4F015BE64A56552DE4B125 /* Resources in Resources */ = {isa = PBXBuildFile; fileRef = 0048A73D7254A5193FEDD794 /* Resources */; };
+		8CC760B620FB1E5A26F03057 /* SystemBridge in Frameworks */ = {isa = PBXBuildFile; productRef = F5142B2FF36510477A5F737C /* SystemBridge */; };
+		9C73249647B466A240A45226 /* Persistence in Frameworks */ = {isa = PBXBuildFile; productRef = BB1B7579CFA6433AA1BFD527 /* Persistence */; };
+		B4FCBD5655604D9F38D45948 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17DCD27851E847489C9BE57D /* AppEnvironment.swift */; };
+		C0D003C209E058943589532B /* LocalPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F89F26E56BDECD64F1D6C47 /* LocalPreferences.swift */; };
+		C12E94117D70DE456E689026 /* StickyNotesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1132623A93A04B27B3B53BE /* StickyNotesApp.swift */; };
+		CEE7BEA14E640F69EDD73CCE /* AssetStore in Frameworks */ = {isa = PBXBuildFile; productRef = 6FFFFB09E504973F99ADC646 /* AssetStore */; };
+		E339A2915C298CFB87C68161 /* SecurityCore in Frameworks */ = {isa = PBXBuildFile; productRef = A5139BD372DFB1A4199024BE /* SecurityCore */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		39F0C9DF8ECB8279C4064A3B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 91582E3B08811EC7ED174249 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 79739306D0E728206179484B;
+			remoteInfo = StickyNotes;
+		};
+		9829695032D04E49701DFEB5 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 91582E3B08811EC7ED174249 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 79739306D0E728206179484B;
+			remoteInfo = StickyNotes;
+		};
+		D699BAA83E941FE03AA59B45 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 91582E3B08811EC7ED174249 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 89A84E2F34A081874850520F;
+			remoteInfo = WidgetExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		5A0A3828350ADF8CE1BC0180 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				5A542D6DB14A436A04142333 /* WidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		0048A73D7254A5193FEDD794 /* Resources */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Resources; path = App/Resources; sourceTree = SOURCE_ROOT; };
+		17DCD27851E847489C9BE57D /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
+		2406155D3BD8C7138714D769 /* StickyCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = StickyCore; path = Packages/StickyCore; sourceTree = SOURCE_ROOT; };
+		25EBF1C303B4EC0DBE097511 /* AppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		48F7FAD50DF90DD24DBFF35A /* StickyNotes.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StickyNotes.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		78A4C413F0CF87AEB4BD70BD /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		9F89F26E56BDECD64F1D6C47 /* LocalPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalPreferences.swift; sourceTree = "<group>"; };
+		A939AE5295713D9B40025718 /* AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C893B99213FD87B64D1DB1E9 /* WidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		D1132623A93A04B27B3B53BE /* StickyNotesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StickyNotesApp.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		31CAB7C65D9428D08CCCC2AF /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				291B0F0705855B01B173D037 /* Domain in Frameworks */,
+				380FC9E9686FB601F597E1BF /* Persistence in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9A5CC9DBE8DF6CC9BC8C01C9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				08A3B71916C5E8ED34101E8A /* Domain in Frameworks */,
+				9C73249647B466A240A45226 /* Persistence in Frameworks */,
+				4712D2B8A75B68C6E3D85EBE /* EditorCore in Frameworks */,
+				CEE7BEA14E640F69EDD73CCE /* AssetStore in Frameworks */,
+				E339A2915C298CFB87C68161 /* SecurityCore in Frameworks */,
+				2C8062C347153AF1BFB1FF83 /* SyncCore in Frameworks */,
+				8CC760B620FB1E5A26F03057 /* SystemBridge in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0A6D21E1D3EAAE8782853502 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				319E5F9BD2349FF28611936A /* Sources */,
+				0048A73D7254A5193FEDD794 /* Resources */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		1313674E2EBDF931DA2E960B /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				2406155D3BD8C7138714D769 /* StickyCore */,
+			);
+			path = Packages;
+			sourceTree = "<group>";
+		};
+		1C2233A148DFC962340B1240 /* Trash */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Trash;
+			sourceTree = "<group>";
+		};
+		319E5F9BD2349FF28611936A /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				41CBD951A17C7274B07F958F /* App */,
+				9517157F9DC97D3A30F531D1 /* Features */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		334824774A9C96A1708D9D00 /* WidgetExtension */ = {
+			isa = PBXGroup;
+			children = (
+				78A4C413F0CF87AEB4BD70BD /* Info.plist */,
+			);
+			path = WidgetExtension;
+			sourceTree = "<group>";
+		};
+		41CBD951A17C7274B07F958F /* App */ = {
+			isa = PBXGroup;
+			children = (
+				17DCD27851E847489C9BE57D /* AppEnvironment.swift */,
+				D1132623A93A04B27B3B53BE /* StickyNotesApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		4E2B9DFAFECACE9D91CA93A4 = {
+			isa = PBXGroup;
+			children = (
+				0A6D21E1D3EAAE8782853502 /* App */,
+				90EBC5C53C7FC43E0DEF5C4D /* AppTests */,
+				B4540D7405CE83EDE648DF0B /* AppUITests */,
+				1313674E2EBDF931DA2E960B /* Packages */,
+				334824774A9C96A1708D9D00 /* WidgetExtension */,
+				FB687CFA1368E1A62656DDD1 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		710AEEDF97528A09C359AB6D /* NoteWindow */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = NoteWindow;
+			sourceTree = "<group>";
+		};
+		8BB3FDE185E4E21346DAF794 /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		90EBC5C53C7FC43E0DEF5C4D /* AppTests */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = AppTests;
+			sourceTree = "<group>";
+		};
+		9517157F9DC97D3A30F531D1 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				D8CF1C93A9CA754AF6D7CA2E /* About */,
+				D149FE6F44065BCF374A9562 /* Capture */,
+				FBEA17CD73C77384F18558D9 /* Editor */,
+				A4187E211DCB281458FA409B /* Library */,
+				710AEEDF97528A09C359AB6D /* NoteWindow */,
+				8BB3FDE185E4E21346DAF794 /* Settings */,
+				DC2A76D5B9FF52091769FAD4 /* Shared */,
+				1C2233A148DFC962340B1240 /* Trash */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		A4187E211DCB281458FA409B /* Library */ = {
+			isa = PBXGroup;
+			children = (
+				9F89F26E56BDECD64F1D6C47 /* LocalPreferences.swift */,
+			);
+			path = Library;
+			sourceTree = "<group>";
+		};
+		B4540D7405CE83EDE648DF0B /* AppUITests */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = AppUITests;
+			sourceTree = "<group>";
+		};
+		D149FE6F44065BCF374A9562 /* Capture */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Capture;
+			sourceTree = "<group>";
+		};
+		D8CF1C93A9CA754AF6D7CA2E /* About */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = About;
+			sourceTree = "<group>";
+		};
+		DC2A76D5B9FF52091769FAD4 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		FB687CFA1368E1A62656DDD1 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A939AE5295713D9B40025718 /* AppTests.xctest */,
+				25EBF1C303B4EC0DBE097511 /* AppUITests.xctest */,
+				48F7FAD50DF90DD24DBFF35A /* StickyNotes.app */,
+				C893B99213FD87B64D1DB1E9 /* WidgetExtension.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		FBEA17CD73C77384F18558D9 /* Editor */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Editor;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		42D00892214D497762E443B7 /* AppUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 05D154710B9776E968032CCD /* Build configuration list for PBXNativeTarget "AppUITests" */;
+			buildPhases = (
+				0D3D04B21C050862A04A04D3 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				F6D75B224BD1ABAD7662B8FC /* PBXTargetDependency */,
+			);
+			name = AppUITests;
+			packageProductDependencies = (
+			);
+			productName = AppUITests;
+			productReference = 25EBF1C303B4EC0DBE097511 /* AppUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		6D16123B7F27A28BFA2DB9E2 /* AppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C316B0AFADC582A9D88D87AC /* Build configuration list for PBXNativeTarget "AppTests" */;
+			buildPhases = (
+				317C20EAA41B9146EEB12B9F /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				208B5F7C95E524C074BFEA21 /* PBXTargetDependency */,
+			);
+			name = AppTests;
+			packageProductDependencies = (
+			);
+			productName = AppTests;
+			productReference = A939AE5295713D9B40025718 /* AppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		79739306D0E728206179484B /* StickyNotes */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1F2AE3FDAE09C2D4C2E2A8A3 /* Build configuration list for PBXNativeTarget "StickyNotes" */;
+			buildPhases = (
+				BBA6F222D23D65B6E6716F15 /* Sources */,
+				242B4ECB1BB66A8B84364940 /* Resources */,
+				9A5CC9DBE8DF6CC9BC8C01C9 /* Frameworks */,
+				5A0A3828350ADF8CE1BC0180 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				46F33D36B2BAC3740EE896F7 /* PBXTargetDependency */,
+			);
+			name = StickyNotes;
+			packageProductDependencies = (
+				0E924C867EAA12FBA94B943D /* Domain */,
+				BB1B7579CFA6433AA1BFD527 /* Persistence */,
+				B3648445B9C8B8BAB042421A /* EditorCore */,
+				6FFFFB09E504973F99ADC646 /* AssetStore */,
+				A5139BD372DFB1A4199024BE /* SecurityCore */,
+				33ACDE522DDC6C590228CA92 /* SyncCore */,
+				F5142B2FF36510477A5F737C /* SystemBridge */,
+			);
+			productName = StickyNotes;
+			productReference = 48F7FAD50DF90DD24DBFF35A /* StickyNotes.app */;
+			productType = "com.apple.product-type.application";
+		};
+		89A84E2F34A081874850520F /* WidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8585E4A56289BB45D79A80B1 /* Build configuration list for PBXNativeTarget "WidgetExtension" */;
+			buildPhases = (
+				C05385DC0A78C9835AAF3757 /* Sources */,
+				31CAB7C65D9428D08CCCC2AF /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = WidgetExtension;
+			packageProductDependencies = (
+				F70C2DB4F125716B9C4A4E22 /* Domain */,
+				685DD79A896646A6A66AF18F /* Persistence */,
+			);
+			productName = WidgetExtension;
+			productReference = C893B99213FD87B64D1DB1E9 /* WidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		91582E3B08811EC7ED174249 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					42D00892214D497762E443B7 = {
+						DevelopmentTeam = "";
+						TestTargetID = 79739306D0E728206179484B;
+					};
+					6D16123B7F27A28BFA2DB9E2 = {
+						DevelopmentTeam = "";
+					};
+					79739306D0E728206179484B = {
+						DevelopmentTeam = "";
+					};
+					89A84E2F34A081874850520F = {
+						DevelopmentTeam = "";
+					};
+				};
+			};
+			buildConfigurationList = 0C84412A9808554CA465B0EA /* Build configuration list for PBXProject "StickyNotes" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 4E2B9DFAFECACE9D91CA93A4;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				C8E97FDB01B935069ABAECC9 /* XCLocalSwiftPackageReference "Packages/StickyCore" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = FB687CFA1368E1A62656DDD1 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				79739306D0E728206179484B /* StickyNotes */,
+				89A84E2F34A081874850520F /* WidgetExtension */,
+				6D16123B7F27A28BFA2DB9E2 /* AppTests */,
+				42D00892214D497762E443B7 /* AppUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		242B4ECB1BB66A8B84364940 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6B4F015BE64A56552DE4B125 /* Resources in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		0D3D04B21C050862A04A04D3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		317C20EAA41B9146EEB12B9F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BBA6F222D23D65B6E6716F15 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B4FCBD5655604D9F38D45948 /* AppEnvironment.swift in Sources */,
+				C0D003C209E058943589532B /* LocalPreferences.swift in Sources */,
+				C12E94117D70DE456E689026 /* StickyNotesApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C05385DC0A78C9835AAF3757 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		208B5F7C95E524C074BFEA21 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 79739306D0E728206179484B /* StickyNotes */;
+			targetProxy = 9829695032D04E49701DFEB5 /* PBXContainerItemProxy */;
+		};
+		46F33D36B2BAC3740EE896F7 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 89A84E2F34A081874850520F /* WidgetExtension */;
+			targetProxy = D699BAA83E941FE03AA59B45 /* PBXContainerItemProxy */;
+		};
+		F6D75B224BD1ABAD7662B8FC /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 79739306D0E728206179484B /* StickyNotes */;
+			targetProxy = 39F0C9DF8ECB8279C4064A3B /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		0C2CCF13599AF7209D220E0D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = WidgetExtension/WidgetExtension.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = WidgetExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Sticky Notes Widget";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = local.stickynotes.app.widget;
+				PRODUCT_NAME = StickyNotesWidget;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		1B80FDFB6344E1C29C6BD576 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/Resources/StickyNotes.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = App/Resources/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Sticky Notes";
+				INFOPLIST_KEY_LSMinimumSystemVersion = "$(MACOSX_DEPLOYMENT_TARGET)";
+				INFOPLIST_KEY_LSUIElement = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = local.stickynotes.app;
+				PRODUCT_NAME = StickyNotes;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		2405E397827F72E575CA13E0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				APP_GROUP_ID = group.local.stickynotes.placeholder;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_IDENTITY = "";
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		421687E434DC89975A82ED91 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/Resources/StickyNotes.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = App/Resources/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Sticky Notes";
+				INFOPLIST_KEY_LSMinimumSystemVersion = "$(MACOSX_DEPLOYMENT_TARGET)";
+				INFOPLIST_KEY_LSUIElement = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = local.stickynotes.app;
+				PRODUCT_NAME = StickyNotes;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		4F46AC4611D5C389471FD1FD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				APP_GROUP_ID = group.local.stickynotes.placeholder;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_IDENTITY = "";
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		A6AF27DA5BFE597BC9319265 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = local.stickynotes.app.uitests;
+				SDKROOT = macosx;
+				TEST_TARGET_NAME = StickyNotes;
+			};
+			name = Release;
+		};
+		AE1EBAC1711006BC49332BD0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = WidgetExtension/WidgetExtension.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = WidgetExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Sticky Notes Widget";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = local.stickynotes.app.widget;
+				PRODUCT_NAME = StickyNotesWidget;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+		B28FE07A725B66526F54D04D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = local.stickynotes.app.tests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/StickyNotes.app/Contents/MacOS/StickyNotes";
+			};
+			name = Debug;
+		};
+		D01B20383EA9B8979AA36D16 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = local.stickynotes.app.tests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/StickyNotes.app/Contents/MacOS/StickyNotes";
+			};
+			name = Release;
+		};
+		D31F41D30AD1B3ECEEB3EC18 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = local.stickynotes.app.uitests;
+				SDKROOT = macosx;
+				TEST_TARGET_NAME = StickyNotes;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		05D154710B9776E968032CCD /* Build configuration list for PBXNativeTarget "AppUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D31F41D30AD1B3ECEEB3EC18 /* Debug */,
+				A6AF27DA5BFE597BC9319265 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		0C84412A9808554CA465B0EA /* Build configuration list for PBXProject "StickyNotes" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4F46AC4611D5C389471FD1FD /* Debug */,
+				2405E397827F72E575CA13E0 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		1F2AE3FDAE09C2D4C2E2A8A3 /* Build configuration list for PBXNativeTarget "StickyNotes" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				421687E434DC89975A82ED91 /* Debug */,
+				1B80FDFB6344E1C29C6BD576 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		8585E4A56289BB45D79A80B1 /* Build configuration list for PBXNativeTarget "WidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0C2CCF13599AF7209D220E0D /* Debug */,
+				AE1EBAC1711006BC49332BD0 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C316B0AFADC582A9D88D87AC /* Build configuration list for PBXNativeTarget "AppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B28FE07A725B66526F54D04D /* Debug */,
+				D01B20383EA9B8979AA36D16 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		C8E97FDB01B935069ABAECC9 /* XCLocalSwiftPackageReference "Packages/StickyCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/StickyCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		0E924C867EAA12FBA94B943D /* Domain */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Domain;
+		};
+		33ACDE522DDC6C590228CA92 /* SyncCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SyncCore;
+		};
+		685DD79A896646A6A66AF18F /* Persistence */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Persistence;
+		};
+		6FFFFB09E504973F99ADC646 /* AssetStore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = AssetStore;
+		};
+		A5139BD372DFB1A4199024BE /* SecurityCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SecurityCore;
+		};
+		B3648445B9C8B8BAB042421A /* EditorCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = EditorCore;
+		};
+		BB1B7579CFA6433AA1BFD527 /* Persistence */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Persistence;
+		};
+		F5142B2FF36510477A5F737C /* SystemBridge */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SystemBridge;
+		};
+		F70C2DB4F125716B9C4A4E22 /* Domain */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Domain;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 91582E3B08811EC7ED174249 /* Project object */;
+}

@@ -1,16 +1,22 @@
 import Foundation
 import Domain
 
-// MARK: - AutoSave draft manager (T031)
+// MARK: - AutoSave draft manager (T031/T238)
 //
-// Per tasks.md T031 and plan §Auto-save:
+// Per tasks.md T031/T238 and plan §Auto-save:
 //
 // - Local-first. In-memory draft per open note; debounce ordinary text
-//   persistence ~300 ms; save structural ops + todo completion immediately;
-//   flush on focus loss, before window close, before termination; never wait
-//   for remote sync to consider a local save complete.
+//   persistence 500 ms (FR-141a, clarified 2026-08-07); save structural ops
+//   + todo completion immediately; flush on focus loss, before window close,
+//   before deletion, before auto-removal decisions (FR-012), and before
+//   termination; never wait for remote sync to consider a local save
+//   complete.
 // - Stale-debounced-write protection via revision tokens / serialized
 //   note-edit sessions.
+// - Crash-loss contract (FR-141a): if the process is terminated mid-edit
+//   (within the debounce window), at most the input from the last debounce
+//   window is lost; content persisted by a completed autosave is always
+//   recovered on relaunch.
 //
 // This is the framework-free, testable core. The App layer wraps it with a
 // main-actor `@Observable` model that hooks into focus/window-close/terminate
@@ -74,10 +80,16 @@ public actor AutoSaveDraftManager {
     /// The last token that was actually saved (immediate or debounced).
     private var lastSavedToken: AutoSaveRevisionToken?
 
+    /// The auto-save debounce interval (FR-141a, clarified 2026-08-07).
+    /// Fixed at 500 ms — deterministic per build. Ordinary text edits
+    /// persist in a single transaction once this window elapses without
+    /// further changes. Structural ops and `flushNow` bypass the debounce.
+    public static let defaultDebounceInterval: TimeInterval = 0.5
+
     public init(
         noteId: UUID,
         deviceId: UUID,
-        debounceInterval: TimeInterval = 0.3,
+        debounceInterval: TimeInterval = AutoSaveDraftManager.defaultDebounceInterval,
         now: @escaping AutoSaveClock = { Date() },
         save: @escaping AutoSaveSink
     ) {

@@ -170,27 +170,51 @@ import Foundation
 // MARK: - NoteAutoDiscard helper
 //
 // A small Domain helper that encodes the empty-note auto-discard rule
-// (FR-018 / FR-019). Lives in Domain so the rule is testable without UI.
+// (FR-018 / FR-019 / FR-012a clarified 2026-08-07). Lives in Domain so the
+// rule is testable without UI.
+//
+// FR-012a "meaningful content" = (a) at least one non-whitespace Unicode
+// character in the title field, OR (b) at least one non-whitespace Unicode
+// character in any rich-text block, OR (c) the presence of any
+// todo/image/screenshot/code-block/file-reference block regardless of text
+// length. A single character qualifies; whitespace-only does NOT qualify
+// (spaces, tabs, newlines, U+3000 ideographic space, etc.). A note that
+// PREVIOUSLY held meaningful content but is now emptied is NOT auto-deleted
+// (FR-013).
 
 public enum NoteAutoDiscard {
-    /// Returns `true` if the note ever had content. A note with no blocks
-    /// never had content. A rich-text block whose `parentVersionId` is nil
-    /// AND whose current text is empty never had content. A block with a
-    /// non-nil `parentVersionId` had content in a prior version.
+    /// Returns `true` if the note contains meaningful content per FR-012a.
+    /// "Meaningful content" = ≥1 non-whitespace Unicode character in the
+    /// title or any rich-text block, OR the presence of any
+    /// todo/image/screenshot/code-block/file-reference block. A previously-
+    /// content note (a block with a non-nil `parentVersionId`) is also
+    /// considered to have had content (FR-013: not auto-deleted when emptied).
     public static func hadContent(_ note: Note, blocks: [Block]) -> Bool {
+        // (a) title with a non-whitespace character.
+        if let title = note.title, containsNonWhitespace(title) {
+            return true
+        }
         for block in blocks {
             switch block.payload {
             case .richText(let doc):
-                if !doc.text.isEmpty { return true }
-                // If text is empty but the block has a parent version, it
-                // had content before (was emptied).
+                // (b) non-whitespace text in a rich-text block.
+                if containsNonWhitespace(doc.text) { return true }
+                // Previously had content (FR-013): a block with a parent
+                // version was non-empty in a prior version.
                 if block.parentVersionId != nil { return true }
             case .todo(let todo):
-                if !todo.richText.text.isEmpty { return true }
+                // (c) a todo block counts as content regardless of text
+                // length (structural block). But also check its text.
+                if containsNonWhitespace(todo.richText.text) { return true }
                 if block.parentVersionId != nil { return true }
+                // An empty todo block with no prior version still counts as
+                // a structural block per FR-012a (c).
+                return true
             case .code(let code):
-                if !code.text.isEmpty { return true }
+                // (c) a code block counts as content; also check its text.
+                if containsNonWhitespace(code.text) { return true }
                 if block.parentVersionId != nil { return true }
+                return true
             // Non-text blocks (fileRef, image, screenshot) count as content.
             case .fileReference, .image, .screenshot:
                 return true
@@ -199,9 +223,16 @@ public enum NoteAutoDiscard {
         return false
     }
 
+    /// Returns `true` if the string contains at least one non-whitespace
+    /// Unicode character. Whitespace includes spaces, tabs, newlines,
+    /// U+3000 ideographic space, and all Unicode "White_Space" characters.
+    private static func containsNonWhitespace(_ string: String) -> Bool {
+        !string.allSatisfy { $0.isWhitespace }
+    }
+
     /// Returns `true` if the note should be auto-discarded on window close.
-    /// Per FR-018/FR-019: only notes that NEVER had content are auto-
-    /// discarded.
+    /// Per FR-018/FR-019/FR-012a: only notes that NEVER had meaningful
+    /// content are auto-discarded.
     public static func shouldAutoDiscard(_ note: Note, blocks: [Block]) -> Bool {
         // Trashed/permanentlyDeleted/conflictCopy notes are never auto-discarded.
         guard note.lifecycleState == .active else { return false }

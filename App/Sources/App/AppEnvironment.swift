@@ -32,6 +32,10 @@ public struct AppEnvironment: Sendable {
     public let security: SecurityServices
     public let sync: SyncServices
     public let systemBridge: SystemBridgeServices
+    /// Device-local first-launch preferences (FR-014a, T207). Stored in App
+    /// Group UserDefaults; never synchronized, never in canonical JSON, never
+    /// in exported diagnostics.
+    public let localPreferences: LocalPreferences
 
     public init(
         domain: DomainServices,
@@ -40,7 +44,8 @@ public struct AppEnvironment: Sendable {
         assets: AssetServices,
         security: SecurityServices,
         sync: SyncServices,
-        systemBridge: SystemBridgeServices
+        systemBridge: SystemBridgeServices,
+        localPreferences: LocalPreferences
     ) {
         self.domain = domain
         self.persistence = persistence
@@ -49,6 +54,7 @@ public struct AppEnvironment: Sendable {
         self.security = security
         self.sync = sync
         self.systemBridge = systemBridge
+        self.localPreferences = localPreferences
     }
 
     /// Placeholder used during foundation bring-up. Real composition
@@ -60,7 +66,8 @@ public struct AppEnvironment: Sendable {
         assets: AssetServices.placeholder,
         security: SecurityServices.placeholder,
         sync: SyncServices.placeholder,
-        systemBridge: SystemBridgeServices.placeholder
+        systemBridge: SystemBridgeServices.placeholder,
+        localPreferences: LocalPreferences()
     )
 
     /// Bootstraps the database and composes the environment (T154).
@@ -75,6 +82,15 @@ public struct AppEnvironment: Sendable {
     /// The app calls this once at launch; a failure surfaces a
     /// `SchemaCompatibility`-class error and the app refuses to start rather
     /// than running against an inconsistent database (constitution IV, X).
+    ///
+    /// FR-014a (clarified 2026-08-07) / T210: the startup path performs NO
+    /// permission request. `PermissionService.screenRecordingStatus()` uses
+    /// `CGPreflightScreenCaptureAccess()` (no prompt); `accessibilityStatus()`
+    /// uses `AXIsProcessTrusted()` (no prompt). The actual screen-recording
+    /// prompt (`CGRequestWindowCaptureAccess`) is invoked ONLY on capture
+    /// invocation (WindowCapture/RegionCapture), never at launch. This
+    /// invariant is enforced by audit: the bootstrap path below calls no
+    /// `CGRequest*` / `AXIsProcessTrustedWithOptions` API.
     public static func bootstrap(
         appGroupContainerURL: URL
     ) async throws -> AppEnvironment {
@@ -99,7 +115,8 @@ public struct AppEnvironment: Sendable {
             assets: AssetServices(),
             security: SecurityServices(),
             sync: SyncServices(),
-            systemBridge: SystemBridgeServices()
+            systemBridge: SystemBridgeServices(),
+            localPreferences: LocalPreferences()
         )
     }
 }

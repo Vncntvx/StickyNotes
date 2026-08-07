@@ -22,6 +22,11 @@ public enum ProviderError: Error, Sendable, Equatable {
     case schemaUnsupported
     case canceled
     case tls
+    /// Wrong vault detected (FR edge case, clarified 2026-08-07): the
+    /// bootstrap object's `vaultId` does not match the locally-configured
+    /// `vaultId`, or a bootstrap already exists under the chosen locator
+    /// for a new vault. Fail-closed; no local/remote mutation.
+    case wrongVault
     case unknown
 
     /// Stable sanitized code for logs/diagnostics (`sync.provider.<code>`).
@@ -39,6 +44,7 @@ public enum ProviderError: Error, Sendable, Equatable {
         case .schemaUnsupported: return "sync.provider.schemaUnsupported"
         case .canceled: return "sync.provider.canceled"
         case .tls: return "sync.provider.tls"
+        case .wrongVault: return "sync.provider.wrongVault"
         case .unknown: return "sync.provider.unknown"
         }
     }
@@ -50,7 +56,7 @@ public enum ProviderError: Error, Sendable, Equatable {
         case .network, .server, .conflict, .clockSkew:
             return true
         case .auth, .forbidden, .conditionalFailed, .notFound, .corrupt,
-             .schemaUnsupported, .canceled, .tls, .unknown:
+             .schemaUnsupported, .canceled, .tls, .wrongVault, .unknown:
             return false
         }
     }
@@ -59,7 +65,7 @@ public enum ProviderError: Error, Sendable, Equatable {
     /// overwrite/delete local data).
     public var failsClosed: Bool {
         switch self {
-        case .corrupt, .schemaUnsupported, .tls, .auth, .forbidden:
+        case .corrupt, .schemaUnsupported, .tls, .auth, .forbidden, .wrongVault:
             return true
         default:
             return false

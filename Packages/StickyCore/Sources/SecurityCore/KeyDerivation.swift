@@ -36,6 +36,48 @@ public struct Argon2Parameters: Sendable, Equatable, Codable {
     )
 }
 
+// MARK: - Argon2id production minimums (FR-160c, clarified 2026-08-07)
+//
+// Production vault bootstrapping MUST reject parameter sets weaker than:
+// memory ≥ 19456 KiB (19 MiB), iterations ≥ 2, parallelism ≥ 1 (OWASP
+// guidance). The schema minimums (8/1/1) exist ONLY to permit deterministic
+// unit-test fixtures that exercise envelope parsing without paying the full
+// derivation cost. The rejection guard is explicit so a future caller cannot
+// accidentally use weaker params.
+
+public extension Argon2Parameters {
+
+    /// The production minimum memory cost (19 MiB / 19456 KiB).
+    static let productionMinimumMemoryKiB = 19_456
+    /// The production minimum iteration count.
+    static let productionMinimumIterations = 2
+    /// The production minimum parallelism (lanes).
+    static let productionMinimumParallelism = 1
+
+    /// Returns `true` if these parameters meet or exceed the FR-160c
+    /// production minimums.
+    var meetsProductionMinimum: Bool {
+        memoryKiB >= Self.productionMinimumMemoryKiB
+            && iterations >= Self.productionMinimumIterations
+            && parallelism >= Self.productionMinimumParallelism
+    }
+
+    /// Asserts that these parameters meet the FR-160c production minimums.
+    /// Throws `.encryption(.kdfFailed)` if any parameter is weaker than the
+    /// minimum. Use this in the production vault-bootstrap path so a future
+    /// caller cannot accidentally use test-fixture parameters.
+    ///
+    /// - Parameter isTestFixture: When `true`, the guard is skipped (test
+    ///   fixtures may use the weaker schema minimums 8/1/1 to keep the
+    ///   suite fast). Production callers MUST pass `false`.
+    func requireProductionMinimum(isTestFixture: Bool = false) throws {
+        if isTestFixture { return }
+        guard meetsProductionMinimum else {
+            throw StickyError.encryption(.kdfFailed)
+        }
+    }
+}
+
 /// Derives the key-encryption key (KEK) from the sync password using
 /// Argon2id. Runs off the main actor by design (memory-hard; minutes-scale
 /// work for attackers, seconds for us).

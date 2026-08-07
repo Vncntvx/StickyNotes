@@ -22,9 +22,13 @@ import Domain
 
 public enum WidgetDatabase {
 
+    /// The widget read busy timeout (FR-140a). Short enough to never block
+    /// the widget timeline refresh; within the 5s production bound.
+    public static let readBusyTimeout: TimeInterval = 1.0
+
     /// Opens a widget pool: bounded busy timeout (widgets must never hang
     /// the timeline), WAL-friendly read-mostly access.
-    public static func openPool(path: String, busyTimeout: TimeInterval = 1.0) throws -> DatabasePool {
+    public static func openPool(path: String, busyTimeout: TimeInterval = WidgetDatabase.readBusyTimeout) throws -> DatabasePool {
         var config = Configuration()
         config.busyMode = .timeout(busyTimeout)
         config.foreignKeysEnabled = true
