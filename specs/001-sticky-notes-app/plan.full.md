@@ -963,4 +963,6 @@ spec.md and research.md R entries):
 No Complexity Tracking exceptions are required. The plan is ready for
 `/speckit-checklist` and `/speckit-tasks`.
 
-<!-- token-budget: compacted (level=medium) on 2026-08-07T08:59:57Z; original at plan.full.md -->
+<!-- token-budget: compacted (level=medium) on 2026-08-07; original at plan.full.md -->
+<!-- token-budget: backup-refreshed on 2026-08-07 (session-2 FRs FR-011a/014c/050b/141b/180b); prior backup in git history -->
+

@@ -9,6 +9,27 @@ Specs-first repository for "macOS Sticky Notes" — a native, menu-bar-primary s
 - Keep artifacts in sync: never change behavior in `spec.md`/`plan.md` outside the speckit flow (`speckit-analyze` checks cross-artifact consistency).
 - "macOS Sticky Notes" is a **working title only** — never invent a final product or brand name (spec.md line 9).
 
+## Commit messages (conventional)
+
+格式：`type(scope): :emoji: 主述`，空行后接中文无序列表 body。
+
+```
+feat(core): :hammer_and_wrench: 落地 Phase 2 核心域/编辑器/持久化实现与测试
+- Domain: 新增 NoteLifecycle 状态机、NoteSummary 摘要与 FileReference 文件引用
+- EditorCore: 实现 MarkdownTransformer 行级/内联转换与 AutoSave 防抖
+- Persistence: 实现 NoteRepository 与 SearchService（FTS5 检索，隐私排除项不返回）
+- Tests: 覆盖 Domain 生命周期、EditorCore 转换/自动保存、Persistence 检索/回收站
+```
+
+**主述**：中文祈使，不加句号，≤ 50 字符，超限时用 `()` 补 FR/Phase/批次上下文。
+**body**：每条聚焦一个可独立追溯的变更点，引用模块/文件/FR/Phase/任务编号；单行琐碎变更可省略。
+**emoji**：按内容语义选取（非 type 绑定）——`✨`新功能 · `🐛`修复 · `📝`文档 · `♻️`重构 · `✅`测试 · `⚡`性能 · `🔧`工具/配置 · `📦`依赖/打包 · `👷`CI · `🏗️`脚手架 · `🗃️`归档/压缩 · `🔨`实现落地 · `🔒`安全 · `🎨`格式 · `🎉`初始化 · `⏪`回滚。
+**禁入**：secrets、真实笔记内容、内部链接（遵循 Constitution 净化要求）。
+
+**type**：`feat` 新功能 · `fix` 修复 · `docs` 规格/文档/契约 · `refactor` 重构 · `test` 测试 · `perf` 性能 · `build` 构建/依赖 · `ci` CI/CD · `chore` 工具链/杂项 · `style` 格式 · `revert` 回滚。
+
+**scope（固定集合）**：`core` StickyCore 任一模块 · `app` App/Sources · `widget` WidgetExtension · `specs` specs/ 工件及 .specify/templates · `tools` .specify/.claude/.opencode 工具链 · `scaffold` 跨目标脚手架 · `ci` .github/workflows · `init` 仓库初始化。跨多个取最主要；无合适可省略。
+
 ## Documentation lookups (context7 MCP)
 
 Before writing any code that touches a library, framework, or Apple API (GRDB, SwiftUI, WidgetKit, App Intents, OSLog, CryptoKit, …), query context7 for current docs — training data may be stale, and this project targets macOS 26 / Swift 6 APIs.
@@ -59,3 +80,47 @@ DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild test -p
 - **Intended CI toolchain:** Xcode 26.x, Swift 6.3, Swift 6 language mode, strict concurrency, macOS 26 deployment target. The local Xcode 27 beta is NEWER than CI — code that compiles locally may need to stay within the macOS 26 API surface. Record the actual toolchain in `Documentation/toolchain.md` (task T008); do not silently change the deployment target or language mode.
 - Intended architecture: modular monolith — app target + WidgetExtension + one local Swift package `StickyCore` (7 modules). GRDB SQLite (WAL, FTS5) in the App Group container is the source of truth; Keychain for credentials/secrets; sync is an additive E2E-encrypted layer (WebDAV or S3-compatible, one at a time).
 - Intended architecture: modular monolith — app target + WidgetExtension + one local Swift package `StickyCore` (7 modules). GRDB SQLite (WAL, FTS5) in the App Group container is the source of truth; Keychain for credentials/secrets; sync is an additive E2E-encrypted layer (WebDAV or S3-compatible, one at a time).
+
+<!-- BEGIN token-budget compact-backups -->
+
+## Token Budget — backup guard
+
+Files ending in `.full.md` inside `specs/` and `.specify/memory/`
+(e.g. `spec.full.md`, `plan.full.md`) are pre-compaction backups created
+by `/speckit.token-budget.compact`. **Do not read them.** They contain the
+full uncompacted content; loading them cancels the token savings compaction
+achieved. To revert an artifact to its original state, run
+`/speckit.token-budget.restore` instead.
+
+<!-- END token-budget compact-backups -->
+
+<!-- BEGIN token-budget concise-mode -->
+
+## Token Budget — concise mode (active)
+
+When executing any `/speckit.*` command (constitution, specify,
+clarify, plan, tasks, analyze, implement, checklist,
+token-budget.*), follow these output rules:
+
+- Do not narrate plans, intentions, or steps. Run them.
+- Do not recap the user's prompt back to them.
+- Do not announce file writes ("I'll create...", "Now writing..."). Just write.
+- Use terse technical fragments, not full sentences. Write "Updated auth.ts" not "I went ahead and updated auth.ts in order to...".
+- No acknowledgment openers ("Sure!", "Of course!", "Great idea!") and no closing remarks ("I hope this helps", "Let me know if you need anything else").
+- No transitional summaries between steps ("Now I'll...", "Next, I will..."). Just execute.
+- After completing the command, output only:
+  1. The list of files created or changed, one per line.
+  2. Any blocking question or unmet assumption, in one sentence.
+  3. The single line "Done." if there is nothing else to report.
+- Tables, fenced code, and structured data inside artifacts are
+  unaffected — this rule governs only the chat-channel prose around
+  them.
+- Override on request: if the user explicitly asks "explain", "walk
+  me through", "why", or "what did you do", drop concise mode for
+  that single reply and answer normally.
+
+These rules apply only inside `/speckit.*` workflows. Conversational
+replies outside SDD steps are not affected.
+
+<!-- END token-budget concise-mode -->
+

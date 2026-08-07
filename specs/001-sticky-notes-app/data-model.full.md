@@ -4,7 +4,8 @@
 
 This document defines the durable data model. It is the authoritative source for
 `Persistence` migrations and for the canonical/encryption contracts in
-`contracts/`. The model separates **synchronized** data (replicated encrypted via
+`contracts/`. All durable entity identifiers are UUIDs. All timestamps are UTC
+ISO 8601. The model separates **synchronized** data (replicated encrypted via
 the canonical format) from **device-local** data (never leaves the device).
 
 ## Conventions
@@ -60,6 +61,8 @@ The unit a user creates, edits, and retrieves.
 | createdAt | TEXT | yes | |
 | modifiedAt | TEXT | yes | |
 
+**State transitions**: see *State Transitions* below.
+
 ### Block
 
 Ordered content within a note. Categories: richText, todo, code, fileRef,
@@ -104,7 +107,8 @@ payload; identity/hierarchy is separate for stability across reorders/edits.)
 
 **Validation**: no cycles (parent chain must terminate); parent must be in the
 same note; depth ≤ 6 (FR-072a); sort-key collisions normalize; deleting a
-parent does not orphan children (children reparented to grandparent or flagged).
+parent does not orphan children (children reparented to grandparent or flagged
+— see *State Transitions*).
 
 ### Asset
 
@@ -682,5 +686,3 @@ verifiedAt: 2026-08-06T09:10:00Z
   "deletedAt": "2026-08-06T09:30:00Z"
 }
 ```
-
-<!-- token-budget: compacted (level=medium) on 2026-08-07T09:00:53Z; original at data-model.full.md -->
