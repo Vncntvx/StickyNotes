@@ -46,7 +46,7 @@ The unit a user creates, edits, and retrieves.
 | colorKey | enum | yes | yellow/pink/purple/blue/green/gray/custom; built-ins have one canonical sRGB hex each (FR-040a): yellow #FFE08A, pink #F9A8C4, purple #C9A8E8, blue #A8CFF9, green #A8E8B8, gray #D8D8DC |
 | customColor | TEXT (nullable) | yes | hex/rgb when colorKey=custom |
 | transparency | REAL | yes | background opacity, 0.40–1.00 inclusive, 0.05 steps, default 1.00 (FR-041a; below 1.00 the FR-042 contrast logic validates against the composited background); field name retained from v1 — semantic is opacity (FR-041a), not transparency |
-| textSize | enum | yes | per-note text size |
+| textSize | INTEGER | yes | per-note text size in points, 9–24 inclusive, 1-pt steps, default 13 (FR-043a); text ≥18 pt is large text for the FR-042 contrast thresholds |
 | alwaysOnTop | INT (bool) | yes | per-note floating |
 | widgetEligible | INT (bool) | yes | per-note widget privacy gate |
 | coverScreenshotBlockId | UUID (nullable) | yes | at most one cover; FK Block |

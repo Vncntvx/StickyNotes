@@ -14,7 +14,7 @@
     "colorKey": { "enum": ["yellow", "pink", "purple", "blue", "green", "gray", "custom"] },
     "customColor": { "type": ["string", "null"], "description": "Hex color (e.g. #RRGGBB) when colorKey is custom; otherwise null." },
     "transparency": { "type": "number", "minimum": 0.4, "maximum": 1.0, "description": "Background opacity (FR-041a, clarified 2026-08-07): 0.40–1.00 inclusive, 0.05 steps, default 1.00 (opaque). Below 1.00, FR-042 contrast validation runs against the composited background. Field name retained from schema v1; the semantic is opacity." },
-    "textSize": { "enum": ["small", "regular", "large", "extraLarge"] },
+    "textSize": { "type": "integer", "minimum": 9, "maximum": 24, "default": 13, "description": "Per-note text size in points (FR-043a, clarified 2026-08-07): 9–24 inclusive, 1-pt steps, default 13 pt. Text ≥18 pt is large text for the FR-042 contrast thresholds." },
     "alwaysOnTop": { "type": "boolean", "description": "Per-note floating state." },
     "widgetEligible": { "type": "boolean", "description": "Per-note widget privacy gate." },
     "coverScreenshotBlockId": { "type": ["string", "null"], "format": "uuid", "description": "At most one cover screenshot per note; references a screenshot block id." },

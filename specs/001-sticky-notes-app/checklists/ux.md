@@ -17,14 +17,14 @@ measurable, and traceable.
 
 ## Requirement Completeness
 
-- [ ] CHK001 - Are requirements specified for the exact visual positioning of the menu-bar library window relative to the menu bar (pixel offset, alignment, animation behavior on open/dismiss)? [Completeness, Spec §FR-001, Constitution II]
+- [x] CHK001 - Are requirements specified for the exact visual positioning of the menu-bar library window relative to the menu bar (pixel offset, alignment, animation behavior on open/dismiss)? [Completeness, Spec §FR-001, Constitution II]
 - [X] CHK002 - Is the card-grid layout fully specified — card dimensions, number of columns, spacing, responsive behavior at different window widths, scroll behavior, and empty-state presentation? [Completeness, Gap, Spec §FR-002]
 - [X] CHK003 - Are all library affordances from FR-004 enumerated with their expected entry points (menu items, toolbar buttons, keyboard shortcuts, drag-and-drop targets) so no affordance is ambiguously reachable? [Completeness, Spec §FR-004]
 - [X] CHK004 - Are requirements defined for the visual appearance of a note window that "looks like a lightweight sheet of note paper" — border style, corner radius, shadow, title-bar presence, background texture? [Completeness, Gap, Spec §FR-030]
 - [X] CHK005 - Are all upper-area controls from FR-031 enumerated with their individual visibility timing, interaction model (toggle/button/menu/picker), and keyboard-accessibility fallback? [Completeness, Spec §FR-031]
 - [ ] CHK006 - Are requirements specified for the visual presentation of each block category (rich text, todo, code, file-reference, embedded image, screenshot) in the editor — spacing, borders, background, inline vs block display? [Completeness, Gap, Spec §FR-050]
-- [ ] CHK007 - Are requirements defined for the card-grid card content beyond the field list in FR-020 — specifically the truncation behavior of body previews, the format of last-modified time (relative vs absolute), and the visual design of todo-completion progress? [Completeness, Gap, Spec §FR-020]
-- [ ] CHK008 - Are requirements specified for the screenshot viewer's exact interaction model — zoom increment, pan gesture, keyboard navigation between screenshots, caption-editing entry point, and viewer window type (panel vs window vs sheet)? [Completeness, Gap, Spec §FR-095]
+- [ ] CHK007 - Are requirements defined for the card-grid card content beyond the field list in FR-020 — specifically the truncation behavior of body previews, the format of last-modified time (relative vs absolute), and the visual design of todo-completion progress? — truncation/time resolved by FR-020a; the visual design of todo-completion progress is still open [Completeness, Gap, Spec §FR-020]
+- [x] CHK008 - Are requirements specified for the screenshot viewer's exact interaction model — zoom increment, pan gesture, keyboard navigation between screenshots, caption-editing entry point, and viewer window type (panel vs window vs sheet)? [Completeness, Gap, Spec §FR-095]
 - [ ] CHK009 - Are requirements defined for the visual design and interaction model of the file-reference card — icon size, metadata layout, availability-status indicator design, and relink-UI flow? [Completeness, Gap, Spec §FR-100]
 - [X] CHK010 - Are requirements specified for the Trash UI — list layout, sort order, restoration confirmation, permanent-delete confirmation, and visual distinction between Trash/permanent-deleted/recovered-conflict-copy/active states? [Completeness, Spec §FR-175, US6]
 - [X] CHK011 - Are requirements defined for the Settings UI structure — section organization, entry points from menu-bar vs Dock, and the relationship between Settings, sync settings, permission settings, and shortcut settings? [Completeness, Gap, Spec §FR-008]
@@ -38,7 +38,7 @@ measurable, and traceable.
 - [X] CHK016 - Is "compact card grid inspired by the Windows 11 Sticky Notes experience" clarified with specific measurable properties (card aspect ratio, grid gap, columns at default width) rather than relying on a subjective external reference? [Clarity, Ambiguity, Spec §FR-002]
 - [X] CHK017 - Is "lightweight sheet of note paper" clarified with measurable visual properties (opacity range, border width, shadow radius) rather than a subjective adjective? [Clarity, Ambiguity, Spec §FR-030]
 - [X] CHK018 - Is "most window controls SHOULD remain hidden until the pointer enters the upper area" clarified with the exact trigger region (height in points, full-width vs centered), the show/hide animation, and the behavior when focus moves away? [Clarity, Gap, Spec §FR-031]
-- [ ] CHK019 - Is "short body preview" on note cards quantified with a character/line limit or truncation rule? [Clarity, Gap, Spec §FR-020]
+- [x] CHK019 - Is "short body preview" on note cards quantified with a character/line limit or truncation rule? [Clarity, Gap, Spec §FR-020]
 - [X] CHK020 - Is "readable presentation of long lines via wrapping or horizontal scrolling" for code blocks resolved to a single choice (wrapping OR scrolling) or a user-toggleable option, rather than an ambiguous "or"? [Clarity, Ambiguity, Spec §FR-080]
 - [X] CHK021 - Is "promptly" in "Search results MUST update promptly as the query changes" (FR-024) quantified with a debounce or latency target, or is SC-005's 200ms the binding interpretation? [Clarity, Spec §FR-024/SC-005]
 - [X] CHK022 - Is "unobtrusive" in "Formatting tools SHOULD remain unobtrusive" (FR-052) clarified with a measurable criterion (appear-on-selection delay, auto-dismiss timeout, max visible controls)? [Clarity, Ambiguity, Spec §FR-052]
@@ -46,7 +46,7 @@ measurable, and traceable.
 - [X] CHK024 - Is "first meaningful content" for the generated summary (FR-021) defined with a selection rule (first non-empty line? first sentence? max character count?) so two implementations produce the same summary? [Clarity, Gap, Spec §FR-021]
 - [X] CHK025 - Are the exact built-in color values for Yellow, Pink, Purple, Blue, Green, Gray specified (hex/sRGB) so the appearance is reproducible and contrast-tested? [Clarity, Gap, Spec §FR-040]
 - [X] CHK026 - Is the transparency adjustment range quantified (min/max opacity, step size, default) rather than "adjustable"? [Clarity, Gap, Spec §FR-041]
-- [ ] CHK027 - Is the text-size adjustment quantified (min/max point sizes, step, default, per-note vs global) rather than "each note MAY use its own text size"? [Clarity, Gap, Spec §FR-043]
+- [x] CHK027 - Is the text-size adjustment quantified (min/max point sizes, step, default, per-note vs global) rather than "each note MAY use its own text size"? [Clarity, Gap, Spec §FR-043]
 - [X] CHK028 - Is the "additional actions" item in FR-031's control list enumerated (what actions are available beyond the listed ones)? [Clarity, Gap, Spec §FR-031]
 - [X] CHK029 - Are the widget interaction affordances in FR-111 specified as MAY-per-action or as a definitive list of which actions each widget form supports? [Clarity, Spec §FR-110/FR-111]
 - [X] CHK030 - Is "clear, specific, and non-alarming" for permission explanations (FR-134) clarified with tone guidelines, max length, or example wording so the requirement is testable? [Clarity, Ambiguity, Spec §FR-134]
@@ -160,7 +160,7 @@ measurable, and traceable.
 - [X] CHK111 - Are requirements specified for the Undo/Redo stack behavior across block boundaries — does Undo cross block boundaries, does it restore deleted blocks, and is the stack per-note or per-block? [Clarity, Gap, Spec §FR-051/FR-062, Constitution V]
 - [X] CHK112 - Are requirements specified for the IME composition interaction with block boundaries — what happens when the user presses Enter during composition, or when composition spans a block boundary? [Completeness, Gap, Spec §FR-063, Constitution V/X]
 - [X] CHK113 - Are requirements specified for the editor's behavior when a block is empty — does it auto-delete, does it show a placeholder, does it merge with the next block? [Completeness, Gap, Constitution V]
-- [ ] CHK114 - Are requirements specified for the selection behavior across multiple blocks — can the user select text spanning blocks, does copy produce rich text or plain text, and does delete remove whole blocks? [Completeness, Gap, Constitution V]
+- [x] CHK114 - Are requirements specified for the selection behavior across multiple blocks — can the user select text spanning blocks, does copy produce rich text or plain text, and does delete remove whole blocks? [Completeness, Gap, Constitution V]
 
 ## Constitution Alignment (This Domain)
 

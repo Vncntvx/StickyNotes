@@ -201,6 +201,31 @@ encryption, data integrity, conflict preservation, or destructive-action safety.
 > sections and research.md R37/R38. None alter the architecture; all add
 > testable acceptance criteria. The post-design Constitution Check (bottom
 > of this file) remains PASS.
+>
+> **2026-08-07 sixth `/speckit-clarify` session propagation** (targeted at
+> remaining `checklists/ux.md` coverage gaps): five ambiguities were resolved
+> and encoded in spec.md as **FR-001a** (menu-bar library window positioned
+> with its left edge aligned to the menu-bar icon's left edge, clamped to the
+> visible screen frame, 4 pt below the menu bar, instant open/dismiss with no
+> animation), **FR-020a** (card body preview truncated at 2 rendered lines
+> with a trailing ellipsis; last-modified time relative within 7 days, then
+> absolute date with the year when in a previous calendar year),
+> **FR-043a** (per-note text size bounded 9–24 pt in 1-pt steps, default
+> 13 pt; text ≥18 pt is large text for the FR-042 thresholds), **FR-095a**
+> (screenshot viewer in an independent borderless note-style window, zoom
+> 25%–400% in 25% steps, ⌘+/- and double-click actual-size/fit-to-window,
+> arrow-key navigation between same-note screenshots, Return/double-click
+> enters caption editing), and **FR-054** (cross-block text selection;
+> copy produces plain + rich text with supported formatting only; delete
+> removes only selected characters and merges emptied blocks per FR-050a;
+> trailing padding paragraph never selectable). These are reflected below
+> in the Menu-bar library, Note appearance, Editor, and Screenshot capture
+> sections, in research.md R40–R43, and in data-model.md +
+> `contracts/note-document.schema.json` (textSize becomes an integer 9–24
+> with default 13, replacing the illustrative small/regular/large/extraLarge
+> enum — no released schema exists, so no migration is required). None alter
+> the architecture; all add testable acceptance criteria. The post-design
+> Constitution Check (bottom of this file) remains PASS.
 
 ## Project Structure
 
@@ -332,7 +357,18 @@ Dependency injection is via explicit initializers and a small `AppEnvironment`
 - **Menu-bar library**: `MenuBarExtra` with window-style presentation. Contains
   search, card grid, sorting, new-note + screenshot actions, Trash, sync state,
   Settings/Help/Quit. Re-click behavior per FR-009: focus if not focused,
-  dismiss if focused, never a second window.
+  dismiss if focused, never a second window. Positioning per FR-001a
+  (clarified 2026-08-07): left edge aligned with the menu-bar icon's left
+  edge, clamped to the visible screen frame, 4 points below the menu bar,
+  instant open/dismiss with no animation (so the SC-001 ≤150 ms warm-
+  presentation target is measurable without animation interference).
+  Card rendering per FR-020a (clarified 2026-08-07): the body preview is
+  truncated at 2 rendered lines with a trailing ellipsis (line-level at the
+  card's current width, from the first rich-text block — never duplicating
+  the generated summary title); the last-modified time is relative ("5 min
+  ago") within the last 7 days and switches to an absolute date ("Aug 1",
+  with the year when in a previous calendar year) beyond that. Locale-aware
+  formatters (FR-180a).
 - **First-launch experience (FR-014a)**: on first launch the library presents
   an empty card grid with a clear call-to-action to create the first note
   (button + keyboard shortcut). No permission prompts appear unless the user
@@ -428,6 +464,16 @@ decoder actor. All cross-actor handoffs pass `Sendable` value types or
   note is never removed this way — it remains an empty paragraph. Every
   automatic removal is reversible with a single Undo and never fires while an
   input-method composition is active (FR-063).
+- **Cross-block selection (FR-054, clarified 2026-08-07)**: text selection MAY
+  span block boundaries (paragraphs, list items, todo items, headings).
+  Copying a spanning selection places both plain-text and rich-text
+  (RTF/HTML) representations on the clipboard, where the rich representation
+  contains only application-supported formatting (FR-053). Deleting a spanning
+  selection removes only the selected characters; an emptied block is merged
+  away per the FR-050a rules (single Undo restores). The trailing empty
+  padding paragraph is never selectable. This is implemented in the editor's
+  selection model (RichTextAdapter + block selection map) and covered by
+  editor tests, without changing the canonical block model.
 - **Keystroke latency instrumentation (SC-004a)**: OSLog signposts bracket the
   keystroke path (keystroke event → attributed-state mutation → glyph commit)
   so keystroke-to-glyph latency is measurable in Instruments and in a
@@ -560,8 +606,10 @@ decoder actor. All cross-actor handoffs pass `Sendable` value types or
   (FR-041a, clarified 2026-08-07); below 100%, FR-042 contrast validation
   and automatic foreground adjustment run against the effective composited
   background (note color at the chosen opacity over the desktop).
-- Per-note text size; global font preference with Chinese/English fallback
-  (FR-043).
+- Per-note text size: bounded 9–24 pt in 1-pt steps, default 13 pt
+  (FR-043a, clarified 2026-08-07 — 16 discrete steps; text ≥18 pt is large
+  text for the FR-042 contrast thresholds); global font preference with
+  Chinese/English fallback (FR-043).
 
 ### Screenshot capture
 
@@ -573,6 +621,14 @@ decoder actor. All cross-actor handoffs pass `Sendable` value types or
   note/asset. Screen-recording permission requested only on capture invocation;
   no accessibility permission for ordinary capture. Opening a screenshot does
   not activate the original app.
+- **Screenshot viewer (FR-095a, clarified 2026-08-07)**: opens in an
+  independent, borderless, note-style window matching the FR-030a window style
+  family (multi-window model per FR-005; several viewers may be open at once;
+  images drag out). Bounded zoom 25%–400% in 25% steps via scroll wheel or
+  pinch, with ⌘+/- keyboard equivalents; double-click toggles actual size
+  (100%) ↔ fit-to-window. Arrow keys navigate between the screenshots of the
+  same note; Return (or double-click on a screenshot) enters caption editing.
+  The viewer never activates the captured application (FR-095).
 
 ### File-reference architecture
 
@@ -1059,7 +1115,31 @@ introduces no violations:
 - **FR-180a (clarified 2026-08-07)** binds zh-Hans + en UI localization with
   system-language switching, including the VoiceOver-announced deletion toast
   (X, II).
-- All design traces to spec FRs and acceptance scenarios (XIV).
+- **FR-001a (clarified 2026-08-07)** pins the menu-bar library window's
+  deterministic position (left edge aligned to the icon, clamped to the
+  screen frame, 4 pt below the menu bar, no open/dismiss animation) so the
+  "visually attached" relationship and the SC-001 ≤150 ms target are
+  objectively testable (X, XI, II).
+- **FR-020a (clarified 2026-08-07)** makes card rendering deterministic
+  (2-line truncated preview from the first rich-text block, never duplicating
+  the generated summary title; relative-then-absolute time format) and
+  therefore testable (X, XI).
+- **FR-043a (clarified 2026-08-07)** bounds per-note text size to 9–24 pt in
+  1-pt steps (default 13 pt), making the FR-042 large-text (≥18 pt → ≥3:1)
+  contrast threshold testable at every step; the canonical JSON schema now
+  stores the integer point size (X, XI, IV).
+- **FR-095a (clarified 2026-08-07)** defines the screenshot viewer's
+  interaction contract (independent note-style window, 25%–400% zoom in 25%
+  steps, ⌘+/- and double-click, arrow-key navigation, Return caption edit),
+  making the viewer testable and keyboard-accessible (X, XI, II, V).
+- **FR-054 (clarified 2026-08-07)** defines cross-block selection semantics
+  (spanning selection; plain + rich copy with supported formatting only;
+  delete removes only selected characters and reuses the FR-050a merge rules;
+  trailing padding paragraph never selectable), keeping the seamless block
+  editor testable without changing the canonical block model (V, X, XII).
+- All clarified requirements trace to spec FRs via the propagation notes
+  above; the remaining requirements are covered by design area in section
+  prose without per-FR citations (XIV).
 
 No Complexity Tracking exceptions are required. The plan is ready for
 `/speckit-checklist` and `/speckit-tasks`.
