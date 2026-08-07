@@ -21,6 +21,12 @@ import SystemBridge
 
 @main
 struct StickyNotesApp: App {
+    // FR-008 (T103): applies the persisted Dock preference at launch.
+    // LSUIElement=true in Info.plist makes the app start in accessory mode;
+    // the Dock icon is enabled BY DEFAULT unless the user disabled it in
+    // Settings (SettingsView's "Show icon in Dock" toggle).
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     @State private var environment: AppEnvironment = .placeholder
     @State private var bootstrapError: BootstrapErrorState?
     @State private var libraryModel: LibraryModel?
@@ -341,5 +347,21 @@ struct BootstrapErrorState {
         return BootstrapErrorState(
             label: Text("Sticky Notes could not open its database (\(code)). Quit and relaunch, or restore from a backup.")
         )
+    }
+}
+
+// MARK: - AppDelegate (FR-008 Dock preference at launch)
+
+/// AppKit delegate: applies the persisted Dock-icon preference once the
+/// application finishes launching (FR-008 — the Dock icon is enabled by
+/// default and may be disabled in Settings; LSUIElement=true starts the app
+/// in accessory mode, so the preference must be applied explicitly).
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let showDockIcon = UserDefaults.standard
+            .object(forKey: "local.stickynotes.showDockIcon") as? Bool ?? true
+        if showDockIcon {
+            try? DockActivationBridge.setDockEnabled(true)
+        }
     }
 }
