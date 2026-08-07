@@ -16,12 +16,29 @@ import Domain
 public struct NoteControlsView: View {
     let note: Note
     let onChanged: (Note) -> Void
+    /// FR-031 note-level actions (T282). Wired by the note-window host:
+    /// duplicate / copy-as-Markdown / export-JSON / move-to-Trash.
+    let onDuplicate: () -> Void
+    let onCopyAsMarkdown: () -> Void
+    let onExport: () -> Void
+    let onMoveToTrash: () -> Void
 
     @State private var isVisible = false
 
-    public init(note: Note, onChanged: @escaping (Note) -> Void) {
+    public init(
+        note: Note,
+        onChanged: @escaping (Note) -> Void,
+        onDuplicate: @escaping () -> Void = {},
+        onCopyAsMarkdown: @escaping () -> Void = {},
+        onExport: @escaping () -> Void = {},
+        onMoveToTrash: @escaping () -> Void = {}
+    ) {
         self.note = note
         self.onChanged = onChanged
+        self.onDuplicate = onDuplicate
+        self.onCopyAsMarkdown = onCopyAsMarkdown
+        self.onExport = onExport
+        self.onMoveToTrash = onMoveToTrash
     }
 
     public var body: some View {
@@ -172,23 +189,12 @@ public struct NoteControlsView: View {
         .accessibilityValue(note.alwaysOnTop ? "On" : "Off")
     }
 
-    // MARK: - Actions (wired by the window host)
+    // MARK: - Close (handled by the hosting NSWindow)
 
     private func onClose() {
         // The window close is handled by the hosting NSWindow.
         NSApp.keyWindow?.close()
     }
-
-    private func onDuplicate() {
-        // Implemented by NoteExportImport (T248) — host wiring in
-        // NoteWindowContent.
-    }
-
-    private func onCopyAsMarkdown() {}
-
-    private func onExport() {}
-
-    private func onMoveToTrash() {}
 
     private func colorFor(_ key: NoteColorKey) -> Color {
         guard let rgb = key.builtinRGB else { return .gray }

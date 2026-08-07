@@ -405,8 +405,9 @@ public struct Tombstone: Sendable, Equatable, Hashable {
 // Per-vault synchronization scheduling/progress. NEVER synchronized.
 
 /// Per-vault sync run state. NEVER synchronized. Distinct from the
-/// per-entity `SyncVersionState` enum.
-public struct SyncState: Sendable, Equatable {
+/// per-entity `SyncVersionState` enum. Codable for device-local persistence
+/// (the App's sync-state store; never syncs).
+public struct SyncState: Sendable, Equatable, Codable {
     public let vaultId: UUID
     public var providerType: ProviderType
     public var lastSuccessfulSyncAt: Date?
@@ -491,7 +492,9 @@ public enum RememberedUnlock: String, Sendable, Codable, Equatable {
 
 /// Device-local reference to a configured vault + provider. Secrets live in
 /// Keychain (referenced by `keychainCredentialRef`), NEVER here.
-public struct VaultConfiguration: Sendable, Equatable {
+/// Codable for device-local persistence (the App's vault-configuration
+/// store; the row never participates in sync).
+public struct VaultConfiguration: Sendable, Equatable, Codable {
     public let vaultId: UUID
     public var vaultLocator: String  // opaque random remote locator
     public var providerType: ProviderType

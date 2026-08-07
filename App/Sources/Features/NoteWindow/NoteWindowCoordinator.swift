@@ -4,21 +4,23 @@ import Domain
 import Persistence
 import SystemBridge
 
-// MARK: - NoteWindowCoordinator (T160/T246/T269)
+// MARK: - NoteWindowCoordinator (T160/T246/T269/T281/T289)
 //
-// Per tasks.md T160 and spec FR-005/FR-006/FR-007/FR-007a:
+// Per tasks.md T160/T246/T269 and spec FR-005/FR-006/FR-007/FR-007a:
 // - Opens a note window by UUID; ONE window per note (focus existing, never
 //   duplicate).
-// - Flushes pending edits before close.
+// - Flushes pending edits before close (T281 host).
 // - Does NOT reopen windows after relaunch (FR-007).
 // - FR-007a: a new note window receives keyboard focus immediately; the
 //   library stays open without focus; global-shortcut creation activates
 //   the app.
-// - FR-012a empty-note auto-discard (T167): a never-contained-content note
-//   MAY be auto-removed on close; a previously-content note MUST NOT be
+// - FR-012a empty-note auto-discard (T167/T281): a never-contained-content
+//   note MAY be auto-removed on close; a previously-content note MUST NOT be
 //   auto-deleted when its text is now empty.
 // - FR-009a (T246): deleting a note with an open window closes the window
 //   immediately (the deletion toast is presented by the library/Trash UI).
+// - FR-032/FR-033 (T289): window frame persistence via WindowStateRepository
+//   (device-local) + display-change correction via DisplayChangeBridge.
 
 /// Opens and coordinates per-note windows (AppKit-backed; SwiftUI content
 /// hosted via `NSHostingView` inside `NSWindow`).
@@ -26,9 +28,34 @@ import SystemBridge
 @Observable
 public final class NoteWindowCoordinator {
     private let environment: AppEnvironment
+    /// FR-009a deletion-toast hook (set by the App layer; presents the
+    /// localized deletion outcome non-blockingly).
+    public var deletionToast: (String) -> Void = { _ in }
+
+    /// Main-actor-only access pattern (like NoteWindowBridge's registry
+    /// lock); removed in deinit. `@ObservationIgnored`: not part of the
+    /// observable state.
+    @ObservationIgnored private nonisolated(unsafe) var displayObserver: NSObjectProtocol?
 
     public init(environment: AppEnvironment) {
         self.environment = environment
+        // FR-033: display connect/disconnect → re-apply corrected frames for
+        // all open note windows (preferred frames preserved per display).
+        displayObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.reapplyFrames()
+            }
+        }
+    }
+
+    deinit {
+        if let displayObserver {
+            NotificationCenter.default.removeObserver(displayObserver)
+        }
     }
 
     /// Opens (or focuses) the note's window. Returns the window.
@@ -60,12 +87,22 @@ public final class NoteWindowCoordinator {
         _ = NoteWindowBridge.register(window, noteId: noteId)
         WindowLevelBridge.apply(window, alwaysOnTop: note.alwaysOnTop)
 
-        let content = NoteWindowContent(
-            noteId: noteId,
-            environment: environment,
-            coordinator: self
-        )
+        let host = NoteWindowHostModel(noteId: noteId, environment: environment)
+        let content = NoteWindowContent(noteId: noteId, host: host, environment: environment, coordinator: self)
         window.contentView = NSHostingView(rootView: content)
+
+        // FR-032/FR-033 (T289): restore the remembered frame (corrected for
+        // the current display arrangement; the disconnected-display preferred
+        // frame is preserved untouched).
+        restoreFrame(for: window, noteId: noteId)
+
+        let delegate = NoteWindowDelegate(
+            noteId: noteId,
+            coordinator: self,
+            host: host,
+            windowStateRepository: environment.persistence.windowStateRepository
+        )
+        window.delegate = delegate
 
         // FR-007a: the new note window receives keyboard focus immediately.
         window.makeKeyAndOrderFront(nil)
@@ -75,23 +112,124 @@ public final class NoteWindowCoordinator {
 
     /// Closes the note's window(s) immediately (FR-009a delete path).
     public func closeAll(noteId: UUID) {
+        NoteWindowBridge.registeredWindow(for: noteId)?.close()
         NoteWindowBridge.unregister(noteId: noteId)
-    }
-
-    /// Flushes pending edits + applies the FR-012a auto-discard decision
-    /// when the window closes. Returns `true` when the note may be removed.
-    public func willClose(noteId: UUID, hadMeaningfulContent: Bool) -> Bool {
-        // FR-012a: never-content notes MAY be auto-discarded; previously-
-        // content notes are NEVER auto-deleted when empty.
-        NoteWindowBridge.unregister(noteId: noteId)
-        return !hadMeaningfulContent
     }
 
     /// Whether a note window is currently open.
     public func isOpen(noteId: UUID) -> Bool {
         NoteWindowBridge.isOpen(noteId: noteId)
     }
+
+    // MARK: - FR-032/FR-033 window frames (T289)
+
+    /// Restores the note's remembered frame, corrected for the current
+    /// display arrangement (FR-032/FR-033).
+    private func restoreFrame(for window: NSWindow, noteId: UUID) {
+        guard let repo = environment.persistence.windowStateRepository else { return }
+        Task {
+            guard let state = try? await repo.fetch(noteId: noteId),
+                  state.frame.width > 0, state.frame.height > 0 else { return }
+            let displays = DisplayObservation.currentDisplayFrames()
+            let preferred = NSRect(x: state.frame.x, y: state.frame.y, width: state.frame.width, height: state.frame.height)
+            let fallback = state.fallbackFrame.map { NSRect(x: $0.x, y: $0.y, width: $0.width, height: $0.height) }
+            let corrected = DisplayChangeBridge.correctedFrame(
+                frame: preferred,
+                preferredDisplayUUID: state.preferredDisplayUUID,
+                fallbackFrame: fallback,
+                displays: displays
+            )
+            window.setFrame(corrected, display: false)
+        }
+    }
+
+    /// Re-applies corrected frames for every open note window after a display
+    /// change (FR-033).
+    private func reapplyFrames() {
+        let displays = DisplayObservation.currentDisplayFrames()
+        guard let repo = environment.persistence.windowStateRepository else { return }
+        for (noteId, registration) in NoteWindowBridge.allRegistrations() {
+            guard let window = registration.windowRef.window() else { continue }
+            Task {
+                guard let state = try? await repo.fetch(noteId: noteId),
+                      state.frame.width > 0 else { return }
+                let preferred = NSRect(x: state.frame.x, y: state.frame.y, width: state.frame.width, height: state.frame.height)
+                let fallback = state.fallbackFrame.map { NSRect(x: $0.x, y: $0.y, width: $0.width, height: $0.height) }
+                let corrected = DisplayChangeBridge.correctedFrame(
+                    frame: preferred,
+                    preferredDisplayUUID: state.preferredDisplayUUID,
+                    fallbackFrame: fallback,
+                    displays: displays
+                )
+                window.setFrame(corrected, display: false)
+            }
+        }
+    }
 }
+
+// MARK: - NoteWindowDelegate (T281/T289)
+
+/// Per-window delegate: saves the frame on move/resize, flushes pending
+/// edits + applies the FR-012a auto-discard decision on close.
+@MainActor
+private final class NoteWindowDelegate: NSObject, NSWindowDelegate {
+    private let noteId: UUID
+    private weak var coordinator: NoteWindowCoordinator?
+    private weak var host: NoteWindowHostModel?
+    private let windowStateRepository: SQLiteWindowStateRepository?
+
+    init(
+        noteId: UUID,
+        coordinator: NoteWindowCoordinator,
+        host: NoteWindowHostModel,
+        windowStateRepository: SQLiteWindowStateRepository?
+    ) {
+        self.noteId = noteId
+        self.coordinator = coordinator
+        self.host = host
+        self.windowStateRepository = windowStateRepository
+    }
+
+    func windowDidMove(_ notification: Notification) {
+        saveFrame(from: notification)
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        saveFrame(from: notification)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        saveFrame(from: notification)
+        // FR-141a flush + FR-012a auto-discard decision.
+        guard let host else { return }
+        Task {
+            let mayRemove = await host.close()
+            guard mayRemove, let repo = host.environment.persistence.noteRepository else { return }
+            try? await repo.permanentlyDelete(id: noteId, deviceId: DeviceIdentity.current.id)
+        }
+    }
+
+    private func saveFrame(from notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+        let displays = DisplayObservation.currentDisplayFrames()
+        let best = DisplayChangeBridge.bestDisplay(for: window.frame, among: displays)
+        let frame = WindowFrame(
+            x: Double(window.frame.origin.x),
+            y: Double(window.frame.origin.y),
+            width: Double(window.frame.width),
+            height: Double(window.frame.height)
+        )
+        Task {
+            try? await windowStateRepository?.updateFrame(
+                noteId: noteId,
+                frame: frame,
+                preferredDisplayUUID: best?.displayUUID
+            )
+        }
+    }
+}
+
+// MARK: - NoteWindowContent (T160/T281/T282)
 
 /// The SwiftUI content hosted inside a note window: controls + editor.
 public struct NoteWindowContent: View {
@@ -99,8 +237,7 @@ public struct NoteWindowContent: View {
     let environment: AppEnvironment
     let coordinator: NoteWindowCoordinator
 
-    @State private var blocks: [Block] = []
-    @State private var note: Note?
+    @State private var host: NoteWindowHostModel?
 
     public init(noteId: UUID, environment: AppEnvironment, coordinator: NoteWindowCoordinator) {
         self.noteId = noteId
@@ -108,38 +245,94 @@ public struct NoteWindowContent: View {
         self.coordinator = coordinator
     }
 
+    public init(noteId: UUID, host: NoteWindowHostModel, environment: AppEnvironment, coordinator: NoteWindowCoordinator) {
+        self.noteId = noteId
+        self.environment = environment
+        self.coordinator = coordinator
+        _host = State(initialValue: host)
+    }
+
     public var body: some View {
-        if let note {
-            VStack(spacing: 0) {
-                NoteControlsView(note: note, onChanged: { updated in
-                    self.note = updated
-                })
-                Divider()
-                RichTextBlockView(
-                    note: note,
-                    blocks: blocks,
-                    onBlocksChanged: { newBlocks in
-                        blocks = newBlocks
-                    }
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        Group {
+            if let host, let note = host.note {
+                VStack(spacing: 0) {
+                    NoteControlsView(
+                        note: note,
+                        onChanged: { updated in
+                            host.updateAppearance(updated)
+                        },
+                        onDuplicate: {
+                            duplicateNote(host: host)
+                        },
+                        onCopyAsMarkdown: {
+                            NoteExportImport.copyNoteAsMarkdown(note: host.note ?? note, blocks: host.blocks)
+                        },
+                        onExport: {
+                            _ = NoteExportImport.exportNoteAsJSON(note: host.note ?? note, blocks: host.blocks)
+                        },
+                        onMoveToTrash: {
+                            moveToTrash(host: host)
+                        }
+                    )
+                    Divider()
+                    RichTextBlockView(
+                        note: note,
+                        blocks: host.blocks,
+                        onBlocksChanged: { newBlocks in
+                            host.updateBlocks(newBlocks)
+                        },
+                        onStructuralBlocksChanged: { newBlocks in
+                            host.updateBlocks(newBlocks, isStructural: true)
+                        }
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .background(ReadableTheme.background(for: note))
+            } else {
+                Color.clear
+                    .task { await load() }
             }
-            .background(ReadableTheme.background(for: note))
-        } else {
-            Color.clear
-                .onAppear(perform: load)
+        }
+        .task {
+            if let host { await host.load() }
         }
     }
 
-    private func load() {
-        guard let repo = environment.persistence.noteRepository else { return }
+    private func load() async {
+        let model = NoteWindowHostModel(noteId: noteId, environment: environment)
+        await model.load()
+        host = model
+    }
+
+    // MARK: - FR-031 note-level actions (T282)
+
+    /// Duplicate note: new UUID, byte-identical blocks + appearance, fresh
+    /// manual sort key (FR-022a), lifecycle active (T248).
+    private func duplicateNote(host: NoteWindowHostModel) {
+        guard let note = host.note, let repo = environment.persistence.noteRepository else { return }
+        let duplicated = NoteDuplicator.duplicate(host.note ?? note, blocks: host.blocks, deviceId: DeviceIdentity.current.id)
         Task {
             do {
-                self.note = try await repo.fetch(id: noteId)
-                self.blocks = try await repo.fetchBlocks(noteId: noteId)
+                try await repo.create(duplicated.note)
+                for block in duplicated.blocks {
+                    try await repo.insert(block)
+                }
+                await environment.syncCoordinator?.localContentChanged()
             } catch {
-                self.note = nil
+                // FR-011a: non-blocking; the library surface owns status text.
             }
+        }
+    }
+
+    /// Move to Trash (FR-014): closes the open window immediately and
+    /// presents the localized FR-009a deletion toast.
+    private func moveToTrash(host: NoteWindowHostModel) {
+        guard let repo = environment.persistence.noteRepository else { return }
+        Task {
+            try? await repo.trash(id: noteId, deviceId: DeviceIdentity.current.id)
+            await environment.syncCoordinator?.localContentChanged()
+            coordinator.closeAll(noteId: noteId)
+            coordinator.deletionToast(String(localized: "Moved to Trash"))
         }
     }
 }

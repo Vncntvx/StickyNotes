@@ -14,15 +14,19 @@ public struct SettingsView: View {
 
     @AppStorage("local.stickynotes.showDockIcon") private var showDockIcon = true
     @State private var clipboardNoteShortcut = "⌘⌥⇧N"
+    /// The sync composition root (T285) — drives the Sync tab.
+    private let syncCoordinator: SyncCoordinator?
 
-    public init() {}
+    public init(syncCoordinator: SyncCoordinator? = nil) {
+        self.syncCoordinator = syncCoordinator
+    }
 
     public var body: some View {
         TabView {
             generalTab
                 .tabItem { Label("General", systemImage: "gearshape") }
 
-            SyncSettingsView()
+            SyncSettingsView(syncCoordinator: syncCoordinator)
                 .tabItem { Label("Sync", systemImage: "icloud.and.arrow.up") }
 
             FontPreferenceView()

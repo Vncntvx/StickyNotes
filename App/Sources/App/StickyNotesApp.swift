@@ -51,6 +51,9 @@ struct StickyNotesApp: App {
                     openAbout: {
                         openAboutWindow()
                     },
+                    openHelp: {
+                        openHelpWindow()
+                    },
                     deletionToast: { message in
                         toastPresenter.present(message: message)
                     }
@@ -79,11 +82,16 @@ struct StickyNotesApp: App {
         .menuBarExtraStyle(.window)
 
         Settings {
-            SettingsView()
+            SettingsView(syncCoordinator: environment.syncCoordinator)
         }
 
         Window("About Sticky Notes", id: "about") {
             AboutView()
+        }
+        .windowResizability(.contentSize)
+
+        Window("Sticky Notes Help", id: "help") {
+            HelpView()
         }
         .windowResizability(.contentSize)
     }
@@ -137,7 +145,11 @@ struct StickyNotesApp: App {
                     environment = env
                     let model = LibraryModel(environment: env)
                     libraryModel = model
-                    coordinator = NoteWindowCoordinator(environment: env)
+                    let coordinator = NoteWindowCoordinator(environment: env)
+                    coordinator.deletionToast = { message in
+                        toastPresenter.present(message: message)
+                    }
+                    self.coordinator = coordinator
                     wireGlobalShortcuts()
                 }
             } catch {
@@ -174,6 +186,25 @@ struct StickyNotesApp: App {
             )
             window.title = "About Sticky Notes"
             window.contentView = NSHostingView(rootView: AboutView())
+            window.center()
+            window.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    /// Opens the Help panel (FR-004/FR-008 — reachable from the menu-bar
+    /// interface, incl. when the Dock icon is disabled).
+    private func openHelpWindow() {
+        if let window = NSApp.windows.first(where: { $0.title == "Sticky Notes Help" }) {
+            window.makeKeyAndOrderFront(nil)
+        } else {
+            let window = NSWindow(
+                contentRect: NSRect(x: 220, y: 200, width: 520, height: 560),
+                styleMask: [.titled, .closable, .resizable],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "Sticky Notes Help"
+            window.contentView = NSHostingView(rootView: HelpView())
             window.center()
             window.makeKeyAndOrderFront(nil)
         }

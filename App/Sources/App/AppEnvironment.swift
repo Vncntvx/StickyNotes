@@ -36,6 +36,10 @@ public struct AppEnvironment: Sendable {
     /// Group UserDefaults; never synchronized, never in canonical JSON, never
     /// in exported diagnostics.
     public let localPreferences: LocalPreferences
+    /// The sync composition root (T284/T285): vault configuration store +
+    /// SyncEngine wiring + status. Nil before bootstrap. Main-actor-isolated
+    /// (Sendable by global-actor isolation).
+    public let syncCoordinator: SyncCoordinator?
 
     public init(
         domain: DomainServices,
@@ -45,7 +49,8 @@ public struct AppEnvironment: Sendable {
         security: SecurityServices,
         sync: SyncServices,
         systemBridge: SystemBridgeServices,
-        localPreferences: LocalPreferences
+        localPreferences: LocalPreferences,
+        syncCoordinator: SyncCoordinator? = nil
     ) {
         self.domain = domain
         self.persistence = persistence
@@ -55,6 +60,7 @@ public struct AppEnvironment: Sendable {
         self.sync = sync
         self.systemBridge = systemBridge
         self.localPreferences = localPreferences
+        self.syncCoordinator = syncCoordinator
     }
 
     /// Placeholder used during foundation bring-up. Real composition
@@ -91,6 +97,7 @@ public struct AppEnvironment: Sendable {
     /// invocation (WindowCapture/RegionCapture), never at launch. This
     /// invariant is enforced by audit: the bootstrap path below calls no
     /// `CGRequest*` / `AXIsProcessTrustedWithOptions` API.
+    @MainActor
     public static func bootstrap(
         appGroupContainerURL: URL
     ) async throws -> AppEnvironment {
@@ -108,6 +115,15 @@ public struct AppEnvironment: Sendable {
             backupPath: backupPath
         )
 
+        // T284/T285: compose the sync root (vault config store + Keychain +
+        // SyncEngine wiring). Loads the persisted configuration/state.
+        let syncCoordinator = SyncCoordinator(
+            store: store,
+            secretStore: KeychainService(),
+            deviceId: DeviceIdentity.current.id
+        )
+        await syncCoordinator.load()
+
         return AppEnvironment(
             domain: DomainServices(),
             persistence: PersistenceServices(store: store),
@@ -116,7 +132,8 @@ public struct AppEnvironment: Sendable {
             security: SecurityServices(),
             sync: SyncServices(),
             systemBridge: SystemBridgeServices(),
-            localPreferences: LocalPreferences()
+            localPreferences: LocalPreferences(),
+            syncCoordinator: syncCoordinator
         )
     }
 }
@@ -169,10 +186,40 @@ public struct PersistenceServices: Sendable {
         store != nil ? CardProjection.self : nil
     }
 
-    /// Fetches active card projections (empty before bootstrap).
-    public func fetchCards(lifecycle: NoteLifecycleState, sort: NoteSortKey) async throws -> [NoteCardProjection] {
+    /// FTS-backed search (T042/T283): matches titles, body, todos, code,
+    /// file display names, and screenshot captions. Nil before bootstrap.
+    public var searchService: SearchService? {
+        guard let store else { return nil }
+        return SearchService(store: store, fullTextSearch: FullTextSearch(dbPool: store.dbPool))
+    }
+
+    /// Device-local window-state repository (T051/T289 — never synced).
+    public var windowStateRepository: SQLiteWindowStateRepository? {
+        guard let store else { return nil }
+        return SQLiteWindowStateRepository(store: store)
+    }
+
+    /// Device-local vault configuration + sync-state store (T285).
+    public var vaultConfigurationStore: SQLiteVaultConfigurationStore? {
+        guard let store else { return nil }
+        return SQLiteVaultConfigurationStore(store: store)
+    }
+
+    /// Fetches card projections for the given lifecycle state and sort order
+    /// (bounded to 500 rows). When `noteIds` is non-nil (FTS search results),
+    /// only those notes are fetched without the row bound (T283).
+    public func fetchCards(
+        lifecycle: NoteLifecycleState,
+        sort: NoteSortKey,
+        noteIds: Set<UUID>? = nil
+    ) async throws -> [NoteCardProjection] {
         guard let store else { return [] }
-        return try await CardProjection.fetchCardProjections(store: store, lifecycle: lifecycle, sort: sort)
+        return try await CardProjection.fetchCardProjections(
+            store: store,
+            lifecycle: lifecycle,
+            sort: sort,
+            noteIds: noteIds
+        )
     }
 }
 

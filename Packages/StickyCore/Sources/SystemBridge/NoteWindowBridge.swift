@@ -100,6 +100,13 @@ public enum NoteWindowBridge {
         registry.withLock { $0[noteId] != nil }
     }
 
+    /// All current registrations (for display-change frame re-application,
+    /// T289). The window refs are only touched on the main actor.
+    @MainActor
+    public static func allRegistrations() -> [UUID: RegisteredNoteWindow] {
+        registry.withLock { $0 }
+    }
+
     /// Focuses the note's existing window if registered (FR-005: focus
     /// existing, never duplicate). Returns `false` when no window is open.
     @MainActor

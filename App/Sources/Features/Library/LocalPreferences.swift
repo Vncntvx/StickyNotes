@@ -34,6 +34,7 @@ public final class LocalPreferences: @unchecked Sendable {
         static let onboardingHintSeen = "local.stickynotes.onboardingHintSeen"
         static let onboardingHintDismissed = "local.stickynotes.onboardingHintDismissed"
         static let hasCreatedFirstNote = "local.stickynotes.hasCreatedFirstNote"
+        static let autoSyncEnabled = "local.stickynotes.autoSyncEnabled"
     }
 
     public init(defaults: UserDefaults) {
@@ -83,5 +84,13 @@ public final class LocalPreferences: @unchecked Sendable {
         defaults.removeObject(forKey: Key.onboardingHintSeen)
         defaults.removeObject(forKey: Key.onboardingHintDismissed)
         defaults.removeObject(forKey: Key.hasCreatedFirstNote)
+    }
+
+    // MARK: - Auto-sync preference (FR-152, T285)
+
+    /// Whether automatic synchronization is enabled (device-local).
+    public var autoSyncEnabled: Bool {
+        get { defaults.bool(forKey: Key.autoSyncEnabled) }
+        set { defaults.set(newValue, forKey: Key.autoSyncEnabled) }
     }
 }
