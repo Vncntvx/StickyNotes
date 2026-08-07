@@ -103,6 +103,7 @@ public final class NoteWindowHostModel {
     /// structural changes (todo toggles, block insert/delete/reorder) save
     /// immediately.
     public func updateBlocks(_ newBlocks: [Block], isStructural: Bool = false) {
+        StickyLogger(category: .app).debug("host-updateBlocks", code: "fired", sanitizedContext: "count=\(newBlocks.count)")
         self.blocks = newBlocks
         if Self.isMeaningful(note, blocks: newBlocks) {
             hasEverHadMeaningfulContent = true
@@ -663,6 +664,10 @@ public final class NoteWindowHostModel {
     /// meaningful content and still does not); the caller performs the
     /// removal through the repository.
     public func close() async -> Bool {
+        // Await the last recorded edit BEFORE flushing, so the debounced
+        // draft cannot be registered after flushNow ran (actor race —
+        // verified 2026-08-07: typed text was lost on close).
+        await pendingEditTask?.value
         await autosave.flushNow()
         tickTask?.cancel()
         guard !hasEverHadMeaningfulContent else { return false }

@@ -34,7 +34,7 @@ public struct StickyWidgetBundle: WidgetBundle {
 public enum WidgetDataReader {
     /// The App Group container database path.
     public static func databasePath() -> String? {
-        guard let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.local.stickynotes.placeholder") else {
+        guard let container = AppGroupContainer.url(for: "group.local.stickynotes.placeholder") else {
             return nil
         }
         return container

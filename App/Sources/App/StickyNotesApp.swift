@@ -26,7 +26,6 @@ struct StickyNotesApp: App {
     // the Dock icon is enabled BY DEFAULT unless the user disabled it in
     // Settings (SettingsView's "Show icon in Dock" toggle).
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-
     @State private var environment: AppEnvironment = .placeholder
     @State private var bootstrapError: BootstrapErrorState?
     @State private var libraryModel: LibraryModel?
@@ -37,52 +36,58 @@ struct StickyNotesApp: App {
 
     var body: some Scene {
         MenuBarExtra("Sticky Notes", systemImage: "note.text") {
-            if let bootstrapError {
-                bootstrapError.label
-                    .padding()
-                Divider()
-                Button("Quit Sticky Notes") {
-                    NSApplication.shared.terminate(nil)
-                }
-                .keyboardShortcut("q")
-            } else if let libraryModel {
-                MenuBarLibraryScene(
-                    model: libraryModel,
-                    openNote: { noteId in
-                        openNoteWindow(noteId: noteId)
-                    },
-                    openSettings: {
-                        openSettingsWindow()
-                    },
-                    openAbout: {
-                        openAboutWindow()
-                    },
-                    openHelp: {
-                        openHelpWindow()
-                    },
-                    deletionToast: { message in
-                        toastPresenter.present(message: message)
+            Group {
+                if let bootstrapError {
+                    bootstrapError.label
+                        .padding()
+                    Divider()
+                    Button("Quit Sticky Notes") {
+                        NSApplication.shared.terminate(nil)
                     }
-                )
-                .overlay(alignment: .top) {
-                    if let toast = toastPresenter.currentToast {
-                        DeletionToastOverlay(toast: toast)
-                            .padding(.top, 8)
+                    .keyboardShortcut("q")
+                } else if let libraryModel {
+                    MenuBarLibraryScene(
+                        model: libraryModel,
+                        openNote: { noteId in
+                            openNoteWindow(noteId: noteId)
+                        },
+                        openSettings: {
+                            openSettingsWindow()
+                        },
+                        openAbout: {
+                            openAboutWindow()
+                        },
+                        openHelp: {
+                            openHelpWindow()
+                        },
+                        deletionToast: { message in
+                            toastPresenter.present(message: message)
+                        }
+                    )
+                    .overlay(alignment: .top) {
+                        if let toast = toastPresenter.currentToast {
+                            DeletionToastOverlay(toast: toast)
+                                .padding(.top, 8)
+                        }
                     }
+                    .frame(width: 420)
+                } else {
+                    Text("Sticky Notes — setup in progress")
+                        .padding()
+                    Divider()
+                    Button("Quit Sticky Notes") {
+                        NSApplication.shared.terminate(nil)
+                    }
+                    .keyboardShortcut("q")
                 }
-                .frame(width: 420)
-                .task { bootstrapEnvironment() }
-                .onOpenURL { url in
-                    handleDeepLink(url)
-                }
-            } else {
-                Text("Sticky Notes — setup in progress")
-                    .padding()
-                Divider()
-                Button("Quit Sticky Notes") {
-                    NSApplication.shared.terminate(nil)
-                }
-                .keyboardShortcut("q")
+            }
+            // Bootstrap trigger lives on the CONTENT GROUP (every branch),
+            // not inside the `libraryModel` branch — otherwise bootstrap can
+            // never start (libraryModel is only set BY bootstrap) and the
+            // menu would show "setup in progress" forever.
+            .task { bootstrapEnvironment() }
+            .onOpenURL { url in
+                handleDeepLink(url)
             }
         }
         .menuBarExtraStyle(.window)
@@ -233,9 +238,13 @@ struct StickyNotesApp: App {
     // MARK: - Bootstrap (T154)
 
     private func bootstrapEnvironment() {
-        guard let container = FileManager.default
-            .containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier)
-        else {
+        // Re-entrancy guard: the bootstrap trigger fires on every menu open;
+        // once bootstrapped (or failed), never re-run.
+        guard libraryModel == nil, bootstrapError == nil else { return }
+        guard let container = AppGroupContainer.url(for: appGroupIdentifier) else {
+            // FR-011a: never fail silently — surface a non-blocking,
+            // localized status instead of "setup in progress" forever.
+            bootstrapError = BootstrapErrorState.from(StickyError.persistence(.containerUnavailable))
             return
         }
         Task {
@@ -250,9 +259,26 @@ struct StickyNotesApp: App {
                         toastPresenter.present(message: message)
                     }
                     self.coordinator = coordinator
+                    // FR-008: apply the persisted Dock preference (default
+                    // on). LSUIElement starts the app accessory; the
+                    // AppDelegate path is unreliable on macOS 27 beta
+                    // (verified 2026-08-07), so the policy is also applied
+                    // here once bootstrap completes.
+                    let showDockIcon = UserDefaults.standard
+                        .object(forKey: "local.stickynotes.showDockIcon") as? Bool ?? true
+                    if showDockIcon {
+                        try? DockActivationBridge.setDockEnabled(true)
+                    }
                     wireGlobalShortcuts()
                 }
             } catch {
+                // FR-165: sanitized logging — code + category only, never
+                // content, paths, or credentials.
+                if let sticky = error as? StickyError {
+                    StickyLogger(category: .app).error("bootstrap", stickyError: sticky)
+                } else {
+                    StickyLogger(category: .app).error("bootstrap", code: "unknown")
+                }
                 await MainActor.run {
                     bootstrapError = BootstrapErrorState.from(error)
                 }
@@ -284,6 +310,11 @@ struct StickyNotesApp: App {
                 backing: .buffered,
                 defer: false
             )
+            // Retain ownership: programmatic windows default to
+            // `isReleasedWhenClosed = true` — AppKit would release the
+            // window on close while the app still references it
+            // (double-release crash, verified 2026-08-07).
+            window.isReleasedWhenClosed = false
             window.title = "About Sticky Notes"
             window.contentView = NSHostingView(rootView: AboutView())
             window.center()
@@ -303,6 +334,8 @@ struct StickyNotesApp: App {
                 backing: .buffered,
                 defer: false
             )
+            // Retain ownership (see openAboutWindow — double-release guard).
+            window.isReleasedWhenClosed = false
             window.title = "Sticky Notes Help"
             window.contentView = NSHostingView(rootView: HelpView())
             window.center()
@@ -358,10 +391,34 @@ struct BootstrapErrorState {
 /// in accessory mode, so the preference must be applied explicitly).
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        StickyLogger(category: .app).debug("did-finish-launching", code: "fired")
+        // FR-008: Dock icon enabled by default, disabled only by the user
+        // in Settings. LSUIElement=true starts the app in accessory mode, so
+        // the persisted preference must be applied explicitly.
         let showDockIcon = UserDefaults.standard
             .object(forKey: "local.stickynotes.showDockIcon") as? Bool ?? true
         if showDockIcon {
             try? DockActivationBridge.setDockEnabled(true)
+        }
+        // Launch-time container diagnostics (FR-011a): verify the App Group
+        // container is resolvable + writable BEFORE the menu bootstrap runs,
+        // so sandbox/entitlement issues surface in logs immediately.
+        Task {
+            let group = "group.local.stickynotes.placeholder"
+            guard let container = AppGroupContainer.url(for: group) else {
+                StickyLogger(category: .app).error("container-url", code: "unresolved")
+                return
+            }
+            let base = container.appendingPathComponent("Library/Application Support")
+            do {
+                try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+                let probe = base.appendingPathComponent("launch-probe.tmp")
+                try Data("probe".utf8).write(to: probe)
+                try? FileManager.default.removeItem(at: probe)
+                StickyLogger(category: .app).debug("container-writable", code: "ok")
+            } catch {
+                StickyLogger(category: .app).error("container-writable", code: "denied")
+            }
         }
     }
 }

@@ -49,11 +49,15 @@ public final class LibraryModel {
     public private(set) var statusMessage: String?
     public private(set) var isError = false
     public private(set) var isLoading = false
+    /// In-memory mirror of the onboarding-hint dismissal so the UI updates
+    /// immediately when "Got it" is clicked (the UserDefaults write alone
+    /// cannot trigger observation — FR-014a).
+    public private(set) var onboardingHintDismissed = false
 
     /// First-launch onboarding hint visibility (FR-014a).
     public var showOnboardingHint: Bool {
         let state = preferences.firstLaunchState
-        return !state.hasCreatedFirstNote && !state.dismissed
+        return !state.hasCreatedFirstNote && !state.dismissed && !onboardingHintDismissed
     }
 
     public let preferences: LocalPreferences
@@ -166,13 +170,34 @@ public final class LibraryModel {
 
     // MARK: - Actions
 
+    /// Dismisses the first-launch onboarding hint (FR-014a). Updates the
+    /// observable state so the hint disappears immediately.
+    public func dismissOnboardingHint() {
+        preferences.dismissOnboardingHint()
+        onboardingHintDismissed = true
+    }
+
     /// Creates a blank note (FR-010) and returns its id, or nil on failure.
     public func createBlankNote() async -> UUID? {
         guard let repo = environment.persistence.noteRepository else { return nil }
         do {
             let note = Note(lastModifiedDeviceId: DeviceIdentity.current.id)
             try await repo.create(note)
+            // The note's primary editing surface: insert the initial
+            // (empty) rich-text block so typing persists from the first
+            // keystroke. Without it the editor's commit path finds no
+            // rich-text block and drops all input (verified 2026-08-07),
+            // and the FR-012a close-time auto-discard removes the note.
+            let block = Block(
+                noteId: note.id,
+                kind: .richText,
+                sortKey: 0,
+                payload: .richText(.empty),
+                lastModifiedDeviceId: DeviceIdentity.current.id
+            )
+            try await repo.insert(block)
             preferences.markFirstNoteCreated()
+            onboardingHintDismissed = true
             await reload()
             notifyWidgetsOfNoteChange()
             return note.id
