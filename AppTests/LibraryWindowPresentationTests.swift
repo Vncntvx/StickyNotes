@@ -19,7 +19,10 @@ import SystemBridge
 struct EmptyRepresentableContext {}
 
 @MainActor
-@Suite struct LibraryWindowPresentationTests {
+// Serialized: AppKit-window frame assertions are timing-sensitive under
+// parallel execution (`setFrame` applies on the runloop; observed flakes in
+// full-suite runs — Phase 28 stabilization).
+@Suite(.serialized) struct LibraryWindowPresentationTests {
     @Test
     func positionLibraryWindowAppliesDeterministicFrame() throws {
         let window = NSWindow(

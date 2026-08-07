@@ -1,9 +1,10 @@
 import SwiftUI
+import AppKit
 import Domain
 
-// MARK: - ScreenshotViewer (T168/T258, FR-095a)
+// MARK: - ScreenshotViewer (T168/T258/T297, FR-095/FR-095a)
 //
-// Per tasks.md T168/T258 and spec FR-095a (clarified 2026-08-07): the
+// Per tasks.md T168/T258/T297 and spec FR-095a (clarified 2026-08-07): the
 // screenshot viewer opens in an independent, borderless, note-style window
 // (several viewers MAY coexist; images drag out). Zoom is bounded 25%–400%
 // in 25% steps (scroll/pinch + ⌘+/⌘- equivalents); double-click toggles
@@ -11,6 +12,14 @@ import Domain
 // note's screenshots; Return (or double-click on a screenshot) enters
 // caption editing. The viewer never activates the captured application
 // (FR-095).
+//
+// T297 (Phase 28): the viewer loads the REAL image through the injected
+// `imageProvider` — the FR-094a 256px thumbnail below 100% zoom, the
+// original at ≥100% zoom (never full-res decoded for grid surfaces). The
+// FR-095 action set is complete: Copy (pasteboard PNG), Drag-out
+// (copy-only, FR-102 semantics), Save As (NSSavePanel), and Delete
+// Association (removes the block; FR-094b cover nullification is handled by
+// the persistence layer's FK ON DELETE SET NULL).
 
 /// The bounded zoom step set (FR-095a: 25%–400% in 25% steps).
 public enum ScreenshotZoom {
@@ -36,15 +45,30 @@ public struct ScreenshotViewer: View {
     let noteId: UUID
     let screenshots: [ScreenshotPayload]
     let openScreenshot: (Int) -> Void
+    /// T297: resolves asset bytes (thumbnail/original) by asset id. The App
+    /// wires the composed AssetStore.
+    let imageProvider: (UUID) async throws -> Data?
+    /// T297: deletes the screenshot block that owns the given original asset
+    /// id (FR-094b cover nullification at the persistence layer).
+    let onDeleteAssociation: (UUID) -> Void
 
     @State private var zoom: Double = 1.0
     @State private var currentIndex = 0
     @State private var isEditingCaption = false
+    @State private var image: NSImage?
 
-    public init(noteId: UUID, screenshots: [ScreenshotPayload], openScreenshot: @escaping (Int) -> Void = { _ in }) {
+    public init(
+        noteId: UUID,
+        screenshots: [ScreenshotPayload],
+        openScreenshot: @escaping (Int) -> Void = { _ in },
+        imageProvider: @escaping (UUID) async throws -> Data? = { _ in nil },
+        onDeleteAssociation: @escaping (UUID) -> Void = { _ in }
+    ) {
         self.noteId = noteId
         self.screenshots = screenshots
         self.openScreenshot = openScreenshot
+        self.imageProvider = imageProvider
+        self.onDeleteAssociation = onDeleteAssociation
     }
 
     public var body: some View {
@@ -55,6 +79,35 @@ public struct ScreenshotViewer: View {
                     .foregroundStyle(.secondary)
 
                 Spacer()
+
+                // T297 FR-095 action set.
+                Button {
+                    copyCurrentImage()
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                }
+                .help("Copy")
+                .accessibilityLabel("Copy screenshot")
+
+                Button {
+                    saveCurrentImageAs()
+                } label: {
+                    Image(systemName: "square.and.arrow.down")
+                }
+                .help("Save As…")
+                .accessibilityLabel("Save screenshot as")
+
+                Button(role: .destructive) {
+                    if let payload = currentPayload {
+                        onDeleteAssociation(payload.originalAssetId)
+                    }
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .help("Delete Association")
+                .accessibilityLabel("Delete screenshot association")
+
+                Divider().frame(height: 14)
 
                 // ⌘+ / ⌘- equivalents (FR-095a).
                 Button { zoom = ScreenshotZoom.previousStep(before: zoom) } label: {
@@ -80,9 +133,22 @@ public struct ScreenshotViewer: View {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(.quaternary.opacity(0.4))
                     .overlay {
-                        Image(systemName: "camera")
-                            .font(.title)
-                            .foregroundStyle(.secondary)
+                        if let image {
+                            // T297: real screenshot — FR-094a thumbnail below
+                            // 100% zoom, original at ≥100%.
+                            Image(nsImage: image)
+                                .resizable()
+                                .interpolation(.high)
+                                .aspectRatio(contentMode: .fit)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .onDrag {
+                                    NSItemProvider(object: image)   // copy-only drag-out (FR-102)
+                                }
+                        } else {
+                            Image(systemName: "camera")
+                                .font(.title)
+                                .foregroundStyle(.secondary)
+                        }
                     }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -116,6 +182,13 @@ public struct ScreenshotViewer: View {
             )
         }
         .padding(12)
+        .task(id: ViewerLoadKey(index: currentIndex, usesThumbnail: zoom < 1.0)) {
+            await loadCurrentImage()
+        }
+    }
+
+    private var currentPayload: ScreenshotPayload? {
+        screenshots.indices.contains(currentIndex) ? screenshots[currentIndex] : nil
     }
 
     private func navigate(to index: Int) {
@@ -123,4 +196,51 @@ public struct ScreenshotViewer: View {
         currentIndex = min(max(index, 0), screenshots.count - 1)
         openScreenshot(currentIndex)
     }
+
+    // MARK: - Image loading (T297, FR-094a)
+
+    private func loadCurrentImage() async {
+        guard let payload = currentPayload else {
+            image = nil
+            return
+        }
+        // FR-094a: the 256px thumbnail participates below 100% zoom; the
+        // original at ≥100%. Never decode the original for grid surfaces.
+        let assetId = zoom < 1.0 ? payload.thumbnailAssetId : payload.originalAssetId
+        guard let data = try? await imageProvider(assetId) else {
+            image = nil
+            return
+        }
+        image = NSImage(data: data)
+    }
+
+    // MARK: - FR-095 actions (T297)
+
+    private func copyCurrentImage() {
+        guard let payload = currentPayload else { return }
+        Task {
+            guard let data = try? await imageProvider(payload.originalAssetId) else { return }
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setData(data, forType: .png)
+        }
+    }
+
+    private func saveCurrentImageAs() {
+        guard let payload = currentPayload else { return }
+        Task {
+            guard let data = try? await imageProvider(payload.originalAssetId) else { return }
+            let panel = NSSavePanel()
+            panel.allowedContentTypes = [.png]
+            panel.nameFieldStringValue = "screenshot.png"
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            try? data.write(to: url, options: .atomic)
+        }
+    }
+}
+
+/// Identifies the viewer's current load: (index, thumbnail-or-original).
+private struct ViewerLoadKey: Equatable {
+    let index: Int
+    let usesThumbnail: Bool
 }

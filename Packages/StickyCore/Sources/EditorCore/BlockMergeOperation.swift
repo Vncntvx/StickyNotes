@@ -1,15 +1,18 @@
 import Foundation
 import Domain
 
-// MARK: - BlockMergeOperation (T235)
+// MARK: - BlockMergeOperation (T235/T300)
 //
 // Per tasks.md T235 and spec FR-050a (clarified 2026-08-07): when the cursor
 // leaves an emptied block (paragraph/list item/todo/heading), the block is
-// removed by merging with the adjacent block (or deleted when no merge is
-// possible). The FINAL block of a note is never removed this way — it
-// remains an empty paragraph. Every automatic removal is reversible with a
-// single Undo, and removal never fires while an input-method composition is
-// active (FR-063).
+// removed by merging into the FOLLOWING block — the block after it (merge
+// direction pinned 2026-08-07). When the following block cannot accept the
+// merge (it is an image, screenshot, file-reference, or code block — a
+// special block), the emptied block is removed outright with no content
+// merge. The FINAL block of a note is never removed this way — it remains
+// an empty paragraph. Every automatic removal is reversible with a single
+// Undo, and removal never fires while an input-method composition is active
+// (FR-063).
 //
 // This is the pure decision core: it computes the merge result from the
 // ordered blocks + the emptied block index. The App layer (RichTextBlockView)
@@ -18,15 +21,15 @@ import Domain
 
 /// The computed result of an empty-block removal.
 public enum BlockMergeResult: Sendable, Equatable {
-    /// The block was removed by merging with its predecessor: the merged
-    /// content is `mergedText` (the predecessor's text + the emptied
-    /// block's residual text), and the merge happens at the predecessor
-    /// block index `predecessorIndex`. Both blocks collapse into one.
-    case mergeWithPredecessor(predecessorIndex: Int, mergedText: String)
+    /// The emptied block is removed by merging into its successor: the
+    /// following block (at `successorIndex`, pre-removal) takes the emptied
+    /// block's place. The emptied block carries no residual text, so no
+    /// content is fused — the slot collapses into the successor.
+    case mergeWithSuccessor(successorIndex: Int)
 
-    /// No merge was possible (e.g. the block is the first and has no
-    /// predecessor, or the predecessor is a special block): the emptied
-    /// block is deleted outright.
+    /// No merge was possible (the following block is a special block — code,
+    /// file reference, image, or screenshot): the emptied block is deleted
+    /// outright.
     case delete(blockIndex: Int)
 
     /// The block must NOT be removed: it is the final block of the note
@@ -64,21 +67,15 @@ public enum BlockMergeOperation {
         // FR-050a: the final block is never removed.
         guard emptiedBlockIndex < blocks.count - 1 else { return .keepFinalBlock }
 
-        // First block with no predecessor: no merge partner — delete.
-        guard emptiedBlockIndex > 0 else { return .delete(blockIndex: 0) }
-
-        // Merge with the predecessor when it is a text-bearing block
-        // (rich text / todo / heading). The emptied block's residual text
-        // (none, it's empty) merges into the predecessor.
-        let predecessor = blocks[emptiedBlockIndex - 1]
-        switch predecessor.payload {
-        case .richText(let doc):
-            return .mergeWithPredecessor(predecessorIndex: emptiedBlockIndex - 1, mergedText: doc.text)
-        case .todo(let payload):
-            return .mergeWithPredecessor(predecessorIndex: emptiedBlockIndex - 1, mergedText: payload.richText.text)
-        default:
-            // Special block predecessor (code/file/image/screenshot): no
-            // text merge possible — delete the emptied block.
+        // The emptied block is never the last block, so a following block
+        // always exists. Merge into the FOLLOWING block (clarified
+        // 2026-08-07) when it is text-bearing; otherwise remove the emptied
+        // block outright — no content merge with special blocks.
+        let successor = blocks[emptiedBlockIndex + 1]
+        switch successor.payload {
+        case .richText, .todo:
+            return .mergeWithSuccessor(successorIndex: emptiedBlockIndex + 1)
+        case .code, .fileReference, .image, .screenshot:
             return .delete(blockIndex: emptiedBlockIndex)
         }
     }

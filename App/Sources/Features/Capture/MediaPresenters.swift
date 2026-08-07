@@ -13,8 +13,15 @@ import Domain
 public enum MediaPresenters {
 
     /// Opens the screenshot viewer for a note's screenshots (FR-095a zoom
-    /// 25–400%, arrow navigation, caption editing, drag-out).
-    public static func presentScreenshotViewer(noteId: UUID, screenshots: [ScreenshotPayload]) {
+    /// 25–400%, arrow navigation, caption editing, drag-out; T297: real
+    /// image via the injected provider + Copy/Drag-out/Save As/Delete
+    /// Association).
+    public static func presentScreenshotViewer(
+        noteId: UUID,
+        screenshots: [ScreenshotPayload],
+        imageProvider: @escaping (UUID) async throws -> Data? = { _ in nil },
+        onDeleteAssociation: @escaping (UUID) -> Void = { _ in }
+    ) {
         guard !screenshots.isEmpty else { return }
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 560, height: 480),
@@ -27,7 +34,9 @@ public enum MediaPresenters {
         window.contentView = NSHostingView(rootView: ScreenshotViewer(
             noteId: noteId,
             screenshots: screenshots,
-            openScreenshot: { _ in }
+            openScreenshot: { _ in },
+            imageProvider: imageProvider,
+            onDeleteAssociation: onDeleteAssociation
         ))
         window.center()
         window.makeKeyAndOrderFront(nil)

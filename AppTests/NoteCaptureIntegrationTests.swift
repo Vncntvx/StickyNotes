@@ -20,7 +20,10 @@ import AppKit
 // NSWindow creation does not require a display).
 
 @MainActor
-@Suite struct NoteCaptureIntegrationTests {
+// Serialized: AppKit-window tests race under parallel execution (observed
+// host-restart flakes in full-suite runs; pass deterministically when
+// serialized — Phase 28 stabilization).
+@Suite(.serialized) struct NoteCaptureIntegrationTests {
 
     private static let deviceId = UUID(uuidString: "d0000000-0000-4000-8000-000000000001")!
 
@@ -78,6 +81,11 @@ import AppKit
         let noteId = UUID()
         let window1 = NSWindow(contentRect: .init(x: 0, y: 0, width: 200, height: 200),
                                styleMask: [.titled], backing: .buffered, defer: false)
+        // Programmatic windows default to `isReleasedWhenClosed = true`:
+        // `registerOpeningWindow` closes window1 (async release) while the
+        // test still strongly references it — a double-release host crash
+        // under the main-runloop drain. The test retains ownership.
+        window1.isReleasedWhenClosed = false
         _ = NoteWindowBridge.register(window1, noteId: noteId)
 
         // A second open attempt for the same note finds the existing window.

@@ -81,9 +81,20 @@ public final class NoteWindowCoordinator {
             backing: .buffered,
             defer: false
         )
+        // FR-030a (T298): note-paper chrome — borderless/thin transparent
+        // title bar with the upper control area integrated (no distinct
+        // toolbar chrome), 1-pt subtle border, 8-pt corner radius, soft
+        // shadow. The window stays a normal macOS window (FR-030); the
+        // system window shadow supplies the drop shadow (approximating the
+        // "radius 8, opacity 0.15" intent — layer shadows are clipped by
+        // the rounded-corner mask).
         window.title = note.title ?? ""
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
         window.isReleasedWhenClosed = false
-        window.backgroundColor = .textBackgroundColor
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.hasShadow = true
         NoteWindowBridge.applyCollectionBehavior(window, alwaysOnTop: note.alwaysOnTop)
         _ = NoteWindowBridge.register(window, noteId: noteId)
         WindowLevelBridge.apply(window, alwaysOnTop: note.alwaysOnTop)
@@ -91,6 +102,16 @@ public final class NoteWindowCoordinator {
         let host = NoteWindowHostModel(noteId: noteId, environment: environment)
         let content = NoteWindowContent(noteId: noteId, host: host, environment: environment, coordinator: self)
         window.contentView = NSHostingView(rootView: content)
+
+        // FR-030a: 1-pt subtle border + 8-pt corner radius on the content
+        // (clips the SwiftUI background to the rounded sheet shape).
+        if let contentView = window.contentView {
+            contentView.wantsLayer = true
+            contentView.layer?.cornerRadius = 8
+            contentView.layer?.masksToBounds = true
+            contentView.layer?.borderWidth = 1
+            contentView.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.5).cgColor
+        }
 
         // FR-032/FR-033 (T289): restore the remembered frame (corrected for
         // the current display arrangement; the disconnected-display preferred
@@ -334,9 +355,20 @@ public struct NoteWindowContent: View {
                             await host.updateCaption(blockId: blockId, caption: caption)
                         },
                         onOpenViewer: {
+                            // T297: the viewer loads REAL asset bytes via
+                            // the composed AssetStore (thumbnail <100% zoom,
+                            // original ≥100%) and deletes the association
+                            // through the host (FR-094b cover nullification
+                            // at the persistence layer).
                             MediaPresenters.presentScreenshotViewer(
                                 noteId: noteId,
-                                screenshots: host.screenshotPayloads()
+                                screenshots: host.screenshotPayloads(),
+                                imageProvider: { assetId in
+                                    try? await environment.assets.store?.readData(assetID: assetId)
+                                },
+                                onDeleteAssociation: { originalAssetId in
+                                    Task { await host.deleteScreenshotBlock(originalAssetId: originalAssetId) }
+                                }
                             )
                         },
                         onEmbeddedImageAction: { blockId, action in

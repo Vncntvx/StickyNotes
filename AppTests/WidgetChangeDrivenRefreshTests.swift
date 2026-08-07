@@ -21,4 +21,17 @@ import Domain
         let eligibility = WidgetRefreshCoordinator.kindsAffectedByEligibilityChange()
         #expect(eligibility.contains(.smallSelected))
     }
+
+    @Test
+    func conflictCopyChangeReloadsOnlyAffectedKinds() {
+        // T302 (FR-110a): a sync pass creating conflict copies reloads
+        // exactly the conflict-copy kinds (large-overview + medium-multi),
+        // never a blanket reload.
+        var reloaded: [WidgetRefreshCoordinator.Kind] = []
+        WidgetRefreshCoordinator.reloadOverride = { reloaded = $0 }
+        defer { WidgetRefreshCoordinator.reloadOverride = nil }
+        WidgetRefreshCoordinator.reload(for: .conflictCopyCreated)
+        #expect(reloaded == [.largeOverview, .mediumMulti])
+        #expect(!reloaded.contains(.smallSelected), "unaffected kinds must not reload")
+    }
 }

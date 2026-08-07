@@ -51,6 +51,11 @@ public struct RichTextBlockView: View {
 
     @State private var attributedText = AttributedString("")
     @State private var isIMEComposing = false
+    // T300 (FR-050a): cursor-exit detection for empty-block removal. The
+    // decision fires exactly once per exit; the flag resets when the block
+    // gains non-empty text again.
+    @FocusState private var editorFocused: Bool
+    @State private var didRemoveEmptyBlockOnExit = false
 
     public init(
         note: Note,
@@ -103,6 +108,7 @@ public struct RichTextBlockView: View {
                     .foregroundStyle(ReadableTheme.foreground(for: note))
                     .scrollContentBackground(.hidden)
                     .frame(minHeight: 220)
+                    .focused($editorFocused)
                     .onAppear {
                         syncFromCanonical()
                     }
@@ -110,8 +116,28 @@ public struct RichTextBlockView: View {
                         // T211: signpost-bracket the keystroke path
                         // (SC-004a); sanitized op name only.
                         let state = StickyLogger.editor.signpostBegin("editor.keystroke")
+                        didRemoveEmptyBlockOnExit = false
                         commit(newValue)
                         StickyLogger.editor.signpostEnd(state, op: "editor.keystroke")
+                    }
+                    .onChange(of: editorFocused) { _, focused in
+                        // T300 (FR-050a): when the cursor exits an emptied
+                        // block, remove it — merge into the FOLLOWING block
+                        // or delete outright (clarified 2026-08-07); the
+                        // final block is never removed; suppressed while an
+                        // IME composition is active (FR-063).
+                        guard !focused, !isIMEComposing, !didRemoveEmptyBlockOnExit else { return }
+                        didRemoveEmptyBlockOnExit = true
+                        guard let richIndex = blocks.firstIndex(where: { $0.kind == .richText }),
+                              let updated = EditorAppBridge.applyEmptyBlockRemoval(
+                                  blocks: blocks,
+                                  emptiedBlockIndex: richIndex,
+                                  hasIMEComposition: false
+                              ) else { return }
+                        // ONE undo group: the removal restores the block on
+                        // a single Undo (FR-050a). Structural change persists
+                        // immediately per FR-141a.
+                        onStructuralBlocksChanged(updated)
                     }
 
                 // FR-050 block insertion (T290): todos, code blocks, file

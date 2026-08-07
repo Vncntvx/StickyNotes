@@ -151,6 +151,22 @@ xcodebuild test \
   -destination 'platform=macOS'
 ```
 
+> **UI-test runner Gatekeeper workaround (verified 2026-08-07)**: the first
+> `xcodebuild test` run on a freshly built `AppUITests-Runner.app` can be
+> blocked by a "damaged / downloaded at an unknown date" Gatekeeper dialog
+> (unsigned runner carrying `com.apple.provenance` on this machine). Fix
+> once per build before re-running:
+>
+> ```bash
+> RUNNER=$(find ~/Library/Developer/Xcode/DerivedData -name "AppUITests-Runner.app" -maxdepth 6 | head -1)
+> xattr -dr com.apple.provenance "$RUNNER"; xattr -dr com.apple.quarantine "$RUNNER"
+> codesign --force --sign - --deep "$RUNNER"
+> ```
+>
+> `spctl --assess --type execute "$RUNNER"` should return rc=0 afterwards.
+> Without the UI-test target the unit/integration suites are unaffected
+> (`-only-testing:AppTests`).
+
 ### Migration tests
 
 `StickyCore/Tests/PersistenceTests` walks every historical schema fixture

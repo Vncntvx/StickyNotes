@@ -52,6 +52,10 @@ public struct SyncSummary: Sendable, Equatable {
     /// remote deletion history that had aged out. The user MUST be informed
     /// that some synchronization history has aged out (T184-d).
     public var historyAgedOutDetected: Bool
+    /// T302 (FR-110a): new conflict copies created in this pass (content
+    /// divergence + delete-vs-edit recovery). The app refreshes the
+    /// affected widget kinds when non-zero.
+    public var conflictCopiesCreated: Int
 
     public init(
         uploadedObjects: Int = 0,
@@ -60,7 +64,8 @@ public struct SyncSummary: Sendable, Equatable {
         skippedCorruptObjects: Int = 0,
         manifestCommitted: Bool = false,
         initializedRemote: Bool = false,
-        historyAgedOutDetected: Bool = false
+        historyAgedOutDetected: Bool = false,
+        conflictCopiesCreated: Int = 0
     ) {
         self.uploadedObjects = uploadedObjects
         self.downloadedObjects = downloadedObjects
@@ -69,20 +74,32 @@ public struct SyncSummary: Sendable, Equatable {
         self.manifestCommitted = manifestCommitted
         self.initializedRemote = initializedRemote
         self.historyAgedOutDetected = historyAgedOutDetected
+        self.conflictCopiesCreated = conflictCopiesCreated
     }
+}
+
+/// Outcome of a divergence resolution (T302: precise conflict-copy counting).
+public enum ConflictResolutionOutcome: Sendable, Equatable {
+    /// A NEW conflict copy was created by this resolution.
+    case created
+    /// A conflict copy already exists for this divergence (dedup hit) — no
+    /// new copy.
+    case alreadyExists
+    /// Not a content conflict (e.g. sort-key-only divergence resolved by
+    /// FR-022b LWW) — no conflict copy.
+    case notAContentConflict
 }
 
 /// Hook for conflict-copy creation (US10 builds the real resolver; the
 /// engine reports divergence).
 public protocol ConflictResolver: Sendable {
     /// Called when a remote version of a note diverges from the local
-    /// version (neither is an ancestor). Returns true when a conflict copy
-    /// was created.
+    /// version (neither is an ancestor). Returns the conflict-copy outcome.
     func resolveDivergence(
         local: CanonicalNote,
         remote: CanonicalNote,
         deviceId: UUID
-    ) async throws -> Bool
+    ) async throws -> ConflictResolutionOutcome
 }
 
 /// The single-vault synchronization engine.
@@ -180,10 +197,15 @@ public actor SyncEngine {
         //    a manifest field, per T110).
         if let remoteManifest {
             var unresolved: [RemoteObjectEntry] = []
+            var conflictCopiesCreated = 0   // T302 (FR-110a)
             for entry in remoteManifest.entries where localByVersion[entry.objectId] == nil
                 && !localAssetIds.contains(UUID(uuidString: entry.objectId) ?? UUID()) {
                 if let remoteNote = try? await downloadNote(entry: entry) {
-                    let applied = try await applyRemoteIfNewer(remoteNote, localByVersion: localByVersion)
+                    let applied = try await applyRemoteIfNewer(
+                        remoteNote,
+                        localByVersion: localByVersion,
+                        conflictCopiesCreated: &conflictCopiesCreated
+                    )
                     if applied == .applied {
                         summary.downloadedObjects += 1
                     }
@@ -206,10 +228,11 @@ public actor SyncEngine {
 
             // 6. Remote tombstones: apply deletions (lineage-checked).
             for tombstone in remoteManifest.tombstones {
-                if try await applyRemoteTombstone(tombstone) {
+                if try await applyRemoteTombstone(tombstone, conflictCopiesCreated: &conflictCopiesCreated) {
                     summary.appliedTombstones += 1
                 }
             }
+            summary.conflictCopiesCreated = conflictCopiesCreated
         }
 
         // 7. Commit the manifest conditionally when anything changed.
@@ -323,7 +346,8 @@ public actor SyncEngine {
     /// Applies a downloaded note when it is newer or unknown locally.
     private func applyRemoteIfNewer(
         _ remote: CanonicalNote,
-        localByVersion: [String: CanonicalNote]
+        localByVersion: [String: CanonicalNote],
+        conflictCopiesCreated: inout Int
     ) async throws -> ApplyResult {
         let local = localByVersion.values.first { $0.id == remote.id }
         guard let local else {
@@ -338,7 +362,12 @@ public actor SyncEngine {
         // resolver (US10). Without a resolver, keep local (never auto-merge,
         // never overwrite — constitution VIII).
         if let resolver = conflictResolver {
-            _ = try await resolver.resolveDivergence(local: local, remote: remote, deviceId: deviceId)
+            let outcome = try await resolver.resolveDivergence(local: local, remote: remote, deviceId: deviceId)
+            // T302: count only NEW conflict copies; dedup hits (already
+            // exists) and FR-022b sort-key-only LWW never count.
+            if outcome == .created {
+                conflictCopiesCreated += 1
+            }
         }
         return .skipped
     }
@@ -539,12 +568,17 @@ public actor SyncEngine {
     ///   remote-deletion-history reconciliation land in T129 (US10
     ///   `OfflineReconciler`), which is the dedicated home for that logic.
     ///   Do NOT extend this method ad-hoc; US10 owns the complete design.
-    private func applyRemoteTombstone(_ tombstone: RemoteTombstone) async throws -> Bool {
+    private func applyRemoteTombstone(
+        _ tombstone: RemoteTombstone,
+        conflictCopiesCreated: inout Int
+    ) async throws -> Bool {
         let deviceID = deviceId
-        return try await store.write { db in
+        // The write closure is @Sendable — the conflict-copy outcome is
+        // returned out of it instead of captured (T302).
+        let result: (applied: Bool, conflictCreated: Bool) = try await store.write { db in
             guard let row = try Row.fetchOne(db, sql: "SELECT * FROM note WHERE id = ?",
                                              arguments: [tombstone.noteId.uuidString]) else {
-                return false
+                return (false, false)
             }
             let localVersion = Self.uuid(row, "versionId") ?? UUID()
             let localParent = Self.uuid(row, "parentVersionId")
@@ -581,7 +615,7 @@ public actor SyncEngine {
                         """,
                     arguments: [tombstone.noteId.uuidString, deleted.uuidString, tombstone.parentVersionId?.uuidString, deviceID.uuidString, Date()]
                 )
-                return true
+                return (true, false)
             }
 
             // Delete-vs-edit (T163l): the local version diverged from the
@@ -608,11 +642,15 @@ public actor SyncEngine {
                         sql: "UPDATE note SET lifecycleState = 'permanentlyDeleted', trashedAt = NULL WHERE id = ?",
                         arguments: [tombstone.noteId.uuidString]
                     )
-                    return true
+                    return (true, true)   // T302: a new conflict copy
                 }
             }
-            return false
+            return (false, false)
         }
+        if result.conflictCreated {
+            conflictCopiesCreated += 1
+        }
+        return result.applied
     }
 
     // MARK: - Manifest commit (C6: outcome instead of side-channel flag)
