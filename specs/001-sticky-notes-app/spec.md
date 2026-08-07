@@ -11,8 +11,8 @@
 ## Clarifications
 
 The product-behavior clarifications confirmed in the 2026-08-07 sessions are
-encoded directly in the sections below: FR-001a, FR-012a, FR-014b, FR-014c,
-FR-022a,
+encoded directly in the sections below: FR-001a, FR-002a, FR-012a, FR-014b,
+FR-014c, FR-022a,
 FR-022b,
 FR-023a, FR-031a, FR-040a, FR-041a, FR-050a, FR-072a, FR-072b, FR-090a,
 FR-090b, FR-094a, FR-110a, FR-140a, FR-141a, FR-152a, FR-154,
@@ -33,6 +33,8 @@ log is archived in `history/clarifications.md` for audit purposes.
 - Q: When two different notes start with byte-identical first lines, should the spec define how cards stay distinguishable? → A: Identical generated summaries are accepted; cards remain distinguishable via the existing deterministic card fields — last-modified time, note color, and the 2-line body preview (FR-020a). No summary disambiguation rule (FR-021; FR-020a).
 - Q: Should the file-reference card's visual design (icon size, metadata layout, availability-status indicator) be pinned in the spec? → A: Card layout and icon size stay implementation choices per FR-050b; the spec pins only the availability-status indicator semantics — enumerated states (available / missing / stale / on-another-device), communicated by more than color alone (FR-044) (FR-100; FR-103; FR-104; FR-050b).
 - Q: Should the spec add a VoiceOver response-time target for navigating a large note, or leave accessibility performance unquantified? → A: Leave VoiceOver traversal latency unquantified; SC-004a (keystroke-to-glyph <16 ms) and SC-006 (no sustained CPU) remain the accessibility performance guarantees, since traversal latency is dominated by the system accessibility engine (SC-004a; SC-006).
+- Q: When the editor removes an emptied block on cursor exit, which adjacent block should it merge with — the block before or after it? → A: The emptied block merges into the FOLLOWING block (the block after it); when the following block cannot accept the merge (e.g., it is an image, screenshot, or file-reference block), the empty block is removed outright with no content merge. The final block of a note is never removed this way (FR-050a).
+- Q: Should the note-card dimensions in the binding card-grid requirement be pinned to exact values? → A: Yes — card width 220 points and card height 160 points exactly, no tolerance; "approximately" is removed so card rendering is deterministic (FR-002a).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -565,8 +567,9 @@ cited FR.
   the Windows 11 Sticky Notes experience while following macOS interaction
   conventions.
 - **FR-002a**: The card grid MUST display notes in a grid with a default of 3
-  columns, card width of approximately 220 points, card height of
-  approximately 160 points, and 12-point inter-card spacing. The grid MUST
+  columns, card width of exactly 220 points, card height of exactly 160
+  points, and 12-point inter-card spacing (deterministic card dimensions,
+  no tolerance — clarified 2026-08-07). The grid MUST
   be responsive: columns reduce to 2 below 600 points window width and to 1
   below 400 points. These dimensions are tuned for the macOS 26 default
   system font at regular size.
@@ -876,7 +879,10 @@ cited FR.
   block disappearing mid-edit. When the cursor moves out of an empty block
   (via arrow keys, click, Enter at the wrong position, or focus change), the
   application MUST remove the empty block by merging its location with the
-  adjacent block (or deleting it when no merge is possible). The final block
+  FOLLOWING block — the block after it (merge direction pinned 2026-08-07);
+  when the following block cannot accept the merge (e.g., it is an image,
+  screenshot, or file-reference block), the application MUST remove the
+  empty block outright with no content merge. The final block
   of a note MUST never be removed this way — it MUST remain as an empty
   paragraph for continued typing. Every such automatic removal MUST be
   reversible with a single Undo (Constitution V), and the removal MUST NOT

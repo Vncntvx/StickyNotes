@@ -442,6 +442,20 @@ public final class NoteWindowHostModel {
         }
     }
 
+    /// T297 (FR-095): deletes the screenshot block that owns the given
+    /// original asset id (viewer "Delete Association"). FR-094b cover
+    /// nullification is handled by the persistence layer (FK ON DELETE SET
+    /// NULL in the same transaction as the block deletion).
+    public func deleteScreenshotBlock(originalAssetId: UUID) async {
+        guard let block = blocks.first(where: { block in
+            if case .screenshot(let payload) = block.payload {
+                return payload.originalAssetId == originalAssetId
+            }
+            return false
+        }) else { return }
+        await deleteBlock(id: block.id)
+    }
+
     // MARK: - File-reference actions (T291, FR-100/FR-101/FR-102/FR-103/FR-105)
 
     /// Evaluates the FR-100 availability of a file-reference block from its

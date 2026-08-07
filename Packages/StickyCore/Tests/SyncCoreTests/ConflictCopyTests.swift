@@ -130,6 +130,47 @@ import AssetStore
     }
 
     @Test
+    func conflictCopiesCreatedIsCountedInSummary() async throws {
+        // T302 (FR-110a): the sync summary counts new conflict copies so the
+        // app can refresh the affected widget kinds.
+        let vault = try await fastVault()
+        let provider = LocalProvider()
+        let (_, storeB, _) = try await createDivergence(provider: provider, vault: vault)
+
+        let resolver = SyncConflictResolver(store: storeB)
+        let engine = makeEngine(provider: provider, vault: vault, store: storeB, resolver: resolver)
+
+        // First pass: exactly one new conflict copy.
+        let first = try await engine.syncNow()
+        #expect(first.conflictCopiesCreated == 1)
+
+        // Retried passes: the dedup record prevents new copies → zero.
+        let second = try await engine.syncNow()
+        #expect(second.conflictCopiesCreated == 0)
+
+        // Sort-key-only divergence (FR-022b) never counts as a conflict copy.
+        let vault2 = try await fastVault()
+        let provider2 = LocalProvider()
+        let storeA = try makeStore()
+        let repoA = SQLiteNoteRepository(store: storeA, fullTextSearch: FullTextSearch(dbPool: storeA.dbPool))
+        let note = makeNote(title: "shared")
+        try await repoA.create(note)
+        _ = try await makeEngine(provider: provider2, vault: vault2, store: storeA, resolver: nil).syncNow()
+        var a = try await repoA.fetch(id: note.id)!
+        a.manualSortKey = 5000
+        try await repoA.update(a, modifyingDeviceId: UUID())
+        _ = try await makeEngine(provider: provider2, vault: vault2, store: storeA, resolver: nil).syncNow()
+        let sortKeyOnly = try await makeEngine(
+            provider: provider2,
+            vault: vault2,
+            store: storeA,
+            resolver: SyncConflictResolver(store: storeA)
+        ).syncNow()
+        #expect(sortKeyOnly.conflictCopiesCreated == 0,
+                "sort-key-only divergence (FR-022b LWW) must not count as a conflict copy")
+    }
+
+    @Test
     func conflictCopySyncsNormallyToRemote() async throws {
         let vault = try await fastVault()
         let provider = LocalProvider()

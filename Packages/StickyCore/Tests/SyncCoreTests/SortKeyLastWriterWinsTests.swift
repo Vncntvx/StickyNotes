@@ -135,7 +135,7 @@ import SyncCore
         remote.versionId = UUID()
 
         let resolver = SyncConflictResolver(store: store)
-        let createdConflict = try await resolver.resolveDivergence(
+        let outcome = try await resolver.resolveDivergence(
             local: remote,   // remote is newer — still no conflict
             remote: CanonicalNote(note: local, blocks: []),
             deviceId: UUID()
@@ -143,7 +143,7 @@ import SyncCore
         // With only the sort key differing, NO conflict copy is created.
         let conflicts = try await repo.fetchAll(lifecycle: .conflictCopy, sort: .modified)
         #expect(conflicts.isEmpty, "sort-key-only divergence must never create a conflict copy (FR-022b)")
-        _ = createdConflict
+        #expect(outcome == .notAContentConflict)
     }
 
     @Test
@@ -174,7 +174,7 @@ import SyncCore
         let created = try await resolver.resolveDivergence(local: CanonicalNote(note: edited, blocks: []),
                                                            remote: remote,
                                                            deviceId: UUID())
-        #expect(created, "content divergence MUST create a conflict copy")
+        #expect(created == .created, "content divergence MUST create a conflict copy")
         #expect(try await repo.fetchAll(lifecycle: .conflictCopy, sort: .modified).count == 1)
     }
 }

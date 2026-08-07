@@ -75,7 +75,7 @@ public struct SyncConflictResolver: ConflictResolver, Sendable {
         local: CanonicalNote,
         remote: CanonicalNote,
         deviceId: UUID
-    ) async throws -> Bool {
+    ) async throws -> ConflictResolutionOutcome {
         // FR-022b: sort-key-only divergence NEVER creates a conflict copy.
         if ContentDivergence.differsOnlyBySortKey(local, remote) {
             // Apply the LWW sort key onto the local note (deterministic per
@@ -102,7 +102,7 @@ public struct SyncConflictResolver: ConflictResolver, Sendable {
                     ]
                 )
             }
-            return false
+            return .notAContentConflict
         }
 
         // Content divergence: keep the local version as the original and
@@ -120,11 +120,15 @@ public struct SyncConflictResolver: ConflictResolver, Sendable {
                 deviceId: deviceId
             )
         }
+        // T302: the outcome distinguishes NEW copies (created) from dedup
+        // hits (alreadyExists) so the engine counts precisely.
         switch outcome {
-        case .created, .alreadyExists:
-            return true
+        case .created:
+            return .created
+        case .alreadyExists:
+            return .alreadyExists
         case .notAContentConflict:
-            return false
+            return .notAContentConflict
         }
     }
 }

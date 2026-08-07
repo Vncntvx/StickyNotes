@@ -1,16 +1,18 @@
 import SwiftUI
 import Domain
 
-// MARK: - NoteControlsView (T165/T234/T257/T248)
+// MARK: - NoteControlsView (T165/T234/T257/T248/T301)
 //
-// Per tasks.md T165/T234/T257/T248 and spec FR-030/FR-030a/FR-031/FR-032/
-// FR-033/FR-034/FR-035/FR-042/FR-043a/FR-044: the upper control area —
+// Per tasks.md T165/T234/T257/T248/T301 and spec FR-030/FR-030a/FR-031/
+// FR-032/FR-033/FR-034/FR-035/FR-042/FR-043a/FR-044: the upper control area —
 // title, color, transparency (opacity 40–100% in 5-pt steps, FR-041a),
 // text size (9–24 pt in 1-pt steps, FR-043a), Always-on-Top (FR-036),
 // screenshot / file-ref / actions / close — hidden until the pointer enters
 // (FR-031; keyboard alternatives per FR-181). The note's contextual menu
 // (FR-031) hosts duplicate/copy-as-Markdown/export/move-to-Trash (T248) and
-// the widget-eligibility toggle (FR-112, T280).
+// the widget-eligibility toggle (FR-112, T280). T301: the appearance
+// controls are keyboard-reachable without hover — ⌥C/⌥O/⌥T stepping
+// shortcuts plus full-value "Appearance" submenus in the contextual menu.
 
 /// The upper control area of a note window (hidden until pointer enter).
 public struct NoteControlsView: View {
@@ -118,6 +120,46 @@ public struct NoteControlsView: View {
             Button("Export as JSON…") { onExport() }
             Button("Move to Trash") { onMoveToTrash() }
             Divider()
+            // T301 (FR-181): full-value appearance submenus — every color /
+            // opacity step / text size is reachable without pointer hover.
+            Menu("Appearance") {
+                Menu("Note Color") {
+                    ForEach(NoteColorKey.allCases.filter { $0 != .custom }, id: \.self) { key in
+                        Button {
+                            var updated = note
+                            updated.colorKey = key
+                            updated.customColor = nil
+                            onChanged(updated)
+                        } label: {
+                            HStack {
+                                Circle()
+                                    .fill(colorFor(key))
+                                    .frame(width: 10, height: 10)
+                                Text(key.displayName)
+                            }
+                        }
+                    }
+                }
+                Menu("Background Opacity") {
+                    ForEach(NoteAppearance.OpacityBounds.allSteps, id: \.self) { step in
+                        Button("\(Int(step * 100))%") {
+                            var updated = note
+                            updated.transparency = step
+                            onChanged(updated)
+                        }
+                    }
+                }
+                Menu("Text Size") {
+                    ForEach(NoteAppearance.TextSizeBounds.allSizes, id: \.self) { size in
+                        Button("\(size) pt") {
+                            var updated = note
+                            updated.textSize = size
+                            onChanged(updated)
+                        }
+                    }
+                }
+            }
+            Divider()
             // FR-112 (T280): widget-eligibility toggle lives HERE (note
             // level), NOT on the control bar.
             Toggle(isOn: Binding(
@@ -130,6 +172,22 @@ public struct NoteControlsView: View {
             )) {
                 Text("Allow in Widgets")
             }
+        }
+        // T301 (FR-181): keyboard alternatives for the hover-only controls —
+        // ⌥C (next color), ⌥O (next opacity step), ⌥T (next text size). The
+        // buttons stay in the hierarchy (`.hidden()`) so the shortcuts are
+        // registered even while the hover bar is collapsed.
+        .overlay(alignment: .topLeading) {
+            HStack(spacing: 0) {
+                Button("") { cycleNextColor() }
+                    .keyboardShortcut("c", modifiers: .option)
+                Button("") { cycleNextOpacity() }
+                    .keyboardShortcut("o", modifiers: .option)
+                Button("") { cycleNextTextSize() }
+                    .keyboardShortcut("t", modifiers: .option)
+            }
+            .hidden()
+            .accessibilityHidden(true)
         }
     }
 
@@ -225,6 +283,57 @@ public struct NoteControlsView: View {
     private func colorFor(_ key: NoteColorKey) -> Color {
         guard let rgb = key.builtinRGB else { return .gray }
         return Color(red: rgb.red, green: rgb.green, blue: rgb.blue)
+    }
+
+    // MARK: - T301 keyboard alternatives (FR-181)
+
+    /// ⌥C: steps to the next built-in color (wraps).
+    private func cycleNextColor() {
+        let colors = NoteColorKey.allCases.filter { $0 != .custom }
+        guard let current = colors.firstIndex(of: note.colorKey) else {
+            applyColor(colors[0])
+            return
+        }
+        applyColor(colors[(current + 1) % colors.count])
+    }
+
+    private func applyColor(_ key: NoteColorKey) {
+        var updated = note
+        updated.colorKey = key
+        updated.customColor = nil
+        onChanged(updated)
+    }
+
+    /// ⌥O: steps to the next opacity step (wraps).
+    private func cycleNextOpacity() {
+        let steps = NoteAppearance.OpacityBounds.allSteps
+        guard let current = steps.firstIndex(of: note.transparency) else {
+            applyOpacity(steps[0])
+            return
+        }
+        applyOpacity(steps[(current + 1) % steps.count])
+    }
+
+    private func applyOpacity(_ step: Double) {
+        var updated = note
+        updated.transparency = step
+        onChanged(updated)
+    }
+
+    /// ⌥T: steps to the next text size (wraps).
+    private func cycleNextTextSize() {
+        let sizes = NoteAppearance.TextSizeBounds.allSizes
+        guard let current = sizes.firstIndex(of: note.textSize) else {
+            applyTextSize(sizes[0])
+            return
+        }
+        applyTextSize(sizes[(current + 1) % sizes.count])
+    }
+
+    private func applyTextSize(_ size: Int) {
+        var updated = note
+        updated.textSize = size
+        onChanged(updated)
     }
 }
 
