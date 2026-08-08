@@ -68,6 +68,10 @@ public struct LibraryCardGrid: View {
     let openNote: (UUID) -> Void
     let onTrash: (UUID) -> Void
     let onRestore: (UUID) -> Void
+    /// FR-014 (T305): the Trash-scope "Delete Forever" action — the
+    /// permanent-delete path (distinct from `onTrash`; the note must leave
+    /// Trash beyond recovery).
+    let onPermanentlyDelete: (UUID) -> Void
 
     /// FR-002a: card width ≈ 220 pt, height ≈ 160 pt, 12 pt inter-card
     /// spacing.
@@ -87,12 +91,14 @@ public struct LibraryCardGrid: View {
         model: LibraryModel,
         openNote: @escaping (UUID) -> Void,
         onTrash: @escaping (UUID) -> Void = { _ in },
-        onRestore: @escaping (UUID) -> Void = { _ in }
+        onRestore: @escaping (UUID) -> Void = { _ in },
+        onPermanentlyDelete: @escaping (UUID) -> Void = { _ in }
     ) {
         self.model = model
         self.openNote = openNote
         self.onTrash = onTrash
         self.onRestore = onRestore
+        self.onPermanentlyDelete = onPermanentlyDelete
     }
 
     public var body: some View {
@@ -125,7 +131,7 @@ public struct LibraryCardGrid: View {
                                     Button("Move to Trash") { onTrash(card.noteId) }
                                 } else {
                                     Button("Restore") { onRestore(card.noteId) }
-                                    Button("Delete Forever", role: .destructive) { onTrash(card.noteId) }
+                                    Button("Delete Forever", role: .destructive) { onPermanentlyDelete(card.noteId) }
                                 }
                             }
                         }

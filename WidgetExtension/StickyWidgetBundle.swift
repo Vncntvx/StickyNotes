@@ -118,10 +118,11 @@ public enum WidgetDataReader {
 
 // MARK: - Families
 
-/// Small: one user-selected note (FR-111). The selection is stored in App
-/// Group UserDefaults by the `SetSelectedNoteIntent` action (the beta
-/// toolchain ICEs on AppIntentConfiguration with a custom AppEntity; the
-/// intent surface is preserved for actions).
+/// Small: one user-selected note (FR-111). The selection is stored in the
+/// shared App Group store by the app's `WidgetNoteSelection` action (T306)
+/// — the small-selected and medium-todo forms read it at timeline
+/// generation. (The beta toolchain ICEs on AppIntentConfiguration with a
+/// custom AppEntity; the intent surface is preserved for actions.)
 public struct SmallSelectedWidget: Widget {
     public init() {}
     public var body: some WidgetConfiguration {
@@ -147,27 +148,13 @@ public struct SelectedNoteProvider: TimelineProvider {
         SelectedNoteEntry(date: Date(), selectedNoteId: nil)
     }
     public func getSnapshot(in context: Context, completion: @escaping (SelectedNoteEntry) -> Void) {
-        completion(SelectedNoteEntry(date: Date(), selectedNoteId: SelectedNoteStore.read()))
+        completion(SelectedNoteEntry(date: Date(), selectedNoteId: WidgetSelectionStore.read()))
     }
     public func getTimeline(in context: Context, completion: @escaping (Timeline<SelectedNoteEntry>) -> Void) {
         completion(Timeline(
-            entries: [SelectedNoteEntry(date: Date(), selectedNoteId: SelectedNoteStore.read())],
+            entries: [SelectedNoteEntry(date: Date(), selectedNoteId: WidgetSelectionStore.read())],
             policy: .after(Date().addingTimeInterval(15 * 60))
         ))
-    }
-}
-
-/// Device-local selected-note store for the small-selected widget.
-public enum SelectedNoteStore {
-    private static let key = "local.stickynotes.widget.selectedNoteId"
-
-    public static func read() -> UUID? {
-        guard let raw = UserDefaults(suiteName: "group.local.stickynotes.placeholder")?.string(forKey: key) else { return nil }
-        return UUID(uuidString: raw)
-    }
-
-    public static func write(_ id: UUID?) {
-        UserDefaults(suiteName: "group.local.stickynotes.placeholder")?.set(id?.uuidString, forKey: key)
     }
 }
 

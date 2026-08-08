@@ -62,6 +62,11 @@ struct StickyNotesApp: App {
                         },
                         deletionToast: { message in
                             toastPresenter.present(message: message)
+                        },
+                        // FR-009a (T305): deleting a note from the library or
+                        // Trash closes its open window immediately.
+                        onCloseNoteWindows: { noteId in
+                            coordinator?.closeAll(noteId: noteId)
                         }
                     )
                     .overlay(alignment: .top) {
@@ -270,6 +275,7 @@ struct StickyNotesApp: App {
                         try? DockActivationBridge.setDockEnabled(true)
                     }
                     wireGlobalShortcuts()
+                    seedUITestNoteIfRequested()
                 }
             } catch {
                 // FR-165: sanitized logging — code + category only, never
@@ -282,6 +288,36 @@ struct StickyNotesApp: App {
                 await MainActor.run {
                     bootstrapError = BootstrapErrorState.from(error)
                 }
+            }
+        }
+    }
+
+    // MARK: - UITest seeding hook (T305)
+
+    /// Creates a note whose first rich-text block contains the marker passed
+    /// via the `-UITestSeedNote <marker>` launch argument. TEST-ONLY: the
+    /// XCUITest journeys seed content this way because synthetic keyboard
+    /// input (typing/paste) is unreliable on macOS 27 beta; the argument is
+    /// never present in normal launches, and the path is failure-silent
+    /// (FR-011a). Persistence reuses the clipboard-shortcut insert path.
+    private func seedUITestNoteIfRequested() {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let flagIndex = arguments.firstIndex(of: "-UITestSeedNote"),
+              flagIndex + 1 < arguments.count else { return }
+        let marker = arguments[flagIndex + 1]
+        Task {
+            guard let model = self.libraryModel,
+                  let repo = model.environment.persistence.noteRepository else { return }
+            if let id = await model.createBlankNote() {
+                let block = Block(
+                    noteId: id,
+                    kind: .richText,
+                    sortKey: 0,
+                    payload: .richText(.plain(marker)),
+                    lastModifiedDeviceId: AppDevice.current().id
+                )
+                try? await repo.insert(block)
+                await model.reload()
             }
         }
     }
