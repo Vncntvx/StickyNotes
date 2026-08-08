@@ -17,26 +17,63 @@ public struct SettingsView: View {
     @AppStorage("local.stickynotes.showDockIcon") private var showDockIcon = true
     /// The sync composition root (T285) — drives the Sync tab.
     private let syncCoordinator: SyncCoordinator?
+    @State private var selectedTab: SettingsTab = .general
+
+    /// Navigation between the settings sections. A segmented control (not a
+    /// `TabView`) is used so the window stays a plain macOS settings window:
+    /// `TabView` renders its tabs as title-bar toolbar icons in accessory
+    /// windows on macOS 26, which conflicts with the native settings look.
+    public enum SettingsTab: String, CaseIterable, Identifiable {
+        case general
+        case sync
+        case fonts
+        case permissions
+
+        public var id: String { rawValue }
+
+        var label: String {
+            switch self {
+            case .general: return String(localized: "General")
+            case .sync: return String(localized: "Sync")
+            case .fonts: return String(localized: "Fonts")
+            case .permissions: return String(localized: "Permissions")
+            }
+        }
+    }
 
     public init(syncCoordinator: SyncCoordinator? = nil) {
         self.syncCoordinator = syncCoordinator
     }
 
     public var body: some View {
-        TabView {
-            generalTab
-                .tabItem { Label("General", systemImage: "gearshape") }
+        VStack(spacing: 0) {
+            Picker("", selection: $selectedTab) {
+                ForEach(SettingsTab.allCases) { tab in
+                    Text(tab.label).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
 
-            SyncSettingsView(syncCoordinator: syncCoordinator)
-                .tabItem { Label("Sync", systemImage: "icloud.and.arrow.up") }
+            Divider()
 
-            FontPreferenceView()
-                .tabItem { Label("Fonts", systemImage: "textformat") }
-
-            permissionsTab
-                .tabItem { Label("Permissions", systemImage: "lock.shield") }
+            Group {
+                switch selectedTab {
+                case .general:
+                    generalTab
+                case .sync:
+                    SyncSettingsView(syncCoordinator: syncCoordinator)
+                case .fonts:
+                    FontPreferenceView()
+                case .permissions:
+                    permissionsTab
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(width: 460, height: 400)
+        .frame(width: 460)
     }
 
     private var generalTab: some View {
@@ -54,6 +91,9 @@ public struct SettingsView: View {
                 }
             }
         }
+        // Grouped form style: native macOS settings card groups (consistent
+        // with the Sync tab).
+        .formStyle(.grouped)
         .padding(20)
     }
 
@@ -72,6 +112,7 @@ public struct SettingsView: View {
                 .controlSize(.small)
             }
         }
+        .formStyle(.grouped)
         .padding(20)
     }
 }

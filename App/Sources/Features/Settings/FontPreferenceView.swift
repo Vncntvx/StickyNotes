@@ -38,6 +38,9 @@ public struct FontPreferenceView: View {
             }
             .padding(.top, 4)
         }
+        // Grouped form style: native macOS settings card groups (consistent
+        // with the General/Sync tabs).
+        .formStyle(.grouped)
         .padding(20)
     }
 
