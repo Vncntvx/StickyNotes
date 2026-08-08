@@ -95,13 +95,36 @@ public struct BlockInsertionControl: View {
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                     .padding(3)
-                    .background(.regularMaterial, in: Circle())
+                    // 003 T064 (FR-060/FR-061): glass MAY apply to genuinely
+                    // custom interactive controls (plan.md §7 Usage Map).
+                    // System glass auto-degrades under Reduce Transparency
+                    // (SC-015); no glass-on-glass; clear glass is never the
+                    // default. Guarded: macOS 26.0+ availability.
+                    .background(GlassUsagePolicy.customInteractiveControlsMayGlass ? AnyView(glassBackground) : AnyView(circleBackground))
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
             .help("Insert a block")
             .accessibilityLabel("Insert block")
         }
+    }
+
+    /// The glass background (macOS 26.0+ — the deployment floor, so no
+    /// availability guard is needed at compile time; the runtime handles
+    /// Reduce Transparency automatically).
+    @ViewBuilder
+    private var glassBackground: some View {
+        if #available(macOS 26.0, *) {
+            Circle()
+                .fill(.regularMaterial)
+                .glassEffect(.regular, in: Circle())
+        } else {
+            Circle().fill(.regularMaterial)
+        }
+    }
+
+    private var circleBackground: some View {
+        Circle().fill(.regularMaterial)
     }
 
     /// CHK008: visible only when a trigger is active and no IME

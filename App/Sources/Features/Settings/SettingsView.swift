@@ -263,6 +263,12 @@ struct ShortcutRecorderRow: View {
                     if isRecording { stopRecording() } else { startRecording() }
                 }
                 .controlSize(.small)
+                // 003 T066 (001 FR-180b): explicit localized labels + state
+                // for VoiceOver.
+                .accessibilityLabel(isRecording
+                    ? "Cancel recording \(action.displayName) shortcut"
+                    : "Record \(action.displayName) shortcut")
+                .accessibilityValue(isRecording ? "Recording" : "Not recording")
 
                 if currentKey != nil && !isRecording {
                     Button("Clear") {
@@ -274,6 +280,7 @@ struct ShortcutRecorderRow: View {
                         currentKey = nil
                     }
                     .controlSize(.small)
+                    .accessibilityLabel("Clear \(action.displayName) shortcut")
                 }
             }
         }

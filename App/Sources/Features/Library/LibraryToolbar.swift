@@ -115,6 +115,9 @@ final class LibraryToolbarDelegate: NSObject, NSToolbarDelegate {
             item.view = popup
             item.label = String(localized: "Sort")
             item.isBordered = true
+            // 003 T065 (FR-070): secondary items move into system overflow
+            // as the window narrows — sort yields before search/new-note.
+            item.visibilityPriority = .low
             sortPopup = popup
             sortItem = item
             return item
@@ -131,6 +134,8 @@ final class LibraryToolbarDelegate: NSObject, NSToolbarDelegate {
             item.view = control
             item.label = String(localized: "Destination")
             item.isBordered = true
+            // 003 T065 (FR-070): destination overflows before search does.
+            item.visibilityPriority = .low
             destinationControl = control
             destinationItem = item
             return item

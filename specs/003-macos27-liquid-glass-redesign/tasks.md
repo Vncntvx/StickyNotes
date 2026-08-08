@@ -197,18 +197,18 @@ AppTests/   AppUITests/   Documentation/   specs/
 
 ### Tests for User Story 6 (FIRST — must FAIL before implementation) ⚠️
 
-- [ ] T059 [P] [US6] Write system-behavior assertion tests in new `AppTests/SystemBehaviorEnvironmentTests.swift`: custom controls remain understandable under Reduce Transparency / Reduce Motion / Increase Contrast / Show Borders (environment-key-driven appearance assertions; FR-062/063/SC-015); Reduce-Motion governs custom control appear/disappear animations (CHK038) — MUST FAIL
-- [ ] T060 [P] [US6] Add UI tests: Library window scaled 320–1600 pt — column count follows FR-021, secondary toolbar items move into system overflow without compressing content, no duplicated navigation controls (FR-070) — MUST FAIL
-- [ ] T061 [P] [US6] Add keyboard-only workflow UI test: create/search/select/open/delete entirely via keyboard; every important toolbar command reachable from menu bar (SC-017/FR-072); toolbar focus order verified (new → search → sort → destination, CHK004) — MUST FAIL
-- [ ] T062 [P] [US6] Write SC-010/SC-019 glass-usage assertions (code-review style): no decorative glass, no manual blur/gradient/border/shaders emulating Liquid Glass where system behavior exists; glass only on functional/control layer; cards/content surfaces are NOT glass (SC-009) — MUST FAIL
+- [X] T059 [P] [US6] Write system-behavior assertion tests in new `AppTests/SystemBehaviorEnvironmentTests.swift`: custom controls remain understandable under Reduce Transparency / Reduce Motion / Increase Contrast / Show Borders (environment-key-driven appearance assertions; FR-062/063/SC-015); Reduce-Motion governs custom control appear/disappear animations (CHK038) — MUST FAIL
+- [X] T060 [P] [US6] Add UI tests: Library window scaled 320–1600 pt — column count follows FR-021, secondary toolbar items move into system overflow without compressing content, no duplicated navigation controls (FR-070) — MUST FAIL
+- [X] T061 [P] [US6] Add keyboard-only workflow UI test: create/search/select/open/delete entirely via keyboard; every important toolbar command reachable from menu bar (SC-017/FR-072); toolbar focus order verified (new → search → sort → destination, CHK004) — MUST FAIL
+- [X] T062 [P] [US6] Write SC-010/SC-019 glass-usage assertions (code-review style): no decorative glass, no manual blur/gradient/border/shaders emulating Liquid Glass where system behavior exists; glass only on functional/control layer; cards/content surfaces are NOT glass (SC-009) — MUST FAIL
 
 ### Implementation for User Story 6
 
-- [ ] T063 [US6] Integrate guarded platform polish: `visibilityPriority(_:)` (#available macOS 26.1) and `effectIsInteractive` (#available macOS 27.0) where applicable; record usage in `Documentation/toolchain.md` (CI toolchain Xcode 26.x safety)
-- [ ] T064 [US6] Apply `glassEffect(_:in:)` + `GlassEffectContainer` to custom interactive controls per plan.md §7 Usage Map (insertion control, floating controls MAY); NEVER on note content/cards/editor surfaces; no glass-on-glass; clear glass not used as default (FR-060/061)
-- [ ] T065 [US6] Implement narrow-width overflow behavior: secondary toolbar items into system overflow (FR-070); navigation controls never duplicated; cards stay ≥180 pt readable (FR-020)
-- [ ] T066 [US6] VoiceOver pass on all custom controls: card selection, insertion control, sync banner, shortcut recorder — explicit localized labels and states (001 FR-180b); selection/state never color-only (001 FR-044)
-- [ ] T067 [US6] Final native-behavior review: display-scale checks, active/inactive across surfaces, D12 window-title hack cleanup only if low-risk (else record remaining)
+- [X] T063 [US6] Integrate guarded platform polish: `visibilityPriority(_:)` (#available macOS 26.1) and `effectIsInteractive` (#available macOS 27.0) where applicable; record usage in `Documentation/toolchain.md` (CI toolchain Xcode 26.x safety)
+- [X] T064 [US6] Apply `glassEffect(_:in:)` + `GlassEffectContainer` to custom interactive controls per plan.md §7 Usage Map (insertion control, floating controls MAY); NEVER on note content/cards/editor surfaces; no glass-on-glass; clear glass not used as default (FR-060/061)
+- [X] T065 [US6] Implement narrow-width overflow behavior: secondary toolbar items into system overflow (FR-070); navigation controls never duplicated; cards stay ≥180 pt readable (FR-020)
+- [X] T066 [US6] VoiceOver pass on all custom controls: card selection, insertion control, sync banner, shortcut recorder — explicit localized labels and states (001 FR-180b); selection/state never color-only (001 FR-044)
+- [X] T067 [US6] Final native-behavior review: display-scale checks, active/inactive across surfaces, D12 window-title hack cleanup only if low-risk (else record remaining)
 
 **Checkpoint**: US6 fully functional — glass scoping, scaling, keyboard, accessibility, system behaviors verified.
 

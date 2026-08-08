@@ -132,6 +132,17 @@ cannot initialize in this headless session (UI tests require an
 interactive desktop session — environment limitation, not a regression).
 Zero code changes at baseline.
 
+**003 T063 (2026-08-09)**: `glassEffect(_:in:)` applied to the custom
+block-insertion control under a `#available(macOS 26.0, *)` guard (the
+deployment floor — no newer guard needed). `visibilityPriority(_:)`
+(26.1) and `NSGlassEffectView.effectIsInteractive` (27.0) are NOT used:
+the Library toolbar is AppKit `NSToolbar` (item `visibilityPriority`
+property, available since macOS 10.5 — no guard), and the SwiftUI
+`glassEffect` handles interactivity. If a future pass adds SwiftUI
+`ToolbarContent.visibilityPriority`, it MUST be guarded `#available(macOS
+26.1, *)`; `effectIsInteractive` MUST be guarded `#available(macOS 27.0,
+*)` — both stay available for CI's Xcode 26.x.
+
 ## Reconciliation with `tasks.md` T001 / `quickstart.md`
 
 - `tasks.md` T001 says: "Create Xcode workspace with macOS app target `App` and Widget Extension target `WidgetExtension`".
