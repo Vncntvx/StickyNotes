@@ -29,6 +29,10 @@ public struct MenuBarLibraryScene: View {
     /// FR-009a deletion toast presenter hook (T246): receives the localized
     /// deletion outcome message ("Moved to Trash" / "Permanently Deleted").
     let deletionToast: (String) -> Void
+    /// FR-009a (T246/T305): closes any open window(s) of a note the moment
+    /// it is deleted from the library or Trash. Wired to
+    /// `NoteWindowCoordinator.closeAll` by the App layer.
+    let onCloseNoteWindows: (UUID) -> Void
 
     public init(
         model: LibraryModel,
@@ -36,7 +40,8 @@ public struct MenuBarLibraryScene: View {
         openSettings: @escaping () -> Void = {},
         openAbout: @escaping () -> Void = {},
         openHelp: @escaping () -> Void = {},
-        deletionToast: @escaping (String) -> Void = { _ in }
+        deletionToast: @escaping (String) -> Void = { _ in },
+        onCloseNoteWindows: @escaping (UUID) -> Void = { _ in }
     ) {
         self.model = model
         self.openNote = openNote
@@ -44,6 +49,7 @@ public struct MenuBarLibraryScene: View {
         self.openAbout = openAbout
         self.openHelp = openHelp
         self.deletionToast = deletionToast
+        self.onCloseNoteWindows = onCloseNoteWindows
     }
 
     public var body: some View {
@@ -60,10 +66,22 @@ public struct MenuBarLibraryScene: View {
                 Task {
                     if await model.trash(noteId: noteId) != nil {
                         deletionToast(String(localized: "Moved to Trash"))
+                        // FR-009a: an open window closes immediately.
+                        onCloseNoteWindows(noteId)
                     }
                 }
             }, onRestore: { noteId in
                 Task { await model.restore(noteId: noteId) }
+            }, onPermanentlyDelete: { noteId in
+                Task {
+                    // FR-014: Delete Forever removes the note beyond Trash
+                    // recovery (T305 — previously mis-routed to onTrash).
+                    if await model.permanentlyDelete(noteId: noteId) != nil {
+                        deletionToast(String(localized: "Permanently Deleted"))
+                        // FR-009a: an open window closes immediately.
+                        onCloseNoteWindows(noteId)
+                    }
+                }
             })
                 .frame(minWidth: 340, minHeight: 320, idealHeight: 480)
 

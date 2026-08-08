@@ -36,6 +36,9 @@ public struct RichTextView: NSViewRepresentable {
     /// The canonical document currently owned by the model.
     let document: RichTextDocument
     let textSize: CGFloat
+    /// The FR-043 global font preference applied to note text (system font
+    /// when no preference is stored).
+    let fontResolver: NoteFontResolver
     /// Reports a canonical document produced by editing (only supported
     /// attributes survive — FR-053).
     let onCommit: (RichTextDocument) -> Void
@@ -46,11 +49,13 @@ public struct RichTextView: NSViewRepresentable {
     public init(
         document: RichTextDocument,
         textSize: CGFloat,
+        fontResolver: NoteFontResolver = .load(),
         onCommit: @escaping (RichTextDocument) -> Void,
         onFocusChange: @escaping (Bool, Bool) -> Void = { _, _ in }
     ) {
         self.document = document
         self.textSize = textSize
+        self.fontResolver = fontResolver
         self.onCommit = onCommit
         self.onFocusChange = onFocusChange
     }
@@ -72,10 +77,10 @@ public struct RichTextView: NSViewRepresentable {
         textView.isAutomaticSpellingCorrectionEnabled = false
         textView.isAutomaticLinkDetectionEnabled = true
         textView.textContainerInset = NSSize(width: 2, height: 6)
-        textView.font = .systemFont(ofSize: textSize)
+        textView.font = fontResolver.font(size: textSize, for: "")
         textView.delegate = context.coordinator
         textView.autoresizingMask = [.width]
-        context.coordinator.apply(document: document, textSize: textSize, to: textView)
+        context.coordinator.apply(document: document, textSize: textSize, resolver: fontResolver, to: textView)
         return textView
     }
 
@@ -83,9 +88,9 @@ public struct RichTextView: NSViewRepresentable {
         // Push model changes only when the document actually differs (the
         // user is editing — never clobber the live text).
         if textView.string != document.text {
-            context.coordinator.apply(document: document, textSize: textSize, to: textView)
+            context.coordinator.apply(document: document, textSize: textSize, resolver: fontResolver, to: textView)
         } else if textView.font?.pointSize != textSize {
-            textView.font = .systemFont(ofSize: textSize)
+            textView.font = fontResolver.font(size: textSize, for: textView.string)
         }
     }
 
@@ -102,12 +107,12 @@ public struct RichTextView: NSViewRepresentable {
             self.parent = parent
         }
 
-        func apply(document: RichTextDocument, textSize: CGFloat, to textView: NSTextView) {
+        func apply(document: RichTextDocument, textSize: CGFloat, resolver: NoteFontResolver, to textView: NSTextView) {
             isPushing = true
             defer { isPushing = false }
-            textView.font = .systemFont(ofSize: textSize)
+            textView.font = resolver.font(size: textSize, for: document.text)
             textView.string = document.text
-            applyRuns(document, textSize: textSize, to: textView)
+            applyRuns(document, textSize: textSize, resolver: resolver, to: textView)
             textView.undoManager?.removeAllActions()
         }
 
@@ -199,29 +204,41 @@ public struct RichTextView: NSViewRepresentable {
         }
 
         /// Applies the canonical runs as NSAttributedString attributes.
-        private func applyRuns(_ document: RichTextDocument, textSize: CGFloat, to textView: NSTextView) {
+        private func applyRuns(_ document: RichTextDocument, textSize: CGFloat, resolver: NoteFontResolver, to textView: NSTextView) {
             let attributed = NSMutableAttributedString(string: document.text)
             let full = NSRange(location: 0, length: attributed.length)
-            attributed.addAttribute(.font, value: NSFont.systemFont(ofSize: textSize), range: full)
+            attributed.addAttribute(.font, value: resolver.font(size: textSize, for: document.text), range: full)
             let scalars = Array(document.text.unicodeScalars)
             for paragraph in document.paragraphs {
                 for run in paragraph.runs {
                     let start = min(max(run.startScalar, 0), scalars.count)
                     let end = min(max(run.endScalar, start), scalars.count)
                     guard end > start else { continue }
-                    let range = NSRange(location: start, length: end - start)
-                    var font = NSFont.systemFont(ofSize: textSize)
                     var traits: NSFontDescriptor.SymbolicTraits = []
                     if run.marks.contains(.bold) { traits.insert(.bold) }
                     if run.marks.contains(.italic) { traits.insert(.italic) }
-                    if !traits.isEmpty {
-                        let descriptor = font.fontDescriptor.withSymbolicTraits(traits)
-                        font = NSFont(descriptor: descriptor, size: textSize) ?? font
+                    let runText = String(String.UnicodeScalarView(scalars[start..<end]))
+                    // FR-043: apply the primary/fallback families per coverage
+                    // segment so mixed Latin+CJK runs render in both families.
+                    let segments = resolver.segmentedFonts(text: runText, size: textSize, traits: traits)
+                    var segmentScalarOffset = start
+                    for segment in segments {
+                        let segmentScalars = segment.segment.unicodeScalars.count
+                        let segmentStart = min(segmentScalarOffset, scalars.count)
+                        let segmentEnd = min(segmentScalarOffset + segmentScalars, scalars.count)
+                        guard segmentEnd > segmentStart else { continue }
+                        var font = segment.font
+                        if run.marks.contains(.inlineCode) {
+                            font = NSFont.monospacedSystemFont(ofSize: textSize, weight: .regular)
+                        }
+                        attributed.addAttribute(
+                            .font,
+                            value: font,
+                            range: NSRange(location: segmentStart, length: segmentEnd - segmentStart)
+                        )
+                        segmentScalarOffset = segmentEnd
                     }
-                    if run.marks.contains(.inlineCode) {
-                        font = NSFont.monospacedSystemFont(ofSize: textSize, weight: .regular)
-                    }
-                    attributed.addAttribute(.font, value: font, range: range)
+                    let range = NSRange(location: start, length: end - start)
                     if run.marks.contains(.underline) {
                         attributed.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
                     }

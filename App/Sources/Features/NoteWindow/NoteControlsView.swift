@@ -172,6 +172,19 @@ public struct NoteControlsView: View {
             )) {
                 Text("Allow in Widgets")
             }
+            Divider()
+            // FR-110 (T306): pick the note shown by the selected-note
+            // widget forms (small-selected / medium-todo). Note-level like
+            // the other FR-031 actions; keyboard-accessible via the menu.
+            if WidgetNoteSelection.selectedNote() == note.id {
+                Button("Remove from Widget") {
+                    WidgetNoteSelection.setSelectedNote(nil)
+                }
+            } else {
+                Button("Set as Widget Note") {
+                    WidgetNoteSelection.setSelectedNote(note.id)
+                }
+            }
         }
         // T301 (FR-181): keyboard alternatives for the hover-only controls —
         // ⌥C (next color), ⌥O (next opacity step), ⌥T (next text size). The

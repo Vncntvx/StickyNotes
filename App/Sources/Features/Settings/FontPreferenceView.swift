@@ -12,13 +12,10 @@ public struct FontPreferenceView: View {
     @State private var primaryFamily: String = FontPreference.systemDefault.primaryFamily ?? ""
     @State private var fallbackFamily: String = FontPreference.systemDefault.fallbackFamily ?? ""
 
-    private static let key = "local.stickynotes.fontPreference"
-
     public init() {
-        if let data = UserDefaults(suiteName: "group.local.stickynotes.placeholder")?.data(forKey: Self.key),
-           let pref = try? JSONDecoder().decode(FontPreference.self, from: data) {
-            _primaryFamily = State(initialValue: pref.primaryFamily ?? FontPreference.systemDefault.primaryFamily ?? "")
-            _fallbackFamily = State(initialValue: pref.fallbackFamily ?? FontPreference.systemDefault.fallbackFamily ?? "")
+        if let preference = FontPreferenceStore.load() {
+            _primaryFamily = State(initialValue: preference.primaryFamily ?? FontPreference.systemDefault.primaryFamily ?? "")
+            _fallbackFamily = State(initialValue: preference.fallbackFamily ?? FontPreference.systemDefault.fallbackFamily ?? "")
         }
     }
 
@@ -45,12 +42,9 @@ public struct FontPreferenceView: View {
     }
 
     private func persist() {
-        let preference = FontPreference(
+        FontPreferenceStore.save(FontPreference(
             primaryFamily: primaryFamily.isEmpty ? nil : primaryFamily,
             fallbackFamily: fallbackFamily.isEmpty ? nil : fallbackFamily
-        )
-        if let data = try? JSONEncoder().encode(preference) {
-            UserDefaults(suiteName: "group.local.stickynotes.placeholder")?.set(data, forKey: Self.key)
-        }
+        ))
     }
 }

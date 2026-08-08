@@ -194,14 +194,34 @@ jobs:
       - uses: actions/checkout@v4
       - name: Select Xcode
         run: sudo xcode-select -switch /Applications/Xcode_$XCODE_VERSION.app
+      - name: Build for testing (unsigned)
+        run: |
+          xcodebuild build-for-testing \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcpretty
+      # T305: the full UI journeys need a SIGNED app — an unsigned app
+      # cannot write the App Group container on macOS (bootstrap fails and
+      # the library shows the database-error state). Ad-hoc signing embeds
+      # the sandbox/app-groups entitlements without a developer account.
+      - name: Ad-hoc sign app + widget (T305)
+        run: |
+          APP=$(find ~/Library/Developer/Xcode/DerivedData/StickyNotes-*/Build/Products/Debug/StickyNotes.app -maxdepth 0 | head -1)
+          codesign --force --sign - \
+            --entitlements WidgetExtension/WidgetExtension.entitlements \
+            "$APP/Contents/PlugIns/StickyNotesWidget.appex"
+          codesign --force --sign - \
+            --entitlements App/Resources/StickyNotes.entitlements \
+            "$APP"
       - name: XCUITest critical flows
         run: |
-          xcodebuild test \
+          xcodebuild test-without-building \
             -project "$PROJECT" \
             -scheme "$SCHEME" \
             -destination 'platform=macOS' \
             -only-testing:AppUITests/CriticalFlowsUITests \
-            CODE_SIGNING_ALLOWED="$CODE_SIGNING_ALLOWED" \
             | xcpretty
 
   static-warnings:

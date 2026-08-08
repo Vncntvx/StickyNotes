@@ -134,18 +134,34 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: local.stickynotes.app.tests
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/StickyNotes.app/Contents/MacOS/StickyNotes"
         BUNDLE_LOADER: "$(TEST_HOST)"
+        # T305: test bundles need a generated Info.plist so the scheme can
+        # also run signed (ad-hoc) — the full XCUITest journeys require a
+        # signed app whose app-groups entitlement grants the App Group
+        # container.
+        GENERATE_INFOPLIST_FILE: "YES"
     dependencies:
       - target: StickyNotes
+      # T307: the test bundle runs INSIDE the app host process (TEST_HOST);
+      # the host statically contains the StickyCore modules, so the bundle
+      # must NOT link its own copies — linking them produced duplicate class
+      # implementations ("implemented in both ..." objc runtime warnings that
+      # may cause spurious casting failures and mysterious crashes). The
+      # modules stay available for compilation; symbols resolve from the host.
       - package: StickyCore
         product: Domain
+        link: false
       - package: StickyCore
         product: Persistence
+        link: false
       - package: StickyCore
         product: EditorCore
+        link: false
       - package: StickyCore
         product: SystemBridge
+        link: false
       - package: GRDB.swift
         product: GRDB
+        link: false
 
   AppUITests:
     type: bundle.ui-testing
@@ -155,6 +171,9 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: local.stickynotes.app.uitests
+        # T305: generated Info.plist (see AppTests) so the bundle can be
+        # signed ad-hoc when running the full UI journeys.
+        GENERATE_INFOPLIST_FILE: "YES"
     dependencies:
       - target: StickyNotes
 
