@@ -125,13 +125,13 @@ AppTests/   AppUITests/   Documentation/   specs/
 
 ### Tests for User Story 3 (FIRST — must FAIL before implementation) ⚠️
 
-- [ ] T035 [P] [US3] Write UI tests in `AppUITests/CriticalFlowsUITests.swift`: note color control presents exactly the seven-color palette; custom color (001 FR-040) selectable and preserved — MUST FAIL
-- [ ] T036 [P] [US3] Write FR-033 combination tests in `AppTests/PaletteContrastTests.swift`: custom color + transparency + appearance/Increase Contrast combinations auto-adjust foreground to threshold (FR-033), color never rejected — MUST FAIL
+- [X] T035 [P] [US3] Write UI tests in `AppUITests/CriticalFlowsUITests.swift`: note color control presents exactly the seven-color palette; custom color (001 FR-040) selectable and preserved — MUST FAIL
+- [X] T036 [P] [US3] Write FR-033 combination tests in `AppTests/PaletteContrastTests.swift`: custom color + transparency + appearance/Increase Contrast combinations auto-adjust foreground to threshold (FR-033), color never rejected — MUST FAIL
 
 ### Implementation for User Story 3
 
-- [ ] T037 [US3] Update the color picker UI in `App/Sources/Features/NoteWindow/NoteControlsView.swift` to present the seven-color palette with per-appearance values from `NotePalette` (FR-030); old color keys map semantically (紫→薰衣草, FR-032); custom color unchanged
-- [ ] T038 [US3] Light/Dark rendering verification pass (SC-014 partial for palette): every palette color renders with correct per-mode design values; contrast assertions pass end-to-end against real rendering
+- [X] T037 [US3] Update the color picker UI in `App/Sources/Features/NoteWindow/NoteControlsView.swift` to present the seven-color palette with per-appearance values from `NotePalette` (FR-030); old color keys map semantically (紫→薰衣草, FR-032); custom color unchanged
+- [X] T038 [US3] Light/Dark rendering verification pass (SC-014 partial for palette): every palette color renders with correct per-mode design values; contrast assertions pass end-to-end against real rendering
 
 **Checkpoint**: US3 fully functional — restrained palette, per-mode values, migration mapping, custom color intact.
 

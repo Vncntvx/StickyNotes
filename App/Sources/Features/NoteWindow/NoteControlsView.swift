@@ -138,18 +138,15 @@ public struct NoteControlsView: View {
             // opacity step / text size is reachable without pointer hover.
             Menu("Appearance") {
                 Menu("Note Color") {
-                    ForEach(NoteColorKey.allCases.filter { $0 != .custom }, id: \.self) { key in
+                    ForEach(NotePaletteKey.allCases, id: \.self) { key in
                         Button {
-                            var updated = note
-                            updated.colorKey = key
-                            updated.customColor = nil
-                            onChanged(updated)
+                            applyPalette(key)
                         } label: {
                             HStack {
                                 Circle()
-                                    .fill(colorFor(key))
+                                    .fill(paletteColor(for: key))
                                     .frame(width: 10, height: 10)
-                                Text(key.displayName)
+                                Text(paletteDisplayName(for: key))
                             }
                         }
                     }
@@ -222,18 +219,18 @@ public struct NoteControlsView: View {
 
     private var colorPicker: some View {
         Menu {
-            ForEach(NoteColorKey.allCases.filter { $0 != .custom }, id: \.self) { key in
+            // 003 T037 (FR-030): the seven-color palette with per-appearance
+            // design values; old color keys map semantically (紫→薰衣草,
+            // FR-032). Custom colors are preserved (001 FR-040).
+            ForEach(NotePaletteKey.allCases, id: \.self) { key in
                 Button {
-                    var updated = note
-                    updated.colorKey = key
-                    updated.customColor = nil
-                    onChanged(updated)
+                    applyPalette(key)
                 } label: {
                     HStack {
                         Circle()
-                            .fill(colorFor(key))
+                            .fill(paletteColor(for: key))
                             .frame(width: 10, height: 10)
-                        Text(key.displayName)
+                        Text(paletteDisplayName(for: key))
                     }
                 }
             }
@@ -315,6 +312,58 @@ public struct NoteControlsView: View {
         NSApp.keyWindow?.close()
     }
 
+    // MARK: - 003 T037 palette helpers (FR-030/FR-032)
+
+    /// The palette's per-appearance dynamic color (FR-030 design values).
+    private func paletteColor(for key: NotePaletteKey) -> Color {
+        NotePalette.dynamicColor(for: key)
+    }
+
+    /// The stored representation of a palette selection (FR-032):
+    /// - colors with a Domain equivalent map to that stored key
+    ///   (lavender → purple; renders via the palette on read-back);
+    /// - peach has NO Domain built-in (StickyCore zero-change) — it is
+    ///   preserved as a custom color with the palette's designed light
+    ///   value (custom colors are preserved byte-exact per FR-032).
+    private struct PaletteStorage {
+        let colorKey: NoteColorKey
+        let customColorHex: String?
+    }
+
+    private func paletteStorage(for key: NotePaletteKey) -> PaletteStorage {
+        switch key {
+        case .yellow:   return PaletteStorage(colorKey: .yellow, customColorHex: nil)
+        case .peach:    return PaletteStorage(colorKey: .custom, customColorHex: "#FFC9A8")
+        case .pink:     return PaletteStorage(colorKey: .pink, customColorHex: nil)
+        case .green:    return PaletteStorage(colorKey: .green, customColorHex: nil)
+        case .blue:     return PaletteStorage(colorKey: .blue, customColorHex: nil)
+        case .lavender: return PaletteStorage(colorKey: .purple, customColorHex: nil)
+        case .gray:     return PaletteStorage(colorKey: .gray, customColorHex: nil)
+        }
+    }
+
+    /// The localized palette display name.
+    private func paletteDisplayName(for key: NotePaletteKey) -> String {
+        switch key {
+        case .yellow:   return String(localized: "Yellow")
+        case .peach:    return String(localized: "Peach")
+        case .pink:     return String(localized: "Pink")
+        case .green:    return String(localized: "Green")
+        case .blue:     return String(localized: "Blue")
+        case .lavender: return String(localized: "Lavender")
+        case .gray:     return String(localized: "Gray")
+        }
+    }
+
+    /// Applies a palette selection to the note (storage via FR-032 map).
+    private func applyPalette(_ key: NotePaletteKey) {
+        var updated = note
+        let storage = paletteStorage(for: key)
+        updated.colorKey = storage.colorKey
+        updated.customColor = storage.customColorHex
+        onChanged(updated)
+    }
+
     private func colorFor(_ key: NoteColorKey) -> Color {
         guard let rgb = key.builtinRGB else { return .gray }
         return Color(red: rgb.red, green: rgb.green, blue: rgb.blue)
@@ -322,21 +371,16 @@ public struct NoteControlsView: View {
 
     // MARK: - T301 keyboard alternatives (FR-181)
 
-    /// ⌥C: steps to the next built-in color (wraps).
+    /// ⌥C: steps to the next palette color (wraps).
     private func cycleNextColor() {
-        let colors = NoteColorKey.allCases.filter { $0 != .custom }
-        guard let current = colors.firstIndex(of: note.colorKey) else {
-            applyColor(colors[0])
+        let colors = NotePaletteKey.allCases
+        // Find the current palette key from the note's stored key.
+        let currentKey = NotePalette.paletteKey(for: note.colorKey) ?? .yellow
+        guard let current = colors.firstIndex(of: currentKey) else {
+            applyPalette(colors[0])
             return
         }
-        applyColor(colors[(current + 1) % colors.count])
-    }
-
-    private func applyColor(_ key: NoteColorKey) {
-        var updated = note
-        updated.colorKey = key
-        updated.customColor = nil
-        onChanged(updated)
+        applyPalette(colors[(current + 1) % colors.count])
     }
 
     /// ⌥O: steps to the next opacity step (wraps).

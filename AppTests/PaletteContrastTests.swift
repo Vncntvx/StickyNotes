@@ -134,4 +134,42 @@ import Domain
         #expect(NotePaletteKey.allCases.map(\.rawValue).sorted() ==
                 ["blue", "gray", "green", "lavender", "peach", "pink", "yellow"])
     }
+
+    // MARK: - 003 T036 (FR-033): custom + transparency + appearance combos
+
+    @Test
+    func customColorWithTransparencyAutoAdjustsForeground() {
+        // FR-033: a custom color + transparency that would fall below the
+        // threshold must AUTO-ADJUST the foreground — the color is never
+        // rejected.
+        let custom = Note(
+            colorKey: .custom,
+            customColor: "#808080",   // mid-gray: borderline with white/black
+            transparency: 0.4,        // minimum opacity over the desktop
+            lastModifiedDeviceId: UUID(uuidString: "d0000000-0000-4000-8000-0000000000d1")!
+        )
+        let projection = NoteAppearance.projecting(from: custom)
+        // The Domain projection auto-picks black or white and the result
+        // meets the threshold at the effective composited background.
+        #expect(projection.meetsMinimumContrast,
+                "custom color + transparency must auto-adjust, never reject (FR-033)")
+    }
+
+    @Test
+    func customColorNeverRejectedAcrossAppearances() {
+        // FR-033: no "custom color + appearance/Increase Contrast"
+        // combination is rejected — the foreground adjusts instead.
+        let custom = Note(
+            colorKey: .custom,
+            customColor: "#FF6B6B",
+            transparency: 1.0,
+            lastModifiedDeviceId: UUID(uuidString: "d0000000-0000-4000-8000-0000000000d2")!
+        )
+        // ReadableTheme.foreground renders a valid (non-clear) color for
+        // the custom note — adjustment, not rejection.
+        #expect(ReadableTheme.foreground(for: custom) != Color.clear)
+        #expect(!ReadableTheme.customColorFailsContrast(custom) ||
+                NoteAppearance.projecting(from: custom).meetsMinimumContrast,
+                "any failing combination adjusts rather than rejects (FR-033)")
+    }
 }

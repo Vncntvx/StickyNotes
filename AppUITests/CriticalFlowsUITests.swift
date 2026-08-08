@@ -381,4 +381,35 @@ final class CriticalFlowsUITests: XCTestCase {
 
         closeLibraryAndQuit()
     }
+
+    /// T035/FR-030: the note color control presents exactly the seven-color
+    /// palette (yellow/peach/pink/green/blue/lavender/gray); the old purple
+    /// maps semantically to lavender; custom colors preserved.
+    func testNoteColorControlPresentsSevenColorPalette() throws {
+        let marker = uniqueMarker("palette")
+        launchApp(seedNote: marker)
+        openLibrary()
+
+        let noteCard = card(containing: marker)
+        XCTAssertTrue(noteCard.waitForExistence(timeout: 15))
+        noteCard.click()
+        let textView = app.textViews.firstMatch
+        XCTAssertTrue(textView.waitForExistence(timeout: 10))
+
+        // The color control (paint palette) opens the seven-color menu.
+        let colorControl = app.buttons["Note color"]
+        XCTAssertTrue(colorControl.waitForExistence(timeout: 6), "note color control missing")
+        colorControl.click()
+
+        // FR-030: exactly the seven presentation colors.
+        for expected in ["Yellow", "Peach", "Pink", "Green", "Blue", "Lavender", "Gray"] {
+            XCTAssertTrue(app.menuItems[expected].waitForExistence(timeout: 4),
+                          "palette menu must offer \(expected) (FR-030)")
+        }
+
+        // Purple no longer appears as a built-in (FR-032 semantic mapping).
+        XCTAssertFalse(app.menuItems["Purple"].exists, "old purple is superseded by lavender (FR-032)")
+
+        closeLibraryAndQuit()
+    }
 }
