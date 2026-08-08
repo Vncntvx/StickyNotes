@@ -233,6 +233,49 @@ public enum VaultBootstrapService {
 
 public extension VaultBootstrapService {
 
+    /// Opens a REMOTE bootstrap fetched during the join flow (T007, plan
+    /// §Join flow): parse → key-confirmation (wrong password fails closed,
+    /// distinguishable from vault-not-found) → optional vaultId context
+    /// check (wrong-vault fails closed). Reuses the verified `openVault`
+    /// internals — no parallel verification path.
+    ///
+    /// - Parameters:
+    ///   - remoteBootstrap: The bootstrap object fetched from the remote
+    ///     (raw wire bytes).
+    ///   - password: The synchronization password entered by the user.
+    ///   - expectedVaultId: The locally-retained `VaultConfiguration.vaultId`
+    ///     when one exists (nil for a device with no prior config). A
+    ///     mismatch fails closed with `.credentials(.wrongVault)`.
+    /// - Returns: The unwrapped master key.
+    static func openRemoteBootstrap(
+        remoteBootstrap wire: Data,
+        password: String,
+        expectedVaultId: UUID?
+    ) async throws -> SymmetricKey {
+        // Parse + schema/format validation (fail closed on corrupt data).
+        let bootstrap = try VaultBootstrap.fromCanonicalJSON(wire)
+        return try await openRemoteBootstrap(
+            remoteBootstrap: bootstrap,
+            password: password,
+            expectedVaultId: expectedVaultId
+        )
+    }
+
+    /// Opens a REMOTE bootstrap fetched during the join flow (T007). Same
+    /// semantics as the wire-bytes variant, for callers that already parsed.
+    static func openRemoteBootstrap(
+        remoteBootstrap bootstrap: VaultBootstrap,
+        password: String,
+        expectedVaultId: UUID?
+    ) async throws -> SymmetricKey {
+        // Wrong-vault context check BEFORE any key derivation: a bootstrap
+        // from a different vault must fail closed without touching anything.
+        if let expected = expectedVaultId {
+            try checkBootstrap(bootstrap, matches: expected)
+        }
+        return try await openVault(bootstrap, password: password)
+    }
+
     /// Checks whether a fetched bootstrap belongs to the locally-configured
     /// vault. Throws `.credentials(.wrongVault)` on mismatch. Does NOT
     /// modify any local or remote data.

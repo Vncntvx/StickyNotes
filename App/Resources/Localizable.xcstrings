@@ -3605,6 +3605,329 @@
         }
       }
     },
+    "Create new vault": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create new vault"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "创建新保险库"
+          }
+        }
+      }
+    },
+    "Join existing vault": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Join existing vault"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "加入现有保险库"
+          }
+        }
+      }
+    },
+    "Join Existing Vault": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Join Existing Vault"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "加入现有保险库"
+          }
+        }
+      }
+    },
+    "Join Existing Vault…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Join Existing Vault…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "加入现有保险库…"
+          }
+        }
+      }
+    },
+    "Joins a vault created on another Mac. Your local notes are preserved.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joins a vault created on another Mac. Your local notes are preserved."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "加入在另一台 Mac 上创建的保险库。本地便笺将被保留。"
+          }
+        }
+      }
+    },
+    "Vault locator format is invalid (expected 32 hex characters).": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault locator format is invalid (expected 32 hex characters)."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保险库定位符格式无效（应为 32 位十六进制字符）。"
+          }
+        }
+      }
+    },
+    "Vault locator": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault locator"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保险库定位符"
+          }
+        }
+      }
+    },
+    "Import from file…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import from file…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从文件导入…"
+          }
+        }
+      }
+    },
+    "Export Sync Profile…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export Sync Profile…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "导出同步配置…"
+          }
+        }
+      }
+    },
+    "Choose a sync profile exported from another Mac.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a sync profile exported from another Mac."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择从另一台 Mac 导出的同步配置。"
+          }
+        }
+      }
+    },
+    "Sync profile imported. Enter the vault password to join.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync profile imported. Enter the vault password to join."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同步配置已导入。输入保险库密码即可加入。"
+          }
+        }
+      }
+    },
+    "This file is not a valid sync profile (unsupported or corrupted).": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file is not a valid sync profile (unsupported or corrupted)."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "该文件不是有效的同步配置（版本不受支持或已损坏）。"
+          }
+        }
+      }
+    },
+    "Joined the existing vault and completed the first sync.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joined the existing vault and completed the first sync."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已加入现有保险库并完成首次同步。"
+          }
+        }
+      }
+    },
+    "Could not join the vault:": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not join the vault:"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法加入保险库："
+          }
+        }
+      }
+    },
+    "Save a sync profile to join this vault from another Mac.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save a sync profile to join this vault from another Mac."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存同步配置，以便从另一台 Mac 加入此保险库。"
+          }
+        }
+      }
+    },
+    "Sync profile exported. No credentials or note content are included.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync profile exported. No credentials or note content are included."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同步配置已导出。其中不包含任何凭据或便笺内容。"
+          }
+        }
+      }
+    },
+    "Could not export the sync profile.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not export the sync profile."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法导出同步配置。"
+          }
+        }
+      }
+    },
+    "Synchronization mode": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Synchronization mode"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同步模式"
+          }
+        }
+      }
+    },
+    "Sync profile origin device:": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync profile origin device:"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同步配置来源设备："
+          }
+        }
+      }
+    },
     "Confirm vault password": {
       "extractionState": "manual",
       "localizations": {
