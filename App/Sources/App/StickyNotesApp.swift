@@ -467,7 +467,7 @@ struct StickyNotesApp: App {
             return
         }
         let window = NSWindow(
-            contentRect: NSRect(x: 300, y: 300, width: 480, height: 540),
+            contentRect: NSRect(x: 300, y: 300, width: 520, height: 400),
             styleMask: [.titled, .closable, .resizable],
             backing: .buffered,
             defer: false
@@ -478,6 +478,9 @@ struct StickyNotesApp: App {
         window.contentView = NSHostingView(
             rootView: SettingsView(syncCoordinator: environment.syncCoordinator)
         )
+        // 003 T049 (FR-051): panel height fits content (the TabView sizes
+        // itself; the fallback window adapts rather than forcing a canvas).
+        window.setContentSize(window.contentView?.fittingSize ?? NSSize(width: 520, height: 400))
         window.center()
         window.makeKeyAndOrderFront(nil)
         settingsWindow = window

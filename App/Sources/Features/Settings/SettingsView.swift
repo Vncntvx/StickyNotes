@@ -54,34 +54,24 @@ public struct SettingsView: View {
     }
 
     public var body: some View {
-        VStack(spacing: 0) {
-            Picker("", selection: $selectedTab) {
-                ForEach(SettingsTab.allCases) { tab in
-                    Text(tab.label).tag(tab)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-
-            Divider()
-
-            Group {
-                switch selectedTab {
-                case .general:
-                    generalTab
-                case .sync:
-                    SyncSettingsView(syncCoordinator: syncCoordinator)
-                case .fonts:
-                    FontPreferenceView()
-                case .permissions:
-                    permissionsTab
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // 003 T044 (FR-050): native toolbar-style tab navigation (macOS
+        // 14+ TabView) replaces the segmented control — System Settings
+        // style. The four panels fit their content (FR-051).
+        TabView(selection: $selectedTab) {
+            generalTab
+                .tabItem { Label("General", systemImage: "gearshape") }
+                .tag(SettingsTab.general)
+            SyncSettingsView(syncCoordinator: syncCoordinator)
+                .tabItem { Label("Sync", systemImage: "arrow.triangle.2.circlepath") }
+                .tag(SettingsTab.sync)
+            FontPreferenceView()
+                .tabItem { Label("Fonts", systemImage: "textformat") }
+                .tag(SettingsTab.fonts)
+            permissionsTab
+                .tabItem { Label("Permissions", systemImage: "lock") }
+                .tag(SettingsTab.permissions)
         }
-        .frame(width: 460)
+        .frame(minWidth: 480, idealWidth: 520)
     }
 
     private var generalTab: some View {
@@ -114,11 +104,23 @@ public struct SettingsView: View {
                         permissionActionButtons(for: .screenRecording)
                     }
                 }
+                // 003 T048 (FR-056): why it's needed + the dependent
+                // feature, in the user's own terms.
+                LabeledContent("Used for") {
+                    Text("Capturing screen regions and windows into new notes")
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.trailing)
+                }
                 LabeledContent("Accessibility") {
                     HStack(spacing: 8) {
                         statusLabel(accessibilityPermissionStatus)
                         permissionActionButtons(for: .accessibility)
                     }
+                }
+                LabeledContent("Used for") {
+                    Text("Advanced note actions (not currently required — optional)")
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.trailing)
                 }
                 if let accessibilityRequestResult {
                     Label(accessibilityRequestResult, systemImage: "info.circle")
@@ -127,6 +129,11 @@ public struct SettingsView: View {
                 }
             } header: {
                 Text("Permissions are requested only when you use the related feature (FR-131).")
+            } footer: {
+                // Constitution VI / FR-056: unused permissions are
+                // optional, never presented as mandatory.
+                Text("Optional: you can use Sticky Notes fully without granting either permission.")
+                    .font(.caption)
             }
         }
         .formStyle(.grouped)

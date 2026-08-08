@@ -2,52 +2,78 @@ import SwiftUI
 import AppKit
 import Domain
 
-// MARK: - FontPreferenceView (T172, FR-043)
+// MARK: - FontPreferenceView (003 T047, FR-055)
 //
-// Per tasks.md T172 and spec FR-043: a global font preference with Chinese +
-// English fallback (the Domain `FontPreference` model). Primary (Latin)
-// family + fallback (CJK) family, persisted via App Group UserDefaults.
+// Per tasks.md T047 and spec FR-055: a SINGLE user-facing "note font"
+// concept — one family picker + automatic system fallback for CJK —
+// instead of implementation typography terms ("English font"/"Chinese
+// font"). The storage key is unchanged (001 FR-043); the default aligns
+// with macOS system typography; the preview is meaningfully bilingual
+// (Latin + CJK mixed, FR-055).
 
 public struct FontPreferenceView: View {
-    @State private var primaryFamily: String = FontPreference.systemDefault.primaryFamily ?? ""
-    @State private var fallbackFamily: String = FontPreference.systemDefault.fallbackFamily ?? ""
+    @State private var noteFontFamily: String = Self.currentFamily
+    /// 003 T043 (CHK031): a save failure surfaces as a non-blocking
+    /// localized notice; user data is never overwritten (the store
+    /// validates before writing) and the app continues normally.
+    @State private var saveNotice: String?
+
+    private static var currentFamily: String {
+        FontPreferenceStore.load()?.primaryFamily ?? FontPreference.systemDefault.primaryFamily ?? ""
+    }
 
     public init() {
-        if let preference = FontPreferenceStore.load() {
-            _primaryFamily = State(initialValue: preference.primaryFamily ?? FontPreference.systemDefault.primaryFamily ?? "")
-            _fallbackFamily = State(initialValue: preference.fallbackFamily ?? FontPreference.systemDefault.fallbackFamily ?? "")
-        }
+        _noteFontFamily = State(initialValue: Self.currentFamily)
     }
 
     public var body: some View {
         Form {
-            Text("Global font preference. Chinese text uses the fallback family automatically (FR-043).")
+            Text("The note font applies to all notes. Chinese text uses a matching system font automatically.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
-            TextField("English font", text: $primaryFamily)
-                .onChange(of: primaryFamily) { _, _ in persist() }
+            // FR-055: ONE "note font" field (no implementation typography
+            // terms). The family name persists under the unchanged key.
+            TextField("Note font", text: $noteFontFamily)
+                .onChange(of: noteFontFamily) { _, _ in persist() }
 
-            TextField("Chinese font", text: $fallbackFamily)
-                .onChange(of: fallbackFamily) { _, _ in persist() }
-
-            HStack {
-                Text("Aa 中文 Preview")
-                    .font(.custom(primaryFamily, size: 15, relativeTo: .body))
+            // FR-055: meaningful bilingual live preview (Latin + CJK
+            // rendered together with the system fallback).
+            HStack(spacing: 8) {
+                Text(FontPreferenceUI.bilingualPreviewSample)
+                    .font(.custom(noteFontFamily, size: 15, relativeTo: .body))
                 Spacer()
+                Text("Preview")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             .padding(.top, 4)
+
+            if let saveNotice {
+                Label(saveNotice, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
         }
-        // Grouped form style: native macOS settings card groups (consistent
-        // with the General/Sync tabs).
         .formStyle(.grouped)
         .padding(20)
     }
 
     private func persist() {
-        FontPreferenceStore.save(FontPreference(
-            primaryFamily: primaryFamily.isEmpty ? nil : primaryFamily,
-            fallbackFamily: fallbackFamily.isEmpty ? nil : fallbackFamily
-        ))
+        // FR-055: the stored value keeps the primary-family slot; the
+        // fallback stays system-provided (nil = system default).
+        let preference = FontPreference(
+            primaryFamily: noteFontFamily.isEmpty ? nil : noteFontFamily,
+            fallbackFamily: FontPreferenceStore.load()?.fallbackFamily ?? FontPreference.systemDefault.fallbackFamily
+        )
+        // 003 T043 (CHK031): validate BEFORE writing — a failed encode must
+        // never overwrite the stored preference; surface non-blockingly.
+        guard let data = try? JSONEncoder().encode(preference) else {
+            saveNotice = String(localized: "Could not save the font preference. Your existing preference is unchanged.")
+            return
+        }
+        FontPreferenceStore.save(preference)
+        _ = data
+        saveNotice = nil
     }
 }

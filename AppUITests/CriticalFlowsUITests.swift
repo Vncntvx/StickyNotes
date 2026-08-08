@@ -412,4 +412,29 @@ final class CriticalFlowsUITests: XCTestCase {
 
         closeLibraryAndQuit()
     }
+
+    /// T040/FR-050: Settings uses native toolbar-style tab navigation with
+    /// four panels (General/Sync/Fonts/Permissions).
+    func testSettingsFourPanelNavigation() throws {
+        launchApp()
+        openLibrary()
+
+        // Open Settings from the menu bar.
+        let settingsMenu = app.menuBars.firstMatch.menuItems["Settings…"]
+        XCTAssertTrue(settingsMenu.waitForExistence(timeout: 6), "Settings menu command missing")
+        settingsMenu.click()
+
+        let settingsWindow = app.windows["Settings"]
+        XCTAssertTrue(settingsWindow.waitForExistence(timeout: 10), "Settings window did not open")
+
+        // The four panels are reachable as toolbar-style tabs.
+        for panel in ["General", "Sync", "Fonts", "Permissions"] {
+            let tab = settingsWindow.buttons[panel].exists
+                ? settingsWindow.buttons[panel]
+                : settingsWindow.radioButtons[panel]
+            XCTAssertTrue(tab.exists, "Settings tab \(panel) missing (FR-050)")
+        }
+
+        closeLibraryAndQuit()
+    }
 }

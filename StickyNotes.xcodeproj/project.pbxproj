@@ -58,6 +58,7 @@
 		6FE48B5A191FC26F0037E458 /* BlockInsertionControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AECAD8D616ADC87F351EB3C /* BlockInsertionControl.swift */; };
 		742DF23738444198A5DF7D99 /* AboutReachabilityIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D058524C9FC6A00A4D239A21 /* AboutReachabilityIntegrationTests.swift */; };
 		746FC7C8CBCAD623A384C37C /* EmptyLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50162E9CA34419A4324617FD /* EmptyLibraryView.swift */; };
+		7A04F1CFB86DF2AE3105ADC5 /* SettingsPolicies.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3A7B3718B04AC7F567177D8 /* SettingsPolicies.swift */; };
 		7C9122123385CD9B567836BB /* ReadableTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95A65C6ECB5EC56D74D9BFB2 /* ReadableTheme.swift */; };
 		7E1EA87F46301D09B17960E5 /* LibrarySearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B0561D9ACF463C89D89F9D7 /* LibrarySearchView.swift */; };
 		80F60F8A48F740237EBB73A0 /* TrashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D462CEF28D63AA9A3EF562BE /* TrashView.swift */; };
@@ -238,6 +239,7 @@
 		AB87FC6A1C0021CB9DD4BA00 /* ScopedAccessibilityLabelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScopedAccessibilityLabelsTests.swift; sourceTree = "<group>"; };
 		AB9FE63191E1934E75111E80 /* FontPreferenceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FontPreferenceView.swift; sourceTree = "<group>"; };
 		B2F91B1246693F0D0CE9D112 /* TodoCodeFileRefIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoCodeFileRefIntegrationTests.swift; sourceTree = "<group>"; };
+		B3A7B3718B04AC7F567177D8 /* SettingsPolicies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPolicies.swift; sourceTree = "<group>"; };
 		B7739B6E2926F4062557BD94 /* FontPreferenceApplicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FontPreferenceApplicationTests.swift; sourceTree = "<group>"; };
 		B989CFC1B772DCC1FD5E74F6 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		BAF355B8CB6597A934B62701 /* DeepLinkRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinkRouter.swift; sourceTree = "<group>"; };
@@ -403,6 +405,7 @@
 			isa = PBXGroup;
 			children = (
 				AB9FE63191E1934E75111E80 /* FontPreferenceView.swift */,
+				B3A7B3718B04AC7F567177D8 /* SettingsPolicies.swift */,
 				B989CFC1B772DCC1FD5E74F6 /* SettingsView.swift */,
 				057AD9F7C0E332D507AD2DF1 /* SyncSettingsView.swift */,
 			);
@@ -825,6 +828,7 @@
 				070309D43C0778D100147E4A /* RichTextView.swift in Sources */,
 				B2E24EF4CDD2A2C3561F71BF /* ScreenshotBlockView.swift in Sources */,
 				02CAAD5AA98EC60B5D30BC25 /* ScreenshotViewer.swift in Sources */,
+				7A04F1CFB86DF2AE3105ADC5 /* SettingsPolicies.swift in Sources */,
 				01F69423C2CB3F77ACBA69DA /* SettingsView.swift in Sources */,
 				C12E94117D70DE456E689026 /* StickyNotesApp.swift in Sources */,
 				085AE51FE299BCD99A395279 /* SyncAttentionBanner.swift in Sources */,
@@ -854,7 +858,7 @@
 /* Begin PBXTargetDependency section */
 		023059DFD5F7CABCA47FBFA2 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			productRef = "TEMP_A76CEB81-1A48-4BF5-80C0-6F6994061FE6" /* SystemBridge */;
+			productRef = "TEMP_9BA58FEF-C9F2-480B-A4A1-A20434AC6E18" /* SystemBridge */;
 		};
 		208B5F7C95E524C074BFEA21 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -863,7 +867,7 @@
 		};
 		2CCA10F60EAE0ABC186D9562 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			productRef = "TEMP_89C9E699-EE9B-4022-B41F-ED148DBB444D" /* GRDB */;
+			productRef = "TEMP_864F2B83-F66C-4290-8AD3-E13E19644092" /* GRDB */;
 		};
 		46F33D36B2BAC3740EE896F7 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -872,15 +876,15 @@
 		};
 		7C31425EBA1B9D2B171A038D /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			productRef = "TEMP_11FAB601-FA78-4DA5-A8FC-19D31B530FC9" /* Domain */;
+			productRef = "TEMP_04D0FF96-E0B1-4483-BE1B-6D0A5192DAD0" /* Domain */;
 		};
 		BEAF6103BFDCA24A3D04399C /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			productRef = "TEMP_5CC0B31A-EBDE-487C-976B-C21157B5BD37" /* Persistence */;
+			productRef = "TEMP_AD8FA3DB-67DB-4B41-8D7D-3762C058593C" /* Persistence */;
 		};
 		E955A8F681F660898712CB65 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			productRef = "TEMP_1560D7AF-9B93-4B53-868B-0AAC9C9475CA" /* EditorCore */;
+			productRef = "TEMP_7021018C-42A5-43CE-ACDD-7680F6A91933" /* EditorCore */;
 		};
 		F6D75B224BD1ABAD7662B8FC /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -1289,26 +1293,26 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = Domain;
 		};
-		"TEMP_11FAB601-FA78-4DA5-A8FC-19D31B530FC9" /* Domain */ = {
+		"TEMP_04D0FF96-E0B1-4483-BE1B-6D0A5192DAD0" /* Domain */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = Domain;
 		};
-		"TEMP_1560D7AF-9B93-4B53-868B-0AAC9C9475CA" /* EditorCore */ = {
+		"TEMP_7021018C-42A5-43CE-ACDD-7680F6A91933" /* EditorCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = EditorCore;
 		};
-		"TEMP_5CC0B31A-EBDE-487C-976B-C21157B5BD37" /* Persistence */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = Persistence;
-		};
-		"TEMP_89C9E699-EE9B-4022-B41F-ED148DBB444D" /* GRDB */ = {
+		"TEMP_864F2B83-F66C-4290-8AD3-E13E19644092" /* GRDB */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 0A7913A0291CE7CDB8AEF30F /* XCRemoteSwiftPackageReference "GRDB.swift" */;
 			productName = GRDB;
 		};
-		"TEMP_A76CEB81-1A48-4BF5-80C0-6F6994061FE6" /* SystemBridge */ = {
+		"TEMP_9BA58FEF-C9F2-480B-A4A1-A20434AC6E18" /* SystemBridge */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = SystemBridge;
+		};
+		"TEMP_AD8FA3DB-67DB-4B41-8D7D-3762C058593C" /* Persistence */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Persistence;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

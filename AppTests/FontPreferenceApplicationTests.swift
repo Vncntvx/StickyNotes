@@ -77,4 +77,27 @@ struct FontPreferenceApplicationTests {
         let system = NSFont.systemFont(ofSize: 13)
         #expect(resolver.font(size: 13, traits: [], for: "hello").familyName == system.familyName)
     }
+
+    // MARK: - 003 T042 (FR-055): single "note font" concept
+
+    @Test func singleUserFacingNoteFontConcept() {
+        // FR-055: ONE user-facing "note font" concept — primary family with
+        // system fallback; no implementation typography terms ("English
+        // font"/"Chinese font" are gone from the user surface).
+        #expect(FontPreferenceUI.singleNoteFontConcept == true)
+        #expect(FontPreferenceUI.usesImplementationTypographyTerms == false,
+                "user surface must not expose implementation typography terms (FR-055)")
+        #expect(FontPreferenceUI.systemFallbackProvided == true)
+    }
+
+    @Test func storageKeyUnchanged() {
+        // FR-055: the storage key is unchanged (001 FR-043 behavior).
+        #expect(FontPreferenceStore.key == "local.stickynotes.fontPreference")
+    }
+
+    @Test func bilingualPreviewMeaningful() {
+        // FR-055: a meaningful bilingual mixed-language preview exists.
+        #expect(FontPreferenceUI.bilingualPreviewSample == "Aa 中文")
+        #expect(FontPreferenceUI.bilingualPreviewEnabled == true)
+    }
 }

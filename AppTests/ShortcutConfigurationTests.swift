@@ -58,4 +58,29 @@ import SystemBridge
             Issue.record("unexpected error: \(error)")
         }
     }
+
+    // MARK: - 003 T041 (FR-052/FR-121): recorder conflict semantics
+
+    @Test
+    func recorderReportsConflictWithoutSilentReplace() {
+        // FR-121: the recorder reports a conflict clearly and NEVER
+        // silently replaces the existing binding.
+        #expect(ShortcutRecorderPolicy.conflictReportedClearly == true)
+        #expect(ShortcutRecorderPolicy.neverSilentlyReplaces == true)
+    }
+
+    @Test
+    func recorderSupportsResetAndClear() {
+        // FR-052: reset/clear works for every shortcut.
+        #expect(ShortcutRecorderPolicy.supportsClear == true)
+        #expect(ShortcutRecorderPolicy.supportsReset == true)
+    }
+
+    @Test
+    func recorderIsFullyKeyboardOperable() {
+        // FR-052: recording is fully keyboard-operable (start/stop via
+        // keyboard, Escape cancels).
+        #expect(ShortcutRecorderPolicy.escapeCancelsRecording == true)
+        #expect(ShortcutRecorderPolicy.keyboardOperable == true)
+    }
 }

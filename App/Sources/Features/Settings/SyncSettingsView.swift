@@ -200,9 +200,18 @@ public struct SyncSettingsView: View {
                     }
                     .help("Saves a sync profile for another Mac. Contains no credentials, keys, or note content.")
                 } else {
+                    // 003 T050 (FR-054 + clarify 4, CHK006/CHK033): the
+                    // FIRST-configuration page presents BOTH initial-setup
+                    // paths — configure a new repository OR join an existing
+                    // vault — so joining is discoverable without an advanced
+                    // area.
                     Button("Configure Sync…") {
                         showConfigureSheet = true
                     }
+                    Button("Join Existing Vault…") {
+                        showJoinSheet = true
+                    }
+                    .help("Joins a vault created on another Mac. Your local notes are preserved.")
                 }
 
                 // FR-163: unrecoverable-password warning.

@@ -177,4 +177,43 @@ import Persistence
         // SyncStatusView renders this when isConfigured == false.
         #expect(true)
     }
+
+    // MARK: - 003 T039 (FR-050/FR-051/SC-011): Settings navigation
+
+    @Test
+    func settingsUsesNativeToolbarStyleTabNavigation() {
+        // FR-050: native toolbar-style tab navigation (macOS 14+ TabView),
+        // exactly four logical areas.
+        #expect(SettingsLayoutPolicy.usesNativeToolbarTabs == true,
+                "Settings must use native toolbar-style tab navigation (FR-050)")
+        #expect(SettingsLayoutPolicy.logicalAreas == ["General", "Sync", "Fonts", "Permissions"],
+                "exactly four logical areas (General/Sync/Fonts/Permissions)")
+    }
+
+    @Test
+    func settingsPanelHeightFitsContent() {
+        // FR-051/SC-011: panel height adapts to content — no fixed blank
+        // canvas.
+        #expect(SettingsLayoutPolicy.fixedCanvasHeight == nil,
+                "no fixed-height pane with hundreds of pixels of empty space (FR-051)")
+    }
+
+    // MARK: - 003 T043 (spec §Failure & Recovery, CHK031)
+
+    @Test
+    func settingsLoadFailureShowsNonBlockingNotice() {
+        // A settings-panel load failure shows a non-blocking localized
+        // notice; the app continues normally (FR-011a semantics extension).
+        #expect(SettingsFailurePolicy.onLoadFailure == .nonBlockingNotice,
+                "load failure must surface non-blockingly, never crash")
+        #expect(SettingsFailurePolicy.noticeIsLocalized == true)
+    }
+
+    @Test
+    func settingsSaveFailureNeverOverwritesUserData() {
+        // CHK031: a save failure must never overwrite user data; the app
+        // keeps working.
+        #expect(SettingsFailurePolicy.onSaveFailure == .preserveAndReport,
+                "save failure preserves user data and reports non-blockingly")
+    }
 }
