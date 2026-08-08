@@ -222,13 +222,13 @@ AppTests/   AppUITests/   Documentation/   specs/
 
 ### Tests for User Story 7 (FIRST — must FAIL before implementation) ⚠️
 
-- [ ] T068 [P] [US7] Write migration fixture test in new `AppTests/MigrationCompatibilityTests.swift`: 001 schema fixtures (v1/v2, old six-color + custom-color notes + Trash notes + blocks) open in new UI with all content/color/opacity/font-size/pin/window-position preserved (FR-090/SC-020/SC-025) — MUST FAIL until fixture-verified
-- [ ] T069 [P] [US7] Write old-vault sync-config fixture test in `AppTests/SyncCompositionTests.swift`: existing repo config, encrypted data, and unlock semantics unchanged after upgrade; no re-entry of repo config required (001 FR-150/154/162a) — MUST FAIL
-- [ ] T070 [P] [US7] Write preservation tests: global shortcuts and font preference survive upgrade (`AppTests/ShortcutConfigurationTests.swift`, `AppTests/FontPreferenceApplicationTests.swift`); screen-recording/accessibility permission states preserved — no re-request, no lost known state (FR-090) — MUST FAIL
+- [X] T068 [P] [US7] Write migration fixture test in new `AppTests/MigrationCompatibilityTests.swift`: 001 schema fixtures (v1/v2, old six-color + custom-color notes + Trash notes + blocks) open in new UI with all content/color/opacity/font-size/pin/window-position preserved (FR-090/SC-020/SC-025) — MUST FAIL until fixture-verified
+- [X] T069 [P] [US7] Write old-vault sync-config fixture test in `AppTests/SyncCompositionTests.swift`: existing repo config, encrypted data, and unlock semantics unchanged after upgrade; no re-entry of repo config required (001 FR-150/154/162a) — MUST FAIL
+- [X] T070 [P] [US7] Write preservation tests: global shortcuts and font preference survive upgrade (`AppTests/ShortcutConfigurationTests.swift`, `AppTests/FontPreferenceApplicationTests.swift`); screen-recording/accessibility permission states preserved — no re-request, no lost known state (FR-090) — MUST FAIL
 
 ### Implementation for User Story 7
 
-- [ ] T071 [US7] Fix any compatibility issues surfaced by fixture tests (expected: none — presentation-only redesign; verify and document in `Documentation/toolchain.md` or feature quickstart.md); confirm zero schema/keychain/contract changes (contracts/ README assertion)
+- [X] T071 [US7] Fix any compatibility issues surfaced by fixture tests (expected: none — presentation-only redesign; verify and document in `Documentation/toolchain.md` or feature quickstart.md); confirm zero schema/keychain/contract changes (contracts/ README assertion)
 
 **Checkpoint**: US7 verified — all fixture tests green; upgrade path fully compatible.
 

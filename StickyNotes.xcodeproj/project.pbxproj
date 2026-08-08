@@ -44,6 +44,7 @@
 		49BDD42BF12571FB40906CCC /* AppearanceIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F054502E5BC18175FE4975FA /* AppearanceIntegrationTests.swift */; };
 		4AA5B7B2F5B3EA0E5FBD4E93 /* FileReferenceAvailabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1E5050C3BB8197397567185 /* FileReferenceAvailabilityTests.swift */; };
 		5002A19BF8634AA2636408C0 /* ScreenshotCoverAndCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE3B44B46FEF28A567DD2B39 /* ScreenshotCoverAndCaptureTests.swift */; };
+		532BE00DDE6D1D4CA65FF36E /* MigrationCompatibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B42A0E7EA64969B7FD34666 /* MigrationCompatibilityTests.swift */; };
 		55F971594E6C89985CF4D904 /* NoteControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DF0A9411C18B8244741F413 /* NoteControlsView.swift */; };
 		56396920CCEA9E178A872C31 /* TodoCodeFileRefIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2F91B1246693F0D0CE9D112 /* TodoCodeFileRefIntegrationTests.swift */; };
 		59A1FB8448C5BD22E3A906F9 /* NoteWindowLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D705E0B076C79908888284FD /* NoteWindowLifecycleTests.swift */; };
@@ -180,6 +181,7 @@
 		141F170F12817A01AF02270D /* DeletionToastIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeletionToastIntegrationTests.swift; sourceTree = "<group>"; };
 		17DCD27851E847489C9BE57D /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		18AEBB1AF4516D9DDE0195C1 /* LibrarySheetToggleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySheetToggleTests.swift; sourceTree = "<group>"; };
+		1B42A0E7EA64969B7FD34666 /* MigrationCompatibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MigrationCompatibilityTests.swift; sourceTree = "<group>"; };
 		1C7F5699089ED1AA9D9E8EED /* WidgetIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetIntents.swift; sourceTree = "<group>"; };
 		2180C26B480CF6DA0F8A9E71 /* AccessibilityAdaptations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityAdaptations.swift; sourceTree = "<group>"; };
 		224AAE3167A32C4601904E72 /* NoteCaptureIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteCaptureIntegrationTests.swift; sourceTree = "<group>"; };
@@ -451,6 +453,7 @@
 				5BE71E6445CC33FAC29A0361 /* LibraryWindowPresentationTests.swift */,
 				12EFA4FE3B28970A66644A14 /* LocalizationCompletenessTests.swift */,
 				31EDA41368103BDAD2762CE3 /* MenuChecklistTests.swift */,
+				1B42A0E7EA64969B7FD34666 /* MigrationCompatibilityTests.swift */,
 				224AAE3167A32C4601904E72 /* NoteCaptureIntegrationTests.swift */,
 				05AAAF25EF491293349A9C20 /* NoteContextualActionsTests.swift */,
 				D705E0B076C79908888284FD /* NoteWindowLifecycleTests.swift */,
@@ -773,6 +776,7 @@
 				96B058C64E079C458037C1DE /* LibraryWindowPresentationTests.swift in Sources */,
 				6EB06BDE8A3530AF0F49B416 /* LocalizationCompletenessTests.swift in Sources */,
 				2020CA8CCCECE6FFB1C37196 /* MenuChecklistTests.swift in Sources */,
+				532BE00DDE6D1D4CA65FF36E /* MigrationCompatibilityTests.swift in Sources */,
 				898D62ACC007FB1FC1C2EAC0 /* NoteCaptureIntegrationTests.swift in Sources */,
 				85E030AF6A45FECA80A2BBC5 /* NoteContextualActionsTests.swift in Sources */,
 				59A1FB8448C5BD22E3A906F9 /* NoteWindowLifecycleTests.swift in Sources */,
@@ -882,7 +886,7 @@
 /* Begin PBXTargetDependency section */
 		023059DFD5F7CABCA47FBFA2 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			productRef = "TEMP_B54DF776-119F-445C-B733-BBCE6CD18744" /* SystemBridge */;
+			productRef = "TEMP_B61188FB-2CDA-4B48-8A9D-1BA7519F1F52" /* SystemBridge */;
 		};
 		208B5F7C95E524C074BFEA21 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -891,7 +895,7 @@
 		};
 		2CCA10F60EAE0ABC186D9562 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			productRef = "TEMP_CF9768C9-A844-4A1C-9997-FBD800EB21FE" /* GRDB */;
+			productRef = "TEMP_5751CBDB-8825-4B1F-8AFC-05CB2E887C1C" /* GRDB */;
 		};
 		46F33D36B2BAC3740EE896F7 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -900,15 +904,15 @@
 		};
 		7C31425EBA1B9D2B171A038D /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			productRef = "TEMP_D368BD1E-B352-435E-9E16-7917C20E8C40" /* Domain */;
+			productRef = "TEMP_A4763CCF-C4BD-41D6-B955-0438C5541A80" /* Domain */;
 		};
 		BEAF6103BFDCA24A3D04399C /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			productRef = "TEMP_26BFCF3C-B4A5-42D6-9A70-FD72C262BEE3" /* Persistence */;
+			productRef = "TEMP_98AEAFAD-2F89-4F29-9493-5F2304B63F1B" /* Persistence */;
 		};
 		E955A8F681F660898712CB65 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			productRef = "TEMP_24902E0A-EC6C-4FAF-930E-9E9C4DDA82CE" /* EditorCore */;
+			productRef = "TEMP_B2B723CC-15BF-4121-B268-9268C20C27A8" /* EditorCore */;
 		};
 		F6D75B224BD1ABAD7662B8FC /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -1317,26 +1321,26 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = Domain;
 		};
-		"TEMP_24902E0A-EC6C-4FAF-930E-9E9C4DDA82CE" /* EditorCore */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = EditorCore;
-		};
-		"TEMP_26BFCF3C-B4A5-42D6-9A70-FD72C262BEE3" /* Persistence */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = Persistence;
-		};
-		"TEMP_B54DF776-119F-445C-B733-BBCE6CD18744" /* SystemBridge */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = SystemBridge;
-		};
-		"TEMP_CF9768C9-A844-4A1C-9997-FBD800EB21FE" /* GRDB */ = {
+		"TEMP_5751CBDB-8825-4B1F-8AFC-05CB2E887C1C" /* GRDB */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 0A7913A0291CE7CDB8AEF30F /* XCRemoteSwiftPackageReference "GRDB.swift" */;
 			productName = GRDB;
 		};
-		"TEMP_D368BD1E-B352-435E-9E16-7917C20E8C40" /* Domain */ = {
+		"TEMP_98AEAFAD-2F89-4F29-9493-5F2304B63F1B" /* Persistence */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Persistence;
+		};
+		"TEMP_A4763CCF-C4BD-41D6-B955-0438C5541A80" /* Domain */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = Domain;
+		};
+		"TEMP_B2B723CC-15BF-4121-B268-9268C20C27A8" /* EditorCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = EditorCore;
+		};
+		"TEMP_B61188FB-2CDA-4B48-8A9D-1BA7519F1F52" /* SystemBridge */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SystemBridge;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
