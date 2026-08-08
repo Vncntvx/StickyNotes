@@ -11,8 +11,8 @@ the resulting file MUST validate all scenarios below.
 
 | | v1 (current) | v2 (target) |
 |---|---|---|
-| `schemaVersion` | `const: 1` | `const: 2` |
-| `originDeviceName` | absent | **new**, optional, `type: string`, nullable-absent allowed |
+| `schemaVersion` | `const: 1` | `enum: [1, 2]` — both validate; v2 files carry schemaVersion 2 |
+| `originDeviceName` | absent | **new**, optional, `type: string` (`maxLength: 100`), nullable-absent allowed |
 | Required fields | schemaVersion, vaultId, vaultLocator, providerType, providerConfig, encryptionSuiteVersion | unchanged (same six) |
 | `additionalProperties` | false | false (unchanged) |
 

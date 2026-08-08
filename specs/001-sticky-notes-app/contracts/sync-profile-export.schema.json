@@ -2,14 +2,15 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://stickynotes.local/contracts/sync-profile-export.schema.json",
   "title": "Synchronization Profile Export",
-  "description": "A portable, human-assisted way to join a vault from another Mac (e.g. enter the random vault locator and provider config). Contains NO secrets: credentials live in Keychain and MUST NOT be present here. NO decrypted keys, NO bookmarks, NO note content. Schema version 1.",
+  "description": "A portable, human-assisted way to join a vault from another Mac (e.g. enter the random vault locator and provider config). Contains NO secrets: credentials live in Keychain and MUST NOT be present here. NO decrypted keys, NO bookmarks, NO note content. Schema version 2. Backward compatible: v1 files (schemaVersion 1, no originDeviceName) validate unchanged; consumers treat an absent originDeviceName as \"unknown device\". `providerConfig` is REQUIRED and redacted — endpoint/prefix/region are connection info the receiving device needs to connect (NOT secrets); credentials/keys/content are NEVER exported (FR-009/SC-004).",
   "type": "object",
   "required": ["schemaVersion", "vaultId", "vaultLocator", "providerType", "providerConfig", "encryptionSuiteVersion"],
   "additionalProperties": false,
   "properties": {
-    "schemaVersion": { "const": 1 },
+    "schemaVersion": { "enum": [1, 2], "description": "1 = legacy (no originDeviceName); 2 = adds optional originDeviceName. Both validate (v1 read-compat); 0/3+ fail closed (FR-010)." },
     "vaultId": { "type": "string", "format": "uuid" },
     "vaultLocator": { "type": "string", "description": "Random/opaque remote locator." },
+    "originDeviceName": { "type": "string", "maxLength": 100, "description": "User-readable display name of the exporting device (NEW in v2, optional). NOT an identity field — the authoritative join identity remains vaultLocator/vaultId. Absent in v1 files = \"unknown device\"." },
     "providerType": { "enum": ["webdav", "s3"] },
     "providerConfig": {
       "type": "object",

@@ -91,6 +91,13 @@ public final class SyncCoordinator {
 
     public var isConfigured: Bool { configuration != nil }
 
+    /// The configured vault's encryption-suite version (nil when no vault is
+    /// unlocked/configured). Used by the sync-profile export (T032/FR-009)
+    /// so the file always reflects the actual vault, never a hardcoded value.
+    public var encryptionSuiteVersion: Int? {
+        vault?.encryptionSuiteVersion
+    }
+
     /// Loads the persisted configuration + state (app launch).
     public func load() async {
         if let config = try? await configStore.fetchConfiguration() {
@@ -168,6 +175,14 @@ public final class SyncCoordinator {
         let provider = try makeProvider(configuration: configuration, credentials: credentials)
         try await provider.verify()
 
+        // 3b. Upload the bootstrap object (T026, plan §Bootstrap object
+        // name): the join path fetches it under the SAME deterministic name.
+        // Fail closed — any error leaves the local config unwritten.
+        try await provider.upload(
+            objectName: RemoteLayout.bootstrapObjectName(for: bootstrap.vaultLocator),
+            data: try bootstrap.canonicalJSON()
+        )
+
         // 4. Persist the configuration (device-local; one at a time).
         try await configStore.saveConfiguration(configuration)
 
@@ -203,6 +218,96 @@ public final class SyncCoordinator {
         )
         let provider = try makeProvider(configuration: configuration, credentials: credentials)
         try await provider.verify()
+    }
+
+    // MARK: - Join existing vault (T011/T012, US1)
+
+    /// Joins a vault created on another device (FR-002/FR-003): READ-ONLY
+    /// probe + fetch of the remote bootstrap by locator → verify (wrong
+    /// password / wrong vault fail closed, distinguishable) → persist the
+    /// single configuration (replace semantics, FR-154) → wire the engine →
+    /// immediate sync. Network + crypto are off the main actor (FR-012).
+    /// Failure leaves NO local config row and NO remote mutation (FR-004/
+    /// FR-005, CHK030/CHK035).
+    public func joinExistingVault(
+        providerType: ProviderType,
+        endpoint: String,
+        containerPath: String?,
+        bucket: String?,
+        region: String?,
+        vaultLocator: String,
+        credentials: SyncProviderCredentials,
+        vaultPassword: String,
+        expectedVaultId: UUID? = nil
+    ) async throws {
+        // 1. Build the provider + READ-ONLY connectivity probe (FR-003:
+        //    join MUST NOT create any remote object — no MKCOL; a HEAD /
+        //    fetchMetadata on the manifest name is enough).
+        let redacted = redactedConfig(providerType: providerType, endpoint: endpoint, bucket: bucket, region: region, containerPath: containerPath)
+        let configuration = VaultConfiguration(
+            vaultId: UUID(),
+            vaultLocator: vaultLocator,
+            providerType: providerType,
+            providerConfig: redacted,
+            keychainCredentialRef: ""
+        )
+        let provider = try makeProvider(configuration: configuration, credentials: credentials)
+        _ = try await provider.fetchMetadata(objectName: ManifestStore.manifestObjectName)
+
+        // 2. Fetch the remote bootstrap by locator (READ-ONLY, FR-003).
+        let bootstrapName = RemoteLayout.bootstrapObjectName(for: vaultLocator)
+        let wire: Data
+        do {
+            wire = try await provider.fetch(objectName: bootstrapName)
+        } catch ProviderError.notFound {
+            throw StickyError.credentials(.notFound)
+        }
+
+        // 3. Verify: wrong password fails closed with a distinguishable
+        //    code (FR-004/CHK028). `expectedVaultId` is ONLY the user's
+        //    stated expectation (e.g. from an imported sync profile —
+        //    CHK025: joining a location whose bootstrap is a DIFFERENT vault
+        //    than the imported profile's fails closed). The locally RETAINED
+        //    configuration is deliberately NOT the expected identity: joining
+        //    a different vault than the retained one is the replace
+        //    semantics of US1/AC6/FR-007 (the prior locator is recorded on
+        //    the new configuration for the user's reference).
+        let retained = try? await configStore.fetchConfiguration()
+        let key = try await VaultBootstrapService.openRemoteBootstrap(
+            remoteBootstrap: wire,
+            password: vaultPassword,
+            expectedVaultId: expectedVaultId
+        )
+        let parsedBootstrap = try VaultBootstrap.fromCanonicalJSON(wire)
+        let vault = Vault(
+            vaultId: parsedBootstrap.vaultId,
+            encryptionSuiteVersion: parsedBootstrap.encryptionSuiteVersion,
+            masterKey: key
+        )
+
+        // 4. Persist the configuration (single-row replace, FR-154); the
+        //    remote bootstrap is never modified.
+        let credentialsKey = "vault-provider-credentials-\(vault.vaultId.uuidString)"
+        let credentialsData = try CanonicalJSONEncoder().encode(credentials)
+        try secretStore.save(credentialsData, forKey: credentialsKey)
+        let joined = VaultConfiguration(
+            vaultId: vault.vaultId,
+            vaultLocator: vaultLocator,
+            providerType: providerType,
+            providerConfig: redacted,
+            keychainCredentialRef: credentialsKey,
+            rememberedUnlock: .disabled,
+            replacedFromVaultLocator: retained?.vaultLocator
+        )
+        try await configStore.saveConfiguration(joined)
+
+        // 5. Wire the engine + immediate sync (FR-006): local notes upload
+        //    encrypted via the existing engine path.
+        self.configuration = joined
+        self.vault = vault
+        self.lastErrorCode = nil
+        wireEngine(configuration: joined, vault: vault)
+        await runSync()
     }
 
     // MARK: - Sync (FR-151/FR-152/FR-152a)
@@ -392,6 +497,16 @@ public final class SyncCoordinator {
         }
     }
 
+    /// Locator-based remote addressing (T026/T027, plan §Bootstrap object
+    /// name): the vault locator is part of the remote container on BOTH
+    /// providers (`"<prefix>/<locator>"`, or `"<locator>"` when no user
+    /// prefix) so a join by locator reaches the same remote location and
+    /// vaults on one repository stay isolated. Pure + testable.
+    static func remoteContainerPath(prefix: String?, vaultLocator: String) -> String {
+        let base = (prefix ?? "").trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return base.isEmpty ? vaultLocator : "\(base)/\(vaultLocator)"
+    }
+
     /// Builds the provider: test override or the real adapter (credentials
     /// resolved from the Keychain by the caller).
     private func makeProvider(
@@ -406,9 +521,17 @@ public final class SyncCoordinator {
             guard let url = URL(string: configuration.providerConfig.endpoint) else {
                 throw StickyError.credentials(.invalidEndpoint)
             }
+            // WebDAV locator addressing (T026, plan §Bootstrap object name):
+            // the container path includes the vault locator — mirroring the
+            // S3 scheme — so a join by locator reaches the same remote
+            // location on both providers and vaults stay isolated.
+            let containerPath = Self.remoteContainerPath(
+                prefix: configuration.providerConfig.prefix,
+                vaultLocator: configuration.vaultLocator
+            )
             return WebDAVProvider(config: WebDAVConfiguration(
                 baseURL: url,
-                containerPath: configuration.providerConfig.prefix ?? "",
+                containerPath: containerPath,
                 username: credentials.username,
                 password: credentials.password
             ))
@@ -420,8 +543,10 @@ public final class SyncCoordinator {
             // The user-configured folder/prefix (optional) is combined with
             // the vault locator so multiple vaults stay isolated under the
             // chosen prefix (e.g. "mynotes/451aa6fbf…/").
-            let base = configuration.providerConfig.prefix?.trimmingCharacters(in: CharacterSet(charactersIn: "/")) ?? ""
-            let prefix = base.isEmpty ? configuration.vaultLocator : "\(base)/\(configuration.vaultLocator)"
+            let prefix = Self.remoteContainerPath(
+                prefix: configuration.providerConfig.prefix,
+                vaultLocator: configuration.vaultLocator
+            )
             return S3Provider(config: S3Configuration(
                 endpoint: url,
                 region: configuration.providerConfig.region ?? "us-east-1",

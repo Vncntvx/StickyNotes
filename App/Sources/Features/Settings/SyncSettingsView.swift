@@ -23,6 +23,7 @@ public struct SyncSettingsView: View {
     let syncCoordinator: SyncCoordinator?
 
     @State private var showConfigureSheet = false
+    @State private var showJoinSheet = false
     @State private var showReplaceSheet = false
     @State private var showRemoveConfirmation = false
     @State private var errorMessage: String?
@@ -132,6 +133,13 @@ public struct SyncSettingsView: View {
 
             Section {
                 if syncCoordinator?.isConfigured == true {
+                    // FR-002/US1/AC6 (T029): joining a DIFFERENT existing
+                    // vault from the configured state applies replace
+                    // semantics — the mode picker stays available.
+                    Button("Join Existing Vault…") {
+                        showJoinSheet = true
+                    }
+                    .help("Joins a vault created on another Mac. Your local notes are preserved.")
                     Button("Replace Repository…", role: .destructive) {
                         showReplaceSheet = true
                     }
@@ -140,6 +148,12 @@ public struct SyncSettingsView: View {
                         showRemoveConfirmation = true
                     }
                     .help("Removes the local sync configuration. Local notes are NOT deleted.")
+                    // FR-009/US2 (T016): export the sync profile (schema v2,
+                    // no secrets) so another Mac can join this vault.
+                    Button("Export Sync Profile…") {
+                        exportSyncProfile()
+                    }
+                    .help("Saves a sync profile for another Mac. Contains no credentials, keys, or note content.")
                 } else {
                     Button("Configure Sync…") {
                         showConfigureSheet = true
@@ -184,6 +198,20 @@ public struct SyncSettingsView: View {
                 }
             )
         }
+        .sheet(isPresented: $showJoinSheet) {
+            SyncConfigureSheet(
+                syncCoordinator: syncCoordinator,
+                title: String(localized: "Join Existing Vault"),
+                startsInJoinMode: true,
+                onComplete: { status in
+                    statusMessage = status
+                    errorMessage = nil
+                },
+                onError: { error in
+                    errorMessage = error
+                }
+            )
+        }
         .sheet(isPresented: $showReplaceSheet) {
             SyncConfigureSheet(
                 syncCoordinator: syncCoordinator,
@@ -212,6 +240,41 @@ public struct SyncSettingsView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Local notes are preserved. Remote data in the previous repository is not deleted — cleaning it up is your responsibility.")
+        }
+    }
+
+    private static func profileFileName() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        return "stickynotes-sync-profile-\(formatter.string(from: Date())).json"
+    }
+
+    /// T016 (FR-009/US2/AC1): writes a schema-v2 sync profile (protocol,
+    /// locator, origin device name, redacted provider config) via NSSavePanel.
+    /// NEVER credentials/keys/content (SC-004/CHK029); the filename is
+    /// opaque + dated (FR-191 sanitized boundary).
+    private func exportSyncProfile() {
+        guard let configuration = syncCoordinator?.configuration else { return }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.json]
+        panel.nameFieldStringValue = Self.profileFileName()
+        panel.message = String(localized: "Save a sync profile to join this vault from another Mac.")
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            // T032: the suite version comes from the actual vault (never
+            // hardcoded); encode throws instead of writing an empty file.
+            let wire = try SyncProfileCodec.encode(
+                providerType: configuration.providerType,
+                vaultId: configuration.vaultId,
+                vaultLocator: configuration.vaultLocator,
+                providerConfig: configuration.providerConfig,
+                encryptionSuiteVersion: syncCoordinator?.encryptionSuiteVersion ?? 1,
+                originDeviceName: AppDevice.current().displayName
+            )
+            try wire.write(to: url, options: .atomic)
+            statusMessage = String(localized: "Sync profile exported. No credentials or note content are included.")
+        } catch {
+            errorMessage = String(localized: "Could not export the sync profile.")
         }
     }
 
@@ -258,17 +321,29 @@ public struct SyncSettingsView: View {
 
 // MARK: - Configure / replace sheet (FR-150/FR-151/FR-154)
 
-/// The configure/replace repository form: provider type, endpoint +
-/// container/bucket, credentials, vault password, remember-unlock.
+/// The configure/replace/join repository form: mode picker (create/join),
+/// provider type, endpoint + container/bucket, credentials, vault password,
+/// remember-unlock, and (join mode) vault locator + import-from-file.
 private struct SyncConfigureSheet: View {
     let syncCoordinator: SyncCoordinator?
     let title: String
     var replacing = false
+    /// T029: open the sheet already in join mode (the configured-state
+    /// "Join Existing Vault…" entry point). Non-replacing create sheets
+    /// default to create mode.
+    var startsInJoinMode = false
     let onComplete: (String) -> Void
     let onError: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
 
+    /// FR-001: create-new-vault vs join-existing-vault mode.
+    private enum JoinMode: String, CaseIterable {
+        case create
+        case join
+    }
+
+    @State private var mode: JoinMode = .create
     @State private var providerType: ProviderType = .webdav
     @State private var endpoint = ""
     @State private var containerPath = ""
@@ -278,6 +353,13 @@ private struct SyncConfigureSheet: View {
     @State private var password = ""
     @State private var accessKey = ""
     @State private var secretKey = ""
+    @State private var vaultLocator = ""
+    @State private var originDeviceName: String?
+    /// T028/CHK025: the imported profile's vaultId — the user's stated
+    /// expectation. Joining a location whose bootstrap is a DIFFERENT vault
+    /// fails closed (wrong-vault), while manual locator entry (no profile)
+    /// is free to join any vault (US1/AC6 replace semantics).
+    @State private var expectedVaultId: UUID?
     @State private var vaultPassword = ""
     @State private var confirmVaultPassword = ""
     @State private var rememberUnlock = false
@@ -287,10 +369,38 @@ private struct SyncConfigureSheet: View {
     /// use a success icon, not the orange warning used for errors).
     @State private var sheetStatus: (message: String, isError: Bool)?
 
+    init(
+        syncCoordinator: SyncCoordinator?,
+        title: String,
+        replacing: Bool = false,
+        startsInJoinMode: Bool = false,
+        onComplete: @escaping (String) -> Void,
+        onError: @escaping (String) -> Void
+    ) {
+        self.syncCoordinator = syncCoordinator
+        self.title = title
+        self.replacing = replacing
+        self.startsInJoinMode = startsInJoinMode
+        self.onComplete = onComplete
+        self.onError = onError
+        if startsInJoinMode {
+            _mode = State(initialValue: .join)
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(title)
                 .font(.title3.bold())
+
+            if !replacing {
+                Picker("Mode", selection: $mode) {
+                    Text("Create new vault").tag(JoinMode.create)
+                    Text("Join existing vault").tag(JoinMode.join)
+                }
+                .pickerStyle(.segmented)
+                .accessibilityLabel("Synchronization mode")
+            }
 
             Picker("Provider", selection: $providerType) {
                 Text("WebDAV").tag(ProviderType.webdav)
@@ -318,18 +428,51 @@ private struct SyncConfigureSheet: View {
             }
             .textFieldStyle(.roundedBorder)
 
+            if mode == .join {
+                Divider()
+                HStack {
+                    TextField("Vault locator", text: $vaultLocator)
+                        .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel("Vault locator")
+                        .onChange(of: vaultLocator) { _, _ in
+                            originDeviceName = nil
+                        }
+                    Button("Import from file…") { importProfile() }
+                        .accessibilityLabel("Import sync profile from file")
+                }
+                // CHK024 (T030): the format pre-check surfaces a visible
+                // message when the locator is non-empty but malformed —
+                // the Join button is disabled AND the user is told why.
+                if !vaultLocator.isEmpty && !isLocatorFormatValid(vaultLocator) {
+                    Label("Vault locator format is invalid (expected 32 hex characters).", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .accessibilityLabel("Vault locator format error")
+                }
+                if let originDeviceName {
+                    Label("From: \(originDeviceName)", systemImage: "person.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("Sync profile origin device: \(originDeviceName)")
+                }
+            }
+
             Divider()
 
-            Text("Vault password (new)")
+            Text(mode == .join ? "Vault password" : "Vault password (new)")
                 .font(.headline)
             Text("The vault password encrypts your notes. If you forget it, your synced notes cannot be recovered.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             SecureField("Vault password", text: $vaultPassword)
                 .textFieldStyle(.roundedBorder)
-            SecureField("Confirm vault password", text: $confirmVaultPassword)
-                .textFieldStyle(.roundedBorder)
-            Toggle("Remember unlocked vault on this Mac", isOn: $rememberUnlock)
+            if mode == .create {
+                SecureField("Confirm vault password", text: $confirmVaultPassword)
+                    .textFieldStyle(.roundedBorder)
+            }
+            if mode == .create {
+                Toggle("Remember unlocked vault on this Mac", isOn: $rememberUnlock)
+            }
 
             if let sheetStatus {
                 Label(
@@ -349,8 +492,8 @@ private struct SyncConfigureSheet: View {
                     Task { await testConnection() }
                 }
                 .disabled(isTesting || isConfiguring)
-                Button(isConfiguring ? "Working…" : (replacing ? "Replace" : "Configure")) {
-                    Task { await configure() }
+                Button(isConfiguring ? "Working…" : (replacing ? "Replace" : (mode == .join ? "Join" : "Configure"))) {
+                    Task { await configureOrJoin() }
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(isTesting || isConfiguring || !isFormValid)
@@ -362,11 +505,52 @@ private struct SyncConfigureSheet: View {
 
     private var isFormValid: Bool {
         guard !endpoint.trimmingCharacters(in: .whitespaces).isEmpty,
-              !vaultPassword.isEmpty,
-              vaultPassword == confirmVaultPassword else { return false }
+              !vaultPassword.isEmpty else { return false }
+        if mode == .create {
+            guard vaultPassword == confirmVaultPassword else { return false }
+        }
+        if mode == .join {
+            // CHK024: the locator is pre-validated before the join is
+            // attempted — opaque 32-hex shape (format error surfaced inline).
+            guard isLocatorFormatValid(vaultLocator) else { return false }
+        }
         switch providerType {
         case .webdav: return true
         case .s3: return !bucket.trimmingCharacters(in: .whitespaces).isEmpty
+        }
+    }
+
+    /// CHK024: locator format pre-check — 32 hex chars (the opaque locator
+    /// shape generated by `RemoteLayout.opaqueObjectName()`).
+    private func isLocatorFormatValid(_ locator: String) -> Bool {
+        let trimmed = locator.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.count == 32 && trimmed.allSatisfy { $0.isHexDigit }
+    }
+
+    /// FR-010/US2: imports a sync-profile file (v1/v2) and fills provider
+    /// type + locator; shows the origin device name. Fail closed on
+    /// corrupt/unsupported files (no local config written).
+    private func importProfile() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.message = String(localized: "Choose a sync profile exported from another Mac.")
+        guard panel.runModal() == .OK, let url = panel.url,
+              let data = try? Data(contentsOf: url) else { return }
+        do {
+        let profile = try SyncProfileCodec.decode(data)
+        providerType = profile.providerType
+        endpoint = profile.providerConfig.endpoint
+        bucket = profile.providerConfig.bucket ?? ""
+        region = profile.providerConfig.region ?? "us-east-1"
+        containerPath = profile.providerConfig.prefix ?? ""
+        vaultLocator = profile.vaultLocator
+        originDeviceName = profile.originDeviceName
+        expectedVaultId = profile.vaultId
+        sheetStatus = (String(localized: "Sync profile imported. Enter the vault password to join."), false)
+        } catch {
+            sheetStatus = (String(localized: "This file is not a valid sync profile (unsupported or corrupted)."), true)
         }
     }
 
@@ -389,6 +573,55 @@ private struct SyncConfigureSheet: View {
                 String(localized: "Connection failed: \((error as? StickyError)?.sanitizedCode ?? "unavailable")."),
                 true
             )
+        }
+    }
+
+    private func configureOrJoin() async {
+        if mode == .join {
+            await join()
+        } else {
+            await configure()
+        }
+    }
+
+    /// US1 (FR-002/FR-003/FR-004/FR-005): joins a vault created on another
+    /// device. Fail closed: wrong password / missing vault never write a
+    /// local config or modify remote data.
+    private func join() async {
+        isConfiguring = true
+        defer { isConfiguring = false }
+        do {
+            try await syncCoordinator?.joinExistingVault(
+                providerType: providerType,
+                endpoint: endpoint,
+                containerPath: containerPath,
+                bucket: bucket,
+                region: region,
+                vaultLocator: vaultLocator.trimmingCharacters(in: .whitespacesAndNewlines),
+                credentials: credentials,
+                vaultPassword: vaultPassword,
+                expectedVaultId: expectedVaultId
+            )
+            onComplete(String(localized: "Joined the existing vault and completed the first sync."))
+            dismiss()
+        } catch {
+            // FR-004/FR-005/CHK028: distinguishable, sanitized codes.
+            let code: String
+            if let sticky = error as? StickyError {
+                switch sticky {
+                case .credentials(.notFound):
+                    code = "vault-not-found"
+                case .credentials(.wrongVault):
+                    code = "wrong-vault"
+                case .encryption(.wrongPassword):
+                    code = "wrong-password"
+                default:
+                    code = sticky.sanitizedCode
+                }
+            } else {
+                code = "join-failed"
+            }
+            onError(String(localized: "Could not join the vault: \(code)."))
         }
     }
 

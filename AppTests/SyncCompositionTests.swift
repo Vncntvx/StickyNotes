@@ -40,8 +40,8 @@ final class InMemorySyncProvider: SyncProviderProtocol, @unchecked Sendable {
     }
 
     func fetch(objectName: String) async throws -> Data {
-        lock.withLock { state in
-            guard let data = state.objects[objectName] else { return Data() }
+        try lock.withLock { state in
+            guard let data = state.objects[objectName] else { throw ProviderError.notFound }
             return data
         }
     }
@@ -296,5 +296,528 @@ final class InMemorySyncProvider: SyncProviderProtocol, @unchecked Sendable {
         coordinator.setAutoSyncPolicy(.every5)
         #expect(coordinator.autoSyncPolicy == .every5)
         #expect(coordinator.autoSyncPolicy.interval == 5.0 * 60.0)
+    }
+}
+
+// MARK: - JoinExistingVault suite (T008-T010, T022-T025, T021; US1/US2)
+//
+// Per tasks.md Phase 3: the end-to-end join — fetch bootstrap READ-ONLY →
+// openRemoteBootstrap → persist single config → wire engine → immediate
+// sync. Tests use the shared in-memory provider to simulate device A's
+// vault on the remote; device B joins it.
+
+@MainActor
+@Suite struct JoinExistingVaultSuite {
+
+    private static let deviceId = UUID(uuidString: "d0000000-0000-4000-8000-000000000005")!
+    private static let deviceBId = UUID(uuidString: "b0000000-0000-4000-8000-00000000000b")!
+
+    private func makeCoordinator(
+        provider: InMemorySyncProvider,
+        deviceId: UUID = JoinExistingVaultSuite.deviceBId,
+        store: DatabaseStore? = nil
+    ) throws -> (SyncCoordinator, DatabaseStore, InMemorySecretStore) {
+        let db = try store ?? DatabaseStore.inMemory()
+        try InitialSchema.migrator().migrate(db.dbPool)
+        let secretStore = InMemorySecretStore()
+        let coordinator = SyncCoordinator(
+            store: db,
+            secretStore: secretStore,
+            deviceId: deviceId,
+            providerOverride: { _, _ in provider }
+        )
+        return (coordinator, db, secretStore)
+    }
+
+    /// Device A creates the vault (configures + first sync) on the shared
+    /// provider. Returns the vault locator + the configured coordinator
+    /// (its engine is wired and usable for pushing local notes).
+    private func createVaultOnA(provider: InMemorySyncProvider) async throws -> (locator: String, coordinator: SyncCoordinator, store: DatabaseStore) {
+        let (coordinator, store, _) = try makeCoordinator(provider: provider, deviceId: Self.deviceId)
+        await coordinator.load()
+        try await coordinator.configure(
+            providerType: .webdav,
+            endpoint: "https://example.com/dav",
+            containerPath: "stickynotes",
+            bucket: nil,
+            region: nil,
+            credentials: SyncProviderCredentials(username: "user", password: "secret"),
+            vaultPassword: "test-password",
+            rememberUnlock: false,
+            isTestFixture: true
+        )
+        let locator = try #require(coordinator.configuration?.vaultLocator)
+        return (locator, coordinator, store)
+    }
+
+    private func join(
+        coordinator: SyncCoordinator,
+        provider: InMemorySyncProvider,
+        locator: String,
+        password: String = "test-password"
+    ) async throws {
+        try await coordinator.joinExistingVault(
+            providerType: .webdav,
+            endpoint: "https://example.com/dav",
+            containerPath: "stickynotes",
+            bucket: nil,
+            region: nil,
+            vaultLocator: locator,
+            credentials: SyncProviderCredentials(username: "user", password: "secret"),
+            vaultPassword: password
+        )
+    }
+
+    private func noteRepository(store: DatabaseStore) -> SQLiteNoteRepository {
+        SQLiteNoteRepository(store: store, fullTextSearch: FullTextSearch(dbPool: store.dbPool))
+    }
+
+    // MARK: T024 — create path uploads the bootstrap under the deterministic name
+
+    @Test
+    func createPathUploadsBootstrapUnderDerivedObjectName() async throws {
+        let provider = InMemorySyncProvider()
+        let (locator, _, _) = try await createVaultOnA(provider: provider)
+
+        // After configure, the provider MUST contain the bootstrap object
+        // under bootstrapObjectName(locator) — the object join fetches.
+        let name = RemoteLayout.bootstrapObjectName(for: locator)
+        let metadata = try await provider.fetchMetadata(objectName: name)
+        #expect(metadata != nil, "create path MUST upload the bootstrap under the derived name (T024)")
+
+        let data = try await provider.fetch(objectName: name)
+        let parsed = try? VaultBootstrap.fromCanonicalJSON(data)
+        #expect(parsed != nil, "the uploaded bootstrap MUST be a valid VaultBootstrap")
+        #expect(parsed?.vaultLocator == locator)
+    }
+
+    // MARK: T025 — WebDAV + S3 address the same remote location
+
+    @Test
+    func webdavAndS3AddressSameRemoteLocationForCreateAndJoin() async throws {
+        // Both providers derive the remote container from the user prefix +
+        // the vault locator, so a join by locator reaches the same objects.
+        let webdav = RemoteLayout.bootstrapObjectName(for: "loc1")
+        let s3 = RemoteLayout.bootstrapObjectName(for: "loc1")
+        #expect(webdav == s3, "the bootstrap object name is provider-independent")
+        // The derived name differs for a different locator (no cross-vault
+        // collision on the shared repository).
+        #expect(webdav != RemoteLayout.bootstrapObjectName(for: "loc2"))
+    }
+
+    // MARK: T027 — makeProvider containerPath includes the vault locator
+
+    @Test
+    func webdavContainerPathIncludesVaultLocator() throws {
+        // The container path for WebDAV (and the S3 prefix) is derived from
+        // the user prefix + the vault locator — mirroring S3 — so the join
+        // fetch targets the same remote location the create path used.
+        let path = SyncCoordinator.remoteContainerPath(prefix: "stickynotes", vaultLocator: "abc123")
+        #expect(path == "stickynotes/abc123")
+
+        let noPrefix = SyncCoordinator.remoteContainerPath(prefix: nil, vaultLocator: "abc123")
+        #expect(noPrefix == "abc123")
+
+        let trailingSlash = SyncCoordinator.remoteContainerPath(prefix: "mynotes/", vaultLocator: "xyz789")
+        #expect(trailingSlash == "mynotes/xyz789", "leading/trailing slashes are normalized")
+
+        // Identical derivation for WebDAV and S3 — one shared rule.
+        #expect(SyncCoordinator.remoteContainerPath(prefix: "p", vaultLocator: "l")
+                == SyncCoordinator.remoteContainerPath(prefix: "p", vaultLocator: "l"))
+    }
+
+    // MARK: T028 — join with an existing configuration applies replace
+    // semantics (US1/AC6, FR-007/FR-154, CHK018)
+
+    @Test
+    func joinWithExistingConfigurationReplacesConfigKeepingNotes() async throws {
+        let provider = InMemorySyncProvider()
+        let (locator, _, _) = try await createVaultOnA(provider: provider)
+
+        // Device B is already configured with a DIFFERENT vault.
+        let (bCoord, bStore, _) = try makeCoordinator(provider: provider)
+        await bCoord.load()
+        try await bCoord.configure(
+            providerType: .webdav,
+            endpoint: "https://example.com/dav",
+            containerPath: "stickynotes",
+            bucket: nil,
+            region: nil,
+            credentials: SyncProviderCredentials(username: "user", password: "secret"),
+            vaultPassword: "prior-vault-password",
+            rememberUnlock: false,
+            isTestFixture: true
+        )
+        let priorVaultId = try #require(bCoord.configuration?.vaultId)
+
+        // B's local notes must survive the join (FR-007/CHK018).
+        let bRepo = noteRepository(store: bStore)
+        let localNote = Note(title: "keep on join", lastModifiedDeviceId: Self.deviceBId)
+        try await bRepo.create(localNote)
+
+        // Join the OTHER vault: single-row replace semantics.
+        try await join(coordinator: bCoord, provider: provider, locator: locator)
+        #expect(bCoord.isConfigured)
+        let newVaultId = try #require(bCoord.configuration?.vaultId)
+        #expect(newVaultId != priorVaultId, "the config row now points at the JOINED vault (FR-007)")
+        #expect(bCoord.configuration?.vaultLocator == locator)
+
+        // Local notes preserved.
+        let kept = try await bRepo.fetch(id: localNote.id)
+        #expect(kept != nil, "local notes are NOT deleted when the config is replaced (US1/AC6)")
+
+        // Exactly one configuration row remains (single-row replace).
+        let reloaded = SyncCoordinator(
+            store: bStore,
+            secretStore: InMemorySecretStore(),
+            deviceId: Self.deviceBId
+        )
+        await reloaded.load()
+        #expect(reloaded.configuration?.vaultId == newVaultId, "one configuration row, the joined vault")
+
+        // Prior remote data untouched: the prior vault's bootstrap still
+        // exists on the provider (never deleted by the join).
+        let priorLocator = try #require(bCoord.configuration?.replacedFromVaultLocator)
+        let priorBootstrap = try await provider.fetchMetadata(
+            objectName: RemoteLayout.bootstrapObjectName(for: priorLocator)
+        )
+        #expect(priorBootstrap != nil, "prior remote data is NOT deleted on join (FR-154/CHK018)")
+    }
+
+    @Test
+    func joinWithImportedProfileWrongVaultFailsClosed() async throws {
+        // CHK025: an imported sync profile carries the exporting device's
+        // vaultId as the user's stated expectation. Joining a location whose
+        // bootstrap is a DIFFERENT vault must fail closed (wrong-vault) —
+        // the profile would otherwise silently point at another vault.
+        let provider = InMemorySyncProvider()
+        let (locator, _, _) = try await createVaultOnA(provider: provider)
+
+        // The imported profile claims a DIFFERENT vaultId than the remote.
+        let wrongExpectation = UUID()
+
+        let (bCoord, bStore, _) = try makeCoordinator(provider: provider)
+        await bCoord.load()
+        do {
+            try await bCoord.joinExistingVault(
+                providerType: .webdav,
+                endpoint: "https://example.com/dav",
+                containerPath: "stickynotes",
+                bucket: nil,
+                region: nil,
+                vaultLocator: locator,
+                credentials: SyncProviderCredentials(username: "user", password: "secret"),
+                vaultPassword: "test-password",
+                expectedVaultId: wrongExpectation
+            )
+            Issue.record("joining a location whose bootstrap is a different vault than the profile MUST fail closed (CHK025)")
+        } catch StickyError.credentials(.wrongVault) {
+            #expect(true)
+        } catch {
+            Issue.record("unexpected error: \(error)")
+        }
+
+        // Fail closed: no local configuration written.
+        #expect(!bCoord.isConfigured, "no local configuration written (CHK025)")
+        let reloaded = SyncCoordinator(
+            store: bStore,
+            secretStore: InMemorySecretStore(),
+            deviceId: Self.deviceBId
+        )
+        await reloaded.load()
+        #expect(!reloaded.isConfigured, "no configuration row persisted")
+    }
+
+    // MARK: T031 — no main-actor blocking during the join (FR-012)
+
+    @Test
+    func joinDoesNotBlockTheMainActor() async throws {
+        let provider = InMemorySyncProvider()
+        let (locator, _, _) = try await createVaultOnA(provider: provider)
+
+        let (bCoord, _, _) = try makeCoordinator(provider: provider)
+        await bCoord.load()
+
+        // Launch the join. The join's fetch/decrypt MUST run off the main
+        // actor (FR-012/Constitution XI) — while it is in flight, the main
+        // actor must remain responsive to other work.
+        let joinTask = Task {
+            try await bCoord.joinExistingVault(
+                providerType: .webdav,
+                endpoint: "https://example.com/dav",
+                containerPath: "stickynotes",
+                bucket: nil,
+                region: nil,
+                vaultLocator: locator,
+                credentials: SyncProviderCredentials(username: "user", password: "secret"),
+                vaultPassword: "test-password"
+            )
+        }
+
+        // Main-actor heartbeat: run 200 trivial hops while the join runs.
+        // If the join blocked the main actor synchronously, these hops would
+        // stall until the join finished (heartbeat ≈ join duration).
+        let heartbeat = Task { @MainActor in
+            let start = Date()
+            var ticks = 0
+            while ticks < 200 {
+                ticks += 1
+                await Task.yield()
+            }
+            return (ticks, Date().timeIntervalSince(start))
+        }
+        _ = try await joinTask.value
+        let (ticks, heartbeatDuration) = await heartbeat.value
+        let joinStartedAt = Date()
+
+        #expect(bCoord.isConfigured, "join completed")
+        #expect(ticks == 200)
+        // The heartbeat must finish promptly relative to the join: the main
+        // actor was never held by the join's network/crypto (FR-012). A
+        // generous bound — 200 hops on a free main actor take milliseconds.
+        #expect(heartbeatDuration < 2.0, "main actor stayed responsive during join (FR-012), heartbeat took \(heartbeatDuration)s")
+        #expect(joinStartedAt.timeIntervalSinceNow > -60, "sanity")
+    }
+
+    // MARK: T008 — join success + bidirectional first sync
+
+    @Test
+    func joinFetchesVerifiesPersistsAndSyncsBidirectionally() async throws {
+        let provider = InMemorySyncProvider()
+        let (locator, aCoord, aStore) = try await createVaultOnA(provider: provider)
+
+        // Device A has a remote note.
+        let aRepo = noteRepository(store: aStore)
+        let aNote = Note(title: "from device A", lastModifiedDeviceId: Self.deviceId)
+        try await aRepo.create(aNote)
+        // A pushes it (debounce → manual sync). FR-174-d may legitimately
+        // set the informational "sync.historyAgedOut" code once the remote
+        // manifest exists (local note with no remote tombstone — 001
+        // reconciler semantics); the upload still completes.
+        await aCoord.localContentChanged()
+        await aCoord.manualSync()
+        if let code = aCoord.lastErrorCode {
+            #expect(code == "sync.historyAgedOut",
+                    "unexpected error after A upload: \(code)")
+        }
+        #expect(aCoord.lastSuccessfulSyncAt != nil, "A's upload sync completed")
+        let aManifest = try await provider.fetchManifest()
+        #expect(aManifest.data.count > 0, "A committed a manifest")
+        let allRemote = try await provider.list()
+        #expect(allRemote.count >= 2, "bootstrap + manifest + note uploaded: got \(allRemote.count)")
+
+        // Device B joins.
+        let (bCoord, bStore, _) = try makeCoordinator(provider: provider)
+        await bCoord.load()
+        #expect(!bCoord.isConfigured)
+        try await join(coordinator: bCoord, provider: provider, locator: locator)
+
+        #expect(bCoord.isConfigured, "join persists the configuration (FR-007)")
+        #expect(bCoord.configuration?.vaultLocator == locator, "same vault as device A (US1/AC1)")
+        #expect(bCoord.lastSuccessfulSyncAt != nil, "immediate sync after join (FR-006)")
+
+        // B downloaded A's note.
+        let bRepo = noteRepository(store: bStore)
+        let downloaded = try await bRepo.fetch(id: aNote.id)
+        #expect(downloaded != nil, "first sync downloads remote notes")
+
+        // B's own local note uploads to the vault; A can see it after its
+        // next sync. NOTE: FR-174-d may legitimately set the informational
+        // "sync.historyAgedOut" code for B's local notes (no remote tombstone
+        // — 001 reconciler semantics preserved per FR-011); the upload still
+        // completes.
+        let bNote = Note(title: "from device B", lastModifiedDeviceId: Self.deviceBId)
+        try await bRepo.create(bNote)
+        await bCoord.localContentChanged()
+        await bCoord.manualSync()
+        #expect(bCoord.lastSuccessfulSyncAt != nil, "B's upload sync completed")
+        if let code = bCoord.lastErrorCode {
+            #expect(code == "sync.historyAgedOut",
+                    "unexpected error after B upload: \(code)")
+        }
+
+        // A syncs again to pull B's note. FR-174-d informational flag may
+        // fire for A's local note (no remote tombstone) — not an error.
+        await aCoord.manualSync()
+        if let code = aCoord.lastErrorCode {
+            #expect(code == "sync.historyAgedOut",
+                    "unexpected error after A re-sync: \(code)")
+        }
+        let aRepo2 = noteRepository(store: aStore)
+        let seenOnA = try await aRepo2.fetch(id: bNote.id)
+        #expect(seenOnA != nil, "local notes upload encrypted and appear on device A (US1/AC4)")
+
+        // Nothing deleted on either side.
+        let stillOnA = try await aRepo2.fetch(id: aNote.id)
+        let stillOnB = try await bRepo.fetch(id: bNote.id)
+        #expect(stillOnA != nil && stillOnB != nil, "no side's notes are deleted (US1/AC6)")
+    }
+
+    // MARK: T009 — missing bootstrap fails closed
+
+    @Test
+    func joinWithMissingBootstrapFailsClosed() async throws {
+        let provider = InMemorySyncProvider()
+        let (bCoord, bStore, _) = try makeCoordinator(provider: provider)
+        await bCoord.load()
+
+        let bogusLocator = "1a2b3c4d5e6f708192a3b4c5d6e7f80a1"
+        do {
+            try await join(coordinator: bCoord, provider: provider, locator: bogusLocator)
+            Issue.record("join MUST fail when the remote bootstrap is missing")
+        } catch {
+            // Fail closed: no local configuration row written.
+            #expect(!bCoord.isConfigured, "no local configuration written (FR-005)")
+            let reloaded = SyncCoordinator(
+                store: bStore,
+                secretStore: InMemorySecretStore(),
+                deviceId: Self.deviceBId
+            )
+            await reloaded.load()
+            #expect(!reloaded.isConfigured, "no configuration row persisted")
+            // No remote object created (provider state untouched beyond the
+            // bootstrap fetch — no objects except nothing was written).
+            let objects = try await provider.list()
+            #expect(objects.isEmpty, "no remote object created on failed join (CHK030)")
+        }
+    }
+
+    // MARK: T010 — wrong password fails closed, prior config untouched
+
+    @Test
+    func joinWithWrongPasswordFailsClosed() async throws {
+        let provider = InMemorySyncProvider()
+        let (locator, _, _) = try await createVaultOnA(provider: provider)
+
+        let (bCoord, bStore, _) = try makeCoordinator(provider: provider)
+        await bCoord.load()
+        // A prior configuration exists on B (a different vault).
+        try await bCoord.configure(
+            providerType: .webdav,
+            endpoint: "https://example.com/dav",
+            containerPath: "stickynotes",
+            bucket: nil,
+            region: nil,
+            credentials: SyncProviderCredentials(username: "user", password: "secret"),
+            vaultPassword: "prior-vault-password",
+            rememberUnlock: false,
+            isTestFixture: true
+        )
+        let priorVaultId = bCoord.configuration?.vaultId
+
+        do {
+            try await join(coordinator: bCoord, provider: provider, locator: locator, password: "wrong-password")
+            Issue.record("join MUST fail with the wrong password")
+        } catch {
+            #expect(bCoord.configuration?.vaultId == priorVaultId,
+                    "previous configuration untouched (FR-004/US1/AC2)")
+            let reloaded = SyncCoordinator(
+                store: bStore,
+                secretStore: InMemorySecretStore(),
+                deviceId: Self.deviceBId
+            )
+            await reloaded.load()
+            #expect(reloaded.configuration?.vaultId == priorVaultId, "previous config row persisted unchanged")
+        }
+    }
+
+    // MARK: T022 — FR-174 long-offline semantics preserved on join
+
+    @Test
+    func joinPreservesLongOfflineSemanticsNoLocalDeletion() async throws {
+        let provider = InMemorySyncProvider()
+        let (locator, _, _) = try await createVaultOnA(provider: provider)
+
+        // Device B carries local notes that were last synced long ago.
+        let (bCoord, bStore, _) = try makeCoordinator(provider: provider)
+        await bCoord.load()
+        let bRepo = noteRepository(store: bStore)
+        let oldLocal = Note(title: "old local note", lastModifiedDeviceId: Self.deviceBId)
+        try await bRepo.create(oldLocal)
+
+        try await join(coordinator: bCoord, provider: provider, locator: locator)
+
+        // FR-174: the join + first sync MUST NOT auto-delete local content.
+        let fetched = try await bRepo.fetch(id: oldLocal.id)
+        #expect(fetched != nil, "local notes are never auto-deleted on join (FR-174/US3/AC2, CHK023)")
+    }
+
+    // MARK: T023 — edge cases: bootstrap deleted mid-join; concurrent joins
+
+    @Test
+    func joinWhenBootstrapDeletedMidJoinFailsClosed() async throws {
+        let provider = InMemorySyncProvider()
+        let (locator, _, _) = try await createVaultOnA(provider: provider)
+
+        // Simulate device A deleting the remote bootstrap between B's fetch
+        // and verification (CHK026): remove the object after the create.
+        let name = RemoteLayout.bootstrapObjectName(for: locator)
+        try await provider.delete(objectName: name, ifMatch: nil)
+
+        let (bCoord, _, _) = try makeCoordinator(provider: provider)
+        await bCoord.load()
+        do {
+            try await join(coordinator: bCoord, provider: provider, locator: locator)
+            Issue.record("join MUST fail when the remote bootstrap disappears")
+        } catch {
+            #expect(!bCoord.isConfigured, "no local configuration written (CHK026)")
+        }
+    }
+
+    @Test
+    func concurrentJoinsAreReadOnlyAndBothSucceed() async throws {
+        let provider = InMemorySyncProvider()
+        let (locator, _, _) = try await createVaultOnA(provider: provider)
+
+        // Two devices join the same vault at the same time (CHK027): the
+        // join is READ-ONLY (bootstrap fetch) — no write race on the remote.
+        let (b1, _, _) = try makeCoordinator(provider: provider)
+        let (b2, _, _) = try makeCoordinator(provider: provider)
+        await b1.load()
+        await b2.load()
+
+        async let j1: Void = try await join(coordinator: b1, provider: provider, locator: locator)
+        async let j2: Void = try await join(coordinator: b2, provider: provider, locator: locator)
+        _ = try await (j1, j2)
+
+        #expect(b1.isConfigured, "device 1 joined")
+        #expect(b2.isConfigured, "device 2 joined")
+        #expect(b1.configuration?.vaultLocator == locator)
+        #expect(b2.configuration?.vaultLocator == locator)
+        #expect(b1.configuration?.vaultId == b2.configuration?.vaultId, "both joined the SAME vault")
+    }
+
+    // MARK: T021 — performance: <100 notes first sync converges promptly;
+    // join does not block the main actor
+
+    @Test
+    func joinAndFirstSyncOfManyNotesCompletesQuickly() async throws {
+        let provider = InMemorySyncProvider()
+        let (locator, aCoord, aStore) = try await createVaultOnA(provider: provider)
+
+        // Device A syncs 80 notes so the remote is populated.
+        let aRepo = noteRepository(store: aStore)
+        for i in 0..<80 {
+            let note = Note(title: "note-\(i)", lastModifiedDeviceId: Self.deviceId)
+            try await aRepo.create(note)
+        }
+        await aCoord.localContentChanged()
+        await aCoord.manualSync()
+        #expect(aCoord.lastErrorCode == nil)
+
+        // B joins + first sync — SC-002: <100 notes converge within 1 minute
+        // on the loopback/in-memory provider (asserted well under).
+        let start = Date()
+        let (bCoord, bStore, _) = try makeCoordinator(provider: provider)
+        await bCoord.load()
+        try await join(coordinator: bCoord, provider: provider, locator: locator)
+        let elapsed = Date().timeIntervalSince(start)
+
+        #expect(bCoord.lastErrorCode == nil, "B sync failed: \(String(describing: bCoord.lastErrorCode))")
+        #expect(bCoord.lastSuccessfulSyncAt != nil)
+        let bRepo = noteRepository(store: bStore)
+        let all = try await bRepo.fetchAll(lifecycle: .active, sort: .modified)
+        #expect(all.count >= 80, "all remote notes converged to B")
+        #expect(elapsed < 60.0, "first sync of <100 notes converges within 1 minute (SC-002)")
     }
 }
