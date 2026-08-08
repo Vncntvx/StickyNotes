@@ -118,7 +118,6 @@ public final class SyncCoordinator {
     /// FR-162a: silently restores the unlocked vault when "remember" is
     /// enabled and the Mac has not restarted since (boot-timestamp compare).
     private func launchUnlockVault(configuration: VaultConfiguration) -> Vault? {
-        let boot = Int(Date().timeIntervalSince1970 - ProcessInfo.processInfo.systemUptime)
         return try? VaultBootstrapService.attemptLaunchUnlock(
             bootstrap: VaultBootstrap(
                 vaultId: configuration.vaultId,
@@ -128,7 +127,7 @@ public final class SyncCoordinator {
                 keyConfirmation: nil
             ),
             configuration: configuration,
-            currentBootTimestamp: boot,
+            currentBootTimestamp: SystemBootTime.current(),
             secretStore: secretStore
         )
     }
@@ -454,11 +453,10 @@ public final class SyncCoordinator {
         guard let configuration, let vault else { return }
         if enabled {
             // The engine holds the unlocked vault; remember its key.
-            let boot = Int(Date().timeIntervalSince1970 - ProcessInfo.processInfo.systemUptime)
             let (ref, timestamp) = try VaultBootstrapService.enableRememberUnlock(
                 vault: vault,
                 configuration: configuration,
-                bootTimestamp: boot,
+                bootTimestamp: SystemBootTime.current(),
                 secretStore: secretStore
             )
             var updated = configuration
@@ -643,11 +641,10 @@ public final class SyncCoordinator {
 
     private func setRememberUnlockInternal(enabled: Bool, configuration: VaultConfiguration, vault: Vault) async {
         if enabled {
-            let boot = Int(Date().timeIntervalSince1970 - ProcessInfo.processInfo.systemUptime)
             guard let rememberResult = try? VaultBootstrapService.enableRememberUnlock(
                 vault: vault,
                 configuration: configuration,
-                bootTimestamp: boot,
+                bootTimestamp: SystemBootTime.current(),
                 secretStore: secretStore
             ) else { return }
             let (ref, timestamp) = rememberResult
@@ -658,5 +655,28 @@ public final class SyncCoordinator {
             self.configuration = updated
             try? await configStore.saveConfiguration(updated)
         }
+    }
+}
+
+/// Real system boot time via `sysctl kern.boottime` (FR-162a).
+///
+/// The previous formula (`Date() - ProcessInfo.processInfo.systemUptime`)
+/// DRIFTED whenever the Mac slept: `systemUptime` excludes sleep time while
+/// the wall clock keeps advancing, so the "computed boot time" grew by the
+/// accumulated sleep duration. The remember-unlock boot-timestamp compare
+/// then saw a "restart" on every launch after any sleep and re-prompted for
+/// the password. `kern.boottime` is the REAL boot time — stable across
+/// sleep/wake, changed only by an actual reboot.
+enum SystemBootTime {
+    static func current() -> Int {
+        var mib = [CTL_KERN, KERN_BOOTTIME]
+        var boot = timeval()
+        var size = MemoryLayout<timeval>.size
+        guard sysctl(&mib, 2, &boot, &size, nil, 0) == 0 else {
+            // Fallback: the old formula (still wrong after sleep, but only
+            // used when sysctl is unavailable, which never happens on macOS).
+            return Int(Date().timeIntervalSince1970 - ProcessInfo.processInfo.systemUptime)
+        }
+        return Int(boot.tv_sec)
     }
 }

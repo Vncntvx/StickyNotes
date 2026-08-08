@@ -109,9 +109,21 @@ public enum OfflineReconciler {
     /// set of note ids that must be deleted locally (honored remote
     /// deletions) plus the aged-out/preserved bookkeeping. Performs NO
     /// writes itself — the caller applies deletions.
+    ///
+    /// - Parameters:
+    ///   - store: The local database.
+    ///   - remoteTombstones: The remote manifest's tombstones.
+    ///   - remoteManifestNoteIds: The note version IDs currently present in
+    ///     the remote manifest entries. A note that IS alive in the remote
+    ///     manifest is healthy — it MUST NOT trigger the FR-174-d
+    ///     "history aged out" flag (that flag is only for notes whose remote
+    ///     deletion history may have aged out, i.e. notes NOT in the
+    ///     manifest with no tombstone). Defaults to empty (legacy callers
+    ///     behave as before).
     public static func classify(
         store: DatabaseStore,
-        remoteTombstones: [RemoteTombstone]
+        remoteTombstones: [RemoteTombstone],
+        remoteManifestNoteIds: Set<UUID> = []
     ) async throws -> (toDelete: Set<UUID>, result: OfflineReconciliationResult) {
         let tombstoneByNote = Dictionary(
             uniqueKeysWithValues: remoteTombstones.map { ($0.noteId, $0) }
@@ -157,7 +169,14 @@ public enum OfflineReconciler {
             case .honorRemoteDeletion:
                 toDelete.insert(note.id)
             case .preserveNoRemoteDeletionRecord:
-                if tombstone == nil && note.lifecycleState != .permanentlyDeleted && note.lifecycleState != .trashed {
+                // FR-174-d: the "history aged out" informational flag fires
+                // ONLY when the note is NOT alive in the remote manifest —
+                // a note present in the manifest entries is demonstrably
+                // synced and healthy, so its history did not age out.
+                if tombstone == nil
+                    && note.lifecycleState != .permanentlyDeleted
+                    && note.lifecycleState != .trashed
+                    && !remoteManifestNoteIds.contains(note.versionId) {
                     result.historyAgedOutDetected = true
                     result.preservedNoteCount += 1
                 }

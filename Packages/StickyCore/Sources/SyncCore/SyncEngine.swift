@@ -151,9 +151,17 @@ public actor SyncEngine {
         //      excludes permanentlyDeleted). If any history aged out, the
         //      summary flags it so the UI informs the user (FR-174-d).
         if let remoteManifest {
+            // FR-174-d refinement: a note whose versionId IS in the remote
+            // manifest entries is alive + synced — its history did NOT age
+            // out. Only notes absent from the manifest (and without a
+            // tombstone) trigger the informational flag.
+            let manifestNoteIds = Set(
+                remoteManifest.entries.compactMap { UUID(uuidString: $0.objectId) }
+            )
             let (toDelete, reconcileResult) = try await OfflineReconciler.classify(
                 store: store,
-                remoteTombstones: remoteManifest.tombstones
+                remoteTombstones: remoteManifest.tombstones,
+                remoteManifestNoteIds: manifestNoteIds
             )
             for noteId in toDelete {
                 if try await applyReconciledDeletion(noteId: noteId) {

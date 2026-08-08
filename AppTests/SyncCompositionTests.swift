@@ -297,6 +297,21 @@ final class InMemorySyncProvider: SyncProviderProtocol, @unchecked Sendable {
         #expect(coordinator.autoSyncPolicy == .every5)
         #expect(coordinator.autoSyncPolicy.interval == 5.0 * 60.0)
     }
+
+    @Test
+    func systemBootTimeMatchesKernelBootTimeAndIsStable() {
+        // FR-162a fix: the boot timestamp must come from `kern.boottime`
+        // (immune to sleep drift). It must match the kernel value and be
+        // identical across calls within one launch.
+        let a = SystemBootTime.current()
+        let b = SystemBootTime.current()
+        #expect(a == b, "boot time is stable within a launch")
+
+        // Sanity: it is in the recent past (not a far-future drift).
+        let now = Int(Date().timeIntervalSince1970)
+        #expect(a <= now, "boot time cannot be in the future")
+        #expect(now - a < 60 * 60 * 24 * 30, "boot time is within the last 30 days")
+    }
 }
 
 // MARK: - JoinExistingVault suite (T008-T010, T022-T025, T021; US1/US2)

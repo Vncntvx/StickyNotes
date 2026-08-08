@@ -69,6 +69,15 @@ DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild test -p
 ```
 
 - `CODE_SIGNING_ALLOWED=NO` for local debug builds.
+- **Manual testing on this Mac**: run `scripts/sign-local.sh` instead of the
+  raw unsigned build + ad-hoc sign recipe. It builds Debug, signs app + widget
+  with the STABLE Apple Development identity
+  (`Apple Development: wenjie.xu.sino@foxmail.com (SJFRS6Q8GH)`, override via
+  `IDENTITY=...`), and relaunches the app. Ad-hoc signing (`codesign -s -`)
+  changes the CDHash on every rebuild, so macOS re-prompts for the Keychain
+  password on every launch (sync credentials / remembered-unlock items are
+  ACL-bound to the previous signature). A stable identity prompts only the
+  first time. CI keeps ad-hoc signing (no keychain on runners).
 - Test suites: `Packages/StickyCore/Tests/{DomainTests,PersistenceTests,EditorCoreTests,AssetStoreTests,SecurityCoreTests,SyncCoreTests,SystemBridgeTests}` (+ migration fixtures `Fixtures/schema_vN.sqlite`). All run via the `DEVELOPER_DIR=…` prefix above.
 - Credentialed WebDAV/S3 sync tests are opt-in via CI secrets (`STICKY_WEBDAV_TEST_*`, `STICKY_S3_TEST_*`) and must be skipped when absent — never commit real credentials.
 - Naming inconsistency between docs: `tasks.md` T001 says workspace + app target `App`; `quickstart.md` uses `StickyNotes.xcodeproj` / scheme `StickyNotes`. Reconcile before Phase 1 work.

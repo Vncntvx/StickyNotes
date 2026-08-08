@@ -46,6 +46,24 @@ public struct SyncSettingsView: View {
         }
     }
 
+    /// The configured repository address (endpoint + bucket/prefix, no
+    /// credentials) — lets the user verify WHERE their vault lives.
+    private func repositoryText(_ configuration: VaultConfiguration) -> String {
+        let config = configuration.providerConfig
+        switch configuration.providerType {
+        case .webdav:
+            return config.prefix.map { "\(config.endpoint)/\($0)" } ?? config.endpoint
+        case .s3:
+            if let bucket = config.bucket {
+                if let prefix = config.prefix, !prefix.isEmpty {
+                    return "\(bucket)/\(prefix)"
+                }
+                return bucket
+            }
+            return config.endpoint
+        }
+    }
+
     public init(syncCoordinator: SyncCoordinator?) {
         self.syncCoordinator = syncCoordinator
     }
@@ -63,6 +81,23 @@ public struct SyncSettingsView: View {
                 LabeledContent("Provider") {
                     Text(providerText)
                 }
+                if let configuration = syncCoordinator?.configuration {
+                    // FR-008/US1: the vault locator is the join key for
+                    // another Mac (manual entry or exported profile). Opaque
+                    // and non-sensitive (CHK032); displayed so device A can
+                    // share it with device B.
+                    LabeledContent("Vault") {
+                        Text(configuration.vaultLocator)
+                            .font(.system(.body, design: .monospaced))
+                            .textSelection(.enabled)
+                            .help("The vault locator. Enter it on another Mac to join this vault.")
+                    }
+                    LabeledContent("Repository") {
+                        Text(repositoryText(configuration))
+                            .textSelection(.enabled)
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 LabeledContent("Last successful sync") {
                     if let date = syncCoordinator?.lastSuccessfulSyncAt {
                         Text(DisplayFormatters.lastModified(date))
@@ -71,9 +106,19 @@ public struct SyncSettingsView: View {
                     }
                 }
                 if let error = syncCoordinator?.lastErrorCode {
-                    LabeledContent("Last error") {
-                        Text(error)
-                            .foregroundStyle(.orange)
+                    // FR-174-d (sync.historyAgedOut) is INFORMATIONAL, not an
+                    // error: some sync history may have aged out; content is
+                    // preserved. Show it muted instead of the alarming orange.
+                    if error == "sync.historyAgedOut" {
+                        LabeledContent("Sync history") {
+                            Text("Some sync history may have aged out; your notes were preserved.")
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        LabeledContent("Last error") {
+                            Text(error)
+                                .foregroundStyle(.orange)
+                        }
                     }
                 }
 
