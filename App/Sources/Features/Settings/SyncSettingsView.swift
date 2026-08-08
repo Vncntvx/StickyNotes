@@ -28,6 +28,23 @@ public struct SyncSettingsView: View {
     @State private var errorMessage: String?
     @State private var statusMessage: String?
 
+    /// The configured status, including the active protocol so the user can
+    /// always see which sync protocol is in use (FR-150).
+    private var statusText: String {
+        guard syncCoordinator?.isConfigured == true else { return "Not configured" }
+        return "Configured"
+    }
+
+    /// The active protocol (WebDAV / S3-compatible), or "—" when
+    /// unconfigured.
+    private var providerText: String {
+        switch syncCoordinator?.configuration?.providerType {
+        case .webdav: return "WebDAV"
+        case .s3: return "S3-compatible"
+        case nil: return "—"
+        }
+    }
+
     public init(syncCoordinator: SyncCoordinator?) {
         self.syncCoordinator = syncCoordinator
     }
@@ -40,7 +57,10 @@ public struct SyncSettingsView: View {
                     .foregroundStyle(.secondary)
 
                 LabeledContent("Status") {
-                    Text(syncCoordinator?.isConfigured == true ? "Configured" : "Not configured")
+                    Text(statusText)
+                }
+                LabeledContent("Provider") {
+                    Text(providerText)
                 }
                 LabeledContent("Last successful sync") {
                     if let date = syncCoordinator?.lastSuccessfulSyncAt {
@@ -62,6 +82,20 @@ public struct SyncSettingsView: View {
                         set: { syncCoordinator?.setAutoSyncEnabled($0) }
                     ))
                     .help("Syncs automatically a few seconds after local changes (FR-152a)")
+
+                    // FR-152 (clarified 2026-08-08): user-selectable strategy —
+                    // change-only or a fixed periodic interval.
+                    Picker("Sync frequency", selection: Binding(
+                        get: { syncCoordinator?.autoSyncPolicy ?? .default },
+                        set: { syncCoordinator?.setAutoSyncPolicy($0) }
+                    )) {
+                        ForEach(AutoSyncPolicy.allCases, id: \.self) { policy in
+                            Text(policy.displayName).tag(policy)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .disabled(!(syncCoordinator?.autoSyncEnabled ?? false))
+                    .help("When automatic sync is on: sync after local changes only, or also on a fixed interval (FR-152)")
 
                     Toggle("Remember unlocked vault on this Mac", isOn: Binding(
                         get: { (syncCoordinator?.configuration?.rememberedUnlock ?? .disabled) == .enabledUntilLockOrRestart },
@@ -275,6 +309,9 @@ private struct SyncConfigureSheet: View {
                     TextField("Endpoint URL (https://…)", text: $endpoint)
                     TextField("Bucket", text: $bucket)
                     TextField("Region", text: $region)
+                    // FR-150 / clarified 2026-08-08: optional folder/prefix —
+                    // objects are stored under "<prefix>/<vault-locator>/".
+                    TextField("Folder / Prefix (optional)", text: $containerPath)
                     TextField("Access key", text: $accessKey)
                     SecureField("Secret key", text: $secretKey)
                 }

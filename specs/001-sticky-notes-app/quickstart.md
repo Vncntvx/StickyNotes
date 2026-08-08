@@ -273,6 +273,22 @@ not granted (headless CI stays green); the other journeys seed their note via
 the test-only `-UITestSeedNote <marker>` launch argument — no synthetic
 keyboard input, which is unreliable through XCUITest on macOS 27 beta.
 
+## Manual testing on your Mac (stable Keychain access)
+
+Ad-hoc signing changes the CDHash on every rebuild, so macOS re-asks for the
+Keychain password on every launch (the sync credentials / remembered-unlock
+Keychain items are bound to the previous signature). For manual testing,
+sign with a STABLE identity once and reuse it:
+
+```bash
+scripts/sign-local.sh
+```
+
+`sign-local.sh` builds Debug, signs app + widget with the local Apple
+Development certificate (override via `IDENTITY=...`), and launches the app —
+Keychain only asks the first time. CI keeps using ad-hoc signing (no
+keychain on runners; the UI smoke journeys do not touch Keychain).
+
 ## Avoiding committing secrets
 
 - Keep all credentials in Keychain at runtime and in CI encrypted secrets for

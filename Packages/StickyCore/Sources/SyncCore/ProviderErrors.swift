@@ -27,6 +27,12 @@ public enum ProviderError: Error, Sendable, Equatable {
     /// `vaultId`, or a bootstrap already exists under the chosen locator
     /// for a new vault. Fail-closed; no local/remote mutation.
     case wrongVault
+    /// An unmapped response/error with a sanitized diagnostic attached —
+    /// e.g. an unrecognized HTTP status (`status<code>`) or a non-URLSession
+    /// error domain (`<domain>.<code>`). The diagnostic NEVER carries
+    /// content, paths, or credentials (FR-165); it exists so the UI can show
+    /// why a sync failed instead of the uninformative `unknown`.
+    case unmapped(String)
     case unknown
 
     /// Stable sanitized code for logs/diagnostics (`sync.provider.<code>`).
@@ -45,6 +51,7 @@ public enum ProviderError: Error, Sendable, Equatable {
         case .canceled: return "sync.provider.canceled"
         case .tls: return "sync.provider.tls"
         case .wrongVault: return "sync.provider.wrongVault"
+        case .unmapped(let diagnostic): return "sync.provider.unmapped.\(diagnostic)"
         case .unknown: return "sync.provider.unknown"
         }
     }
@@ -56,7 +63,7 @@ public enum ProviderError: Error, Sendable, Equatable {
         case .network, .server, .conflict, .clockSkew:
             return true
         case .auth, .forbidden, .conditionalFailed, .notFound, .corrupt,
-             .schemaUnsupported, .canceled, .tls, .wrongVault, .unknown:
+             .schemaUnsupported, .canceled, .tls, .wrongVault, .unmapped, .unknown:
             return false
         }
     }
@@ -101,6 +108,13 @@ public enum ProviderErrorMapping {
             default:
                 return .network
             }
+        // Connection-level failures can surface as POSIX errors (e.g.
+        // ECONNREFUSED 61, EHOSTUNREACH 64) or Cocoa-domain transport
+        // errors (ATS, proxy, stream setup) instead of NSURLErrorDomain.
+        case NSPOSIXErrorDomain:
+            return .network
+        case NSCocoaErrorDomain:
+            return .network
         default:
             return .unknown
         }

@@ -72,7 +72,7 @@ public final class WebDAVProvider: SyncProviderProtocol, @unchecked Sendable {
         // 201 (created) and 405 (already exists) are both fine.
         let status = response.statusCode
         guard status == 201 || status == 405 else {
-            throw mapStatus(status)
+            throw unmappedError(status, op: "verify")
         }
     }
 
@@ -91,7 +91,7 @@ public final class WebDAVProvider: SyncProviderProtocol, @unchecked Sendable {
         case 404:
             return nil
         default:
-            throw mapStatus(response.statusCode)
+            throw unmappedError(response.statusCode, op: "fetchMetadata")
         }
     }
 
@@ -99,7 +99,7 @@ public final class WebDAVProvider: SyncProviderProtocol, @unchecked Sendable {
         var request = URLRequest(url: objectURL(objectName))
         request.httpMethod = "GET"
         let (data, response) = try await perform(request)
-        guard response.statusCode == 200 else { throw mapStatus(response.statusCode) }
+        guard response.statusCode == 200 else { throw unmappedError(response.statusCode, op: "fetch") }
         return data
     }
 
@@ -116,7 +116,7 @@ public final class WebDAVProvider: SyncProviderProtocol, @unchecked Sendable {
         case 412, 405:
             throw ProviderError.conditionalFailed
         default:
-            throw mapStatus(response.statusCode)
+            throw unmappedError(response.statusCode, op: "upload")
         }
     }
 
@@ -127,14 +127,17 @@ public final class WebDAVProvider: SyncProviderProtocol, @unchecked Sendable {
         request.setValue(ifMatch, forHTTPHeaderField: "If-Match")
         let (_, response) = try await perform(request)
         switch response.statusCode {
-        case 200, 204:
+        case 200, 204, 201:
+            // 201 (Created) included: some servers report Created for every
+            // successful PUT even when updating an existing object
+            // (verified against data.cstcloud.cn 2026-08-08).
             return
         case 412:
             throw ProviderError.conditionalFailed
         case 404:
             throw ProviderError.notFound
         default:
-            throw mapStatus(response.statusCode)
+            throw unmappedError(response.statusCode, op: "replace")
         }
     }
 
@@ -153,7 +156,7 @@ public final class WebDAVProvider: SyncProviderProtocol, @unchecked Sendable {
         case 412:
             throw ProviderError.conditionalFailed
         default:
-            throw mapStatus(response.statusCode)
+            throw unmappedError(response.statusCode, op: "delete")
         }
     }
 
@@ -171,7 +174,7 @@ public final class WebDAVProvider: SyncProviderProtocol, @unchecked Sendable {
             """.utf8
         )
         let (data, response) = try await perform(request)
-        guard response.statusCode == 207 else { throw mapStatus(response.statusCode) }
+        guard response.statusCode == 207 else { throw unmappedError(response.statusCode, op: "list") }
         return WebDAVXMLParser.parseMultistatus(data, containerPath: config.containerPath)
     }
 
@@ -179,7 +182,9 @@ public final class WebDAVProvider: SyncProviderProtocol, @unchecked Sendable {
         let data = try await fetch(objectName: ManifestStore.manifestObjectName)
         let metadata = try await fetchMetadata(objectName: ManifestStore.manifestObjectName)
         guard let token = metadata?.versionToken else {
-            throw ProviderError.corrupt
+            // Server omitted the ETag on HEAD — version token unavailable
+            // (diagnostic, not `corrupt`).
+            throw ProviderError.unmapped("manifestNoETag")
         }
         return ManifestFetchResult(data: data, versionToken: token)
     }
@@ -200,14 +205,32 @@ public final class WebDAVProvider: SyncProviderProtocol, @unchecked Sendable {
         do {
             let (data, response) = try await session.data(for: request)
             guard let http = response as? HTTPURLResponse else {
-                throw ProviderError.unknown
+                StickyLogger(category: .sync).error("webdav-response", code: "not-http")
+                throw ProviderError.unmapped("notHTTPResponse")
             }
             return (data, http)
         } catch is CancellationError {
             throw ProviderError.canceled
         } catch {
-            throw ProviderErrorMapping.classify(error)
+            let providerError = ProviderErrorMapping.classify(error)
+            if providerError == .unknown {
+                // FR-165: sanitized diagnostics — domain + code only, never
+                // content, paths, or credentials; surfaced in the UI as
+                // `sync.provider.unmapped.<domain>.<code>`.
+                let ns = error as NSError
+                StickyLogger(category: .sync).error("webdav-error", code: "unknown.\(ns.domain).\(ns.code)")
+                throw ProviderError.unmapped("\(ns.domain).\(ns.code)")
+            }
+            throw providerError
         }
+    }
+
+    /// Maps an unexpected status to a normalized category; the diagnostic
+    /// embeds the OPERATION name so the UI shows which request failed
+    /// (e.g. `unmapped.replace.status201`).
+    private func unmappedError(_ status: Int, op: String) -> ProviderError {
+        StickyLogger(category: .sync).error("webdav-status", code: "\(op).unmapped.\(status)")
+        return .unmapped("\(op).status\(status)")
     }
 
     private func mapStatus(_ status: Int) -> ProviderError {
@@ -222,10 +245,20 @@ public final class WebDAVProvider: SyncProviderProtocol, @unchecked Sendable {
             return .conditionalFailed
         case 507:
             return .server
+        case 408, 429:
+            return .network
+        case 400, 405, 423:
+            // Bad request / method not allowed / locked — server-side
+            // protocol-level rejections, not client transport faults.
+            return .server
         case 500..<600:
             return .server
         default:
-            return .unknown
+            // FR-165: the status is sanitized diagnostic signal (never
+            // content); surfaced as `sync.provider.unmapped.status<N>` so
+            // the UI shows why the sync failed.
+            StickyLogger(category: .sync).error("webdav-status", code: "unmapped.\(status)")
+            return .unmapped("status\(status)")
         }
     }
 
