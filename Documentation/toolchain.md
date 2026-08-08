@@ -95,6 +95,43 @@ the full per-prototype report; the status is mirrored here:
 T025a is marked complete for the headless portion; the GUI interactive
 verification is T158 (not yet done).
 
+## macOS 27 Liquid Glass API evidence (003 T002, verified 2026-08-09)
+
+Verified against the installed SDK at
+`/Applications/Xcode-beta.app/Contents/Developer` (Xcode 27.0 27A5228h,
+macOS 27.0 SDK). Availability is per the SDK declarations; the project
+deployment target stays macOS 26.0.
+
+**Available at macOS 26.0 (usable unguarded)**:
+
+- SwiftUICore/SwiftUI: `glassEffect(_:in:)` (+ `GlassEffectTransition`),
+  `Glass` (`.regular/.clear/.identity`, instance methods
+  `tint(_:)`/`interactive(_:)`), `GlassEffectContainer`,
+  `glassEffectID(_:in:)`, `glassEffectUnion(id:namespace:)`,
+  `glassEffectTransition(_:)`, `sharedBackgroundVisibility(_:)`,
+  `appearsActive` (10.15+, back-deployed),
+  `accessibilityReduceTransparency`, `accessibilityReduceMotion`,
+  `accessibilityShowBorders`, `.searchable`.
+- AppKit: `NSGlassEffectView` (26.0; incl. `NSGlassEffectContainerView`),
+  `NSButton.BezelStyle.glass` (`NSBezelStyleGlass = 16`, 26.0),
+  `NSBackgroundExtensionView`, `NSToolbar`, `NSWindowToolbarStyle`.
+
+**Newer than macOS 26.0 — MUST be `#available`-guarded**:
+
+- `ToolbarContent.visibilityPriority(_:)` — macOS 26.1.
+- `NSGlassEffectView.effectIsInteractive` — macOS 27.0.
+
+**Confirmed absent (do not use)**:
+
+- `glassEffect(_:in:appliesShadow:cornerRadius:)` overload — not in SDK.
+- `ToolbarItemPlacement.search` — no macOS case.
+
+**Baseline record (003 T001, 2026-08-09)**: StickyCore 605 tests in 7
+modules green; AppTests 145 tests in 45 suites green; AppUITests runner
+cannot initialize in this headless session (UI tests require an
+interactive desktop session — environment limitation, not a regression).
+Zero code changes at baseline.
+
 ## Reconciliation with `tasks.md` T001 / `quickstart.md`
 
 - `tasks.md` T001 says: "Create Xcode workspace with macOS app target `App` and Widget Extension target `WidgetExtension`".

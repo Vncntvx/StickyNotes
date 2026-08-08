@@ -54,6 +54,17 @@ public final class LibraryModel {
     /// cannot trigger observation — FR-014a).
     public private(set) var onboardingHintDismissed = false
 
+    // MARK: - Keyboard navigation (003 T012, FR-024)
+
+    /// The keyboard-selected note id (arrow-key selection model, FR-024).
+    /// Distinct from mouse hover; used by ⌘⌫ move-to-Trash and Return-open
+    /// commands. nil = no selection (e.g. empty grid).
+    public private(set) var keyboardSelection: UUID?
+
+    /// A search-focus request (⌘F / searchAll / `stickynotes://search`):
+    /// the library view consumes it to focus the native search field.
+    public private(set) var searchFocusRequested = false
+
     /// First-launch onboarding hint visibility (FR-014a).
     public var showOnboardingHint: Bool {
         let state = preferences.firstLaunchState
@@ -165,7 +176,32 @@ public final class LibraryModel {
         guard newScope != scope else { return }
         scope = newScope
         searchQuery = ""
+        keyboardSelection = nil
         Task { await reload() }
+    }
+
+    // MARK: - Keyboard navigation (003 T012/T027, FR-024)
+
+    /// Selects the next/previous card in the current sort order (arrow
+    /// keys). Wraps around at the ends. No-op on an empty grid.
+    public func moveKeyboardSelection(by delta: Int) {
+        guard !cards.isEmpty else { return }
+        guard let current = keyboardSelection, let index = cards.firstIndex(where: { $0.noteId == current }) else {
+            keyboardSelection = cards[0].noteId
+            return
+        }
+        let next = (index + delta + cards.count) % cards.count
+        keyboardSelection = cards[next].noteId
+    }
+
+    /// Clears the keyboard selection (grid emptied or scope switched).
+    public func clearKeyboardSelection() {
+        keyboardSelection = nil
+    }
+
+    /// Requests search focus (⌘F / searchAll / deep link, 003 T025).
+    public func setSearchFocusRequested(_ requested: Bool) {
+        searchFocusRequested = requested
     }
 
     // MARK: - Actions

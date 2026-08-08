@@ -88,6 +88,38 @@ import SystemBridge
         NoteWindowBridge.unregister(noteId: note.id)
         #expect(true)
     }
+
+    // MARK: - T003 pre-redesign snapshots (003-macos27-liquid-glass-redesign)
+    //
+    // Red-light behavior pin: the note window stays a standard macOS window
+    // (traffic lights, move/resize/close) across the presentation redesign
+    // (003 FR-040 regression assertions). The redesign must NOT remove the
+    // standard chrome or change the ownership/lifetime semantics.
+
+    @Test
+    func snapshotNoteWindowKeepsStandardTrafficLightChrome() async throws {
+        let env = try makeEnvironment()
+        let coordinator = NoteWindowCoordinator(environment: env)
+        let repo = env.persistence.noteRepository!
+        let note = Note(lastModifiedDeviceId: Self.deviceId)
+        try await repo.create(note)
+
+        let window = try #require(await coordinator.open(noteId: note.id))
+        // Standard macOS chrome: titled (traffic lights), closable
+        // (red-light close), resizable (green-light resize), full-size
+        // content integration.
+        #expect(window.styleMask.contains(.titled), "standard title bar with traffic lights (FR-006/FR-007)")
+        #expect(window.styleMask.contains(.closable), "close button present (red light)")
+        #expect(window.styleMask.contains(.resizable), "resize semantics present (green light)")
+        #expect(window.styleMask.contains(.fullSizeContentView), "full-size content layout (note-paper chrome)")
+
+        // Ownership/lifetime guard from the 2026-08-07 crash fix.
+        #expect(window.isReleasedWhenClosed == false, "coordinator retains ownership")
+
+        window.close()
+        NoteWindowBridge.unregister(noteId: note.id)
+        coordinator.releaseWindowDelegate(noteId: note.id)
+    }
 }
 
 // MARK: - Typing-persistence pipeline (2026-08-07 manual-run regression)

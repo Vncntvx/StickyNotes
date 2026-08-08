@@ -110,6 +110,88 @@ struct StickyNotesApp: App {
             HelpView()
         }
         .windowResizability(.contentSize)
+
+        // MARK: - Menu commands (003 T011, FR-072/SC-017)
+        //
+        // Built from MenuCommandCatalog (the SC-017 single source of
+        // truth); actions reuse the existing model/coordinator methods and
+        // notification-based dispatch — no new command manager.
+        .commands {
+            CommandGroup(replacing: .appInfo) {
+                Button("About Sticky Notes") {
+                    openAboutWindow()
+                }
+            }
+
+            CommandGroup(after: .appSettings) {
+                Button("Settings…") {
+                    openSettingsWindow()
+                }
+            }
+
+            CommandGroup(replacing: .newItem) {
+                Button("New Note") {
+                    createNoteFromShortcut()
+                }
+                .keyboardShortcut("n", modifiers: .command)
+
+                Button("New Note from Clipboard") {
+                    handleClipboardNoteShortcut()
+                }
+
+                Button("New Note from Region Capture") {
+                    createNoteAndCapture()
+                }
+
+                Button("New Note from Window Capture") {
+                    createNoteAndCapture()
+                }
+            }
+
+            CommandGroup(after: .newItem) {
+                Divider()
+                Button("Move to Trash") {
+                    moveFocusedNoteToTrash()
+                }
+                .keyboardShortcut(KeyEquivalent.delete, modifiers: .command)
+
+                Button("Delete Forever…") {
+                    permanentlyDeleteFocusedNote()
+                }
+            }
+
+            CommandGroup(after: .saveItem) {
+                Button("Close Note Window") {
+                    closeKeyNoteWindow()
+                }
+                .keyboardShortcut("w", modifiers: .command)
+            }
+
+            CommandMenu("Sort") {
+                sortSubmenu()
+            }
+
+            CommandGroup(after: .toolbar) {
+                Button("Search") {
+                    focusLibrarySearch()
+                }
+                .keyboardShortcut("f", modifiers: .command)
+
+                Button("Trash") {
+                    toggleTrashDestination()
+                }
+
+                Button("Show/Hide Note Windows") {
+                    toggleNoteWindows()
+                }
+            }
+
+            CommandGroup(replacing: .help) {
+                Button("Help") {
+                    openHelpWindow()
+                }
+            }
+        }
     }
 
     // MARK: - Global shortcuts (T145/T296, FR-120/FR-121)
@@ -434,6 +516,67 @@ struct StickyNotesApp: App {
             // MenuBarExtra is toggled by the system on activation.
             break
         }
+    }
+
+    // MARK: - Menu command actions (003 T011)
+
+    /// Moves the keyboard-focused note card to Trash (FR-024 ⌘⌫ command).
+    private func moveFocusedNoteToTrash() {
+        guard let model = libraryModel, let focused = model.keyboardSelection else { return }
+        Task {
+            if await model.trash(noteId: focused) != nil {
+                toastPresenter.present(message: String(localized: "Moved to Trash"))
+                coordinator?.closeAll(noteId: focused)
+            }
+        }
+    }
+
+    /// Permanently deletes the keyboard-focused note (Trash scope).
+    private func permanentlyDeleteFocusedNote() {
+        guard let model = libraryModel, let focused = model.keyboardSelection else { return }
+        Task {
+            if await model.permanentlyDelete(noteId: focused) != nil {
+                toastPresenter.present(message: String(localized: "Permanently Deleted"))
+                coordinator?.closeAll(noteId: focused)
+            }
+        }
+    }
+
+    /// Closes the key note window (⌘W).
+    private func closeKeyNoteWindow() {
+        guard let window = NSApp.keyWindow else { return }
+        // Find the noteId registered for this window (one window per note).
+        let matching = NoteWindowBridge.allRegistrations().first { entry in
+            entry.value.windowRef.window() === window
+        }
+        guard let (noteId, _) = matching else { return }
+        window.close()
+        NoteWindowBridge.unregister(noteId: noteId)
+        coordinator?.releaseWindowDelegate(noteId: noteId)
+    }
+
+    /// Opens the library and focuses its search field (⌘F / searchAll).
+    private func focusLibrarySearch() {
+        if let model = libraryModel {
+            model.setSearchFocusRequested(true)
+        }
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// Toggles the Notes/Trash destination (View > Trash).
+    private func toggleTrashDestination() {
+        guard let model = libraryModel else { return }
+        model.setScope(model.scope == .library ? .trash : .library)
+    }
+
+    /// The View > Sort submenu (001 FR-022 modes).
+    @ViewBuilder
+    private func sortSubmenu() -> some View {
+        let model = libraryModel
+        Button("Recently Modified") { model?.setSort(.modified) }
+        Button("Created") { model?.setSort(.created) }
+        Button("Title") { model?.setSort(.title) }
+        Button("Manual") { model?.setSort(.manual) }
     }
 }
 
