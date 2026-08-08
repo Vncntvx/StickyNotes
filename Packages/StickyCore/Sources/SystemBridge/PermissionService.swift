@@ -53,6 +53,32 @@ public enum PermissionService {
         CGPreflightScreenCaptureAccess()
     }
 
+    /// Requests screen-recording permission directly: presents the system
+    /// authorization dialog when the user has not decided yet, and routes to
+    /// the Screen Capture privacy pane when the user previously denied it
+    /// (re-requesting a denied permission opens System Settings). Returns
+    /// whether the permission is granted after the request. Only called when
+    /// the user invokes the feature (FR-131).
+    @MainActor
+    public static func requestScreenRecording() -> Bool {
+        CGRequestScreenCaptureAccess()
+    }
+
+    /// Requests accessibility permission: presents the system accessibility
+    /// authorization dialog. Constitution 2.0.0 / FR-131 (clarified
+    /// 2026-08-08): this MUST only ever be invoked from an explicit,
+    /// user-initiated action on the Settings permissions page — never during
+    /// startup, first launch, or ordinary note editing. Returns whether the
+    /// permission is granted after the request.
+    @MainActor
+    public static func requestAccessibility() -> Bool {
+        // "AXTrustedCheckOptionPrompt" is the stable public value of
+        // kAXTrustedCheckOptionPrompt (AXUIElement.h); the non-Sendable
+        // global `var` constant cannot be referenced under Swift 6 strict
+        // concurrency.
+        return AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
+    }
+
     /// Current accessibility status. NEVER called at startup or during
     /// ordinary capture (constitution VI; plan §Permissions).
     public static func accessibilityStatus() -> PermissionStatus {
