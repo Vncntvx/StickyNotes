@@ -199,6 +199,9 @@ tmbootpicker.efi
 
 # Derived data (Xcode / SwiftPM)
 DerivedData/
+build/
+# Xcode explicit precompiled module cache (generated inside the xcodeproj)
+*.xcodeproj/-Xcc/
 *.xcworkspace/xcuserdata/
 *.xcodeproj/xcuserdata/
 *.xcodeproj/project.xcworkspace/xcuserdata/

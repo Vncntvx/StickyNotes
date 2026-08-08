@@ -11,6 +11,7 @@
 		0253C53A6A5428DFEFE7807A /* OfflineCompletenessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66A152530F86B2F096020DF8 /* OfflineCompletenessTests.swift */; };
 		02CAAD5AA98EC60B5D30BC25 /* ScreenshotViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30B531FA942D96036B11AE30 /* ScreenshotViewer.swift */; };
 		06BF047951390D783CFA3F3D /* AppDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CFB590F77008376AAC261A8 /* AppDevice.swift */; };
+		070309D43C0778D100147E4A /* RichTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 777D3A0AC3604F09D8A0DD4F /* RichTextView.swift */; };
 		08A3B71916C5E8ED34101E8A /* Domain in Frameworks */ = {isa = PBXBuildFile; productRef = 0E924C867EAA12FBA94B943D /* Domain */; };
 		11DC1A682CC5FF585D18DA34 /* EditorAppBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81900AF4BA1C9E0E2E07F08F /* EditorAppBridgeTests.swift */; };
 		1543CC1D86E9D4EACA48829F /* WidgetRefreshCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A551E45B01856B10E07279F5 /* WidgetRefreshCoordinator.swift */; };
@@ -191,6 +192,7 @@
 		6F60C54C7398454DA1704818 /* LibraryModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryModel.swift; sourceTree = "<group>"; };
 		7179395CF3D9AC0A08605ADB /* Formatters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Formatters.swift; sourceTree = "<group>"; };
 		776309F2630239B7A7F9FC75 /* WidgetRefreshTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetRefreshTests.swift; sourceTree = "<group>"; };
+		777D3A0AC3604F09D8A0DD4F /* RichTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RichTextView.swift; sourceTree = "<group>"; };
 		78A4C413F0CF87AEB4BD70BD /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		78CD3DDE7950E7C9897A7354 /* ScreenshotBlockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotBlockView.swift; sourceTree = "<group>"; };
 		7B0561D9ACF463C89D89F9D7 /* LibrarySearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySearchView.swift; sourceTree = "<group>"; };
@@ -509,6 +511,7 @@
 				C39E7F8A3D047F54BDBAD329 /* CodeBlockView.swift */,
 				671A751D4B5B0FCABB4A0182 /* EditorAppBridge.swift */,
 				E8ACC7F76C51993D7B944C36 /* RichTextBlockView.swift */,
+				777D3A0AC3604F09D8A0DD4F /* RichTextView.swift */,
 				78CD3DDE7950E7C9897A7354 /* ScreenshotBlockView.swift */,
 				226231C3FA8C724BB9022CDD /* TodoBlockView.swift */,
 			);
@@ -760,6 +763,7 @@
 				7C9122123385CD9B567836BB /* ReadableTheme.swift in Sources */,
 				EC7AC7CFC75FB2781519FD36 /* RegionSelectionOverlay.swift in Sources */,
 				8D662356BD2A6817EA77998A /* RichTextBlockView.swift in Sources */,
+				070309D43C0778D100147E4A /* RichTextView.swift in Sources */,
 				B2E24EF4CDD2A2C3561F71BF /* ScreenshotBlockView.swift in Sources */,
 				02CAAD5AA98EC60B5D30BC25 /* ScreenshotViewer.swift in Sources */,
 				01F69423C2CB3F77ACBA69DA /* SettingsView.swift in Sources */,

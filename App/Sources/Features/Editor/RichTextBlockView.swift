@@ -49,12 +49,10 @@ public struct RichTextBlockView: View {
     let onOpenViewer: () -> Void
     let onEmbeddedImageAction: (UUID, EmbeddedImageAction) async -> Void
 
-    @State private var attributedText = AttributedString("")
     @State private var isIMEComposing = false
     // T300 (FR-050a): cursor-exit detection for empty-block removal. The
     // decision fires exactly once per exit; the flag resets when the block
     // gains non-empty text again.
-    @FocusState private var editorFocused: Bool
     @State private var didRemoveEmptyBlockOnExit = false
 
     public init(
@@ -100,48 +98,19 @@ public struct RichTextBlockView: View {
     }
 
     public var body: some View {
+        // Fixed editor slot (300 pt): large enough that an empty note has a
+        // substantial typing surface without a large void, while the
+        // NSTextView keeps its natural size — dynamically resizing the text
+        // view (GeometryReader / `.infinity`) broke input caret placement
+        // (verified 2026-08-07).
         ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
-                // Rich-text block (the seamless primary surface).
-                TextEditor(text: $attributedText)
-                    .font(.system(size: ReadableTheme.textSize(for: note)))
-                    .foregroundStyle(ReadableTheme.foreground(for: note))
-                    .scrollContentBackground(.hidden)
-                    .frame(minHeight: 220)
-                    .focused($editorFocused)
-                    .onAppear {
-                        syncFromCanonical()
-                    }
-                    .onChange(of: attributedText) { _, newValue in
-                        // T211: signpost-bracket the keystroke path
-                        // (SC-004a); sanitized op name only.
-                        let state = StickyLogger.editor.signpostBegin("editor.keystroke")
-                        didRemoveEmptyBlockOnExit = false
-                        commit(newValue)
-                        StickyLogger.editor.signpostEnd(state, op: "editor.keystroke")
-                    }
-                    .onChange(of: editorFocused) { _, focused in
-                        // T300 (FR-050a): when the cursor exits an emptied
-                        // block, remove it — merge into the FOLLOWING block
-                        // or delete outright (clarified 2026-08-07); the
-                        // final block is never removed; suppressed while an
-                        // IME composition is active (FR-063).
-                        guard !focused, !isIMEComposing, !didRemoveEmptyBlockOnExit else { return }
-                        didRemoveEmptyBlockOnExit = true
-                        guard let richIndex = blocks.firstIndex(where: { $0.kind == .richText }),
-                              let updated = EditorAppBridge.applyEmptyBlockRemoval(
-                                  blocks: blocks,
-                                  emptiedBlockIndex: richIndex,
-                                  hasIMEComposition: false
-                              ) else { return }
-                        // ONE undo group: the removal restores the block on
-                        // a single Undo (FR-050a). Structural change persists
-                        // immediately per FR-141a.
-                        onStructuralBlocksChanged(updated)
-                    }
-
+                VStack(alignment: .leading, spacing: 10) {
                 // FR-050 block insertion (T290): todos, code blocks, file
                 // references (Finder drag-drop handled at the window level).
+                // Placed ABOVE the editor so an empty note's primary
+                // affordance sits at the top (2026-08-07 layout fix — the
+                // row previously floated mid-window below the editor's
+                // min-height area).
                 HStack(spacing: 10) {
                     Menu {
                         Button("Add Todo", action: onInsertTodo)
@@ -161,6 +130,46 @@ public struct RichTextBlockView: View {
                     Spacer()
                 }
                 .padding(.bottom, 2)
+
+                // Rich-text block (the seamless primary surface) —
+                // NSTextView-backed (verified 2026-08-07: SwiftUI
+                // `TextEditor`'s binding never writes back on macOS 27
+                // beta; plan-sanctioned fallback, canonical format
+                // unchanged). Natural height (min 120 pt) so short notes
+                // fit without a scroll track.
+                RichTextView(
+                    document: canonicalDocument,
+                    textSize: ReadableTheme.textSize(for: note),
+                    onCommit: { document in
+                        didRemoveEmptyBlockOnExit = false
+                        commit(document)
+                        let state = StickyLogger.editor.signpostBegin("editor.keystroke")
+                        StickyLogger.editor.signpostEnd(state, op: "editor.keystroke")
+                    },
+                    onFocusChange: { focused, hasMarkedText in
+                        // FR-063: the IME composition state drives every
+                        // transformation/removal decision.
+                        isIMEComposing = hasMarkedText
+                        // T300 (FR-050a): when the cursor exits an emptied
+                        // block, remove it — merge into the FOLLOWING block
+                        // or delete outright (clarified 2026-08-07); the
+                        // final block is never removed; suppressed while an
+                        // IME composition is active (FR-063).
+                        guard !focused, !hasMarkedText, !didRemoveEmptyBlockOnExit else { return }
+                        didRemoveEmptyBlockOnExit = true
+                        guard let richIndex = blocks.firstIndex(where: { $0.kind == .richText }),
+                              let updated = EditorAppBridge.applyEmptyBlockRemoval(
+                                  blocks: blocks,
+                                  emptiedBlockIndex: richIndex,
+                                  hasIMEComposition: false
+                              ) else { return }
+                        // ONE undo group: the removal restores the block on
+                        // a single Undo (FR-050a). Structural change persists
+                        // immediately per FR-141a.
+                        onStructuralBlocksChanged(updated)
+                    }
+                )
+                .frame(minHeight: 300, alignment: .topLeading)
 
                 // Special blocks rendered beneath (todo/code/file/image/
                 // screenshot) with the unified container (FR-050b).
@@ -225,79 +234,39 @@ public struct RichTextBlockView: View {
         }
     }
 
-    // MARK: - Canonical ↔ SwiftUI bridging (T161)
+    // MARK: - Canonical ↔ AppKit bridging (T161; NSTextView fallback 2026-08-07)
 
-    /// Loads the first rich-text block's canonical document into the
-    /// SwiftUI attributed string (only supported marks — FR-053).
-    private func syncFromCanonical() {
+    /// The canonical document backing the editor (the model owns it; the
+    /// representable mirrors it).
+    private var canonicalDocument: RichTextDocument {
         guard let richBlock = blocks.first(where: { $0.kind == .richText }),
               case .richText(let doc) = richBlock.payload else {
-            attributedText = AttributedString("")
-            return
+            return .empty
         }
-        var attributed = AttributedString(doc.text)
-        for paragraph in doc.paragraphs {
-            for run in paragraph.runs {
-                let start = attributed.index(attributed.startIndex, offsetByCharacters: run.startScalar)
-                let end = attributed.index(attributed.startIndex, offsetByCharacters: run.endScalar)
-                guard start < end else { continue }
-                let range = start..<end
-                if run.marks.contains(.bold) { attributed[range].inlinePresentationIntent = .stronglyEmphasized }
-                if run.marks.contains(.italic) { attributed[range].inlinePresentationIntent = .emphasized }
-                if run.marks.contains(.strikethrough) { attributed[range].strikethroughStyle = .single }
-                if run.marks.contains(.underline) { attributed[range].underlineStyle = .single }
-                if run.marks.contains(.inlineCode) {
-                    attributed[range].font = Font.system(.body, design: .monospaced)
-                }
-                if let link = run.link {
-                    attributed[range].link = URL(string: link)
-                }
-            }
-        }
-        attributedText = attributed
+        return doc
     }
 
-    /// Commits the SwiftUI attributed state back to the canonical document
-    /// (strip unsupported attributes; IME-safe; auto-link detection).
-    private func commit(_ newValue: AttributedString) {
-        // IME marked text: keep the raw state, do not transform (FR-063).
-        if isIMEComposing { return }
-        guard var richBlock = blocks.first(where: { $0.kind == .richText }) else { return }
-
-        let plainText = String(newValue.characters)
-        var doc = RichTextAdapter.document(fromPlainText: plainText)
-
-        // Rebuild runs from the supported attributes (FR-053).
-        var runs: [RichTextRun] = []
-        var cursor = 0
-        let scalars = Array(doc.text.unicodeScalars)
-        for run in newValue.runs {
-            let subText = String(newValue[run.range].characters)
-            let runLength = subText.unicodeScalars.count
-            let start = max(0, cursor)
-            let end = min(scalars.count, cursor + runLength)
-            cursor = end
-            guard end > start else { continue }
-            var marks: Set<RichTextMark> = []
-            if let intent = run.inlinePresentationIntent {
-                if intent.contains(.stronglyEmphasized) { marks.insert(.bold) }
-                if intent.contains(.emphasized) { marks.insert(.italic) }
-            }
-            if run.strikethroughStyle != nil { marks.insert(.strikethrough) }
-            if run.underlineStyle != nil { marks.insert(.underline) }
-            runs.append(RichTextRun(startScalar: start, endScalar: end, marks: marks))
+    /// Commits a canonical document produced by the editor: applies the
+    /// FR-050 auto-link detection (T143) and persists through the host's
+    /// debounced autosave (FR-141a).
+    private func commit(_ document: RichTextDocument) {
+        guard var richBlock = blocks.first(where: { $0.kind == .richText }) else {
+            // Defensive (verified 2026-08-07): notes created before the
+            // initial-block fix may lack the rich-text surface. Create it on
+            // first commit so typed input is never dropped.
+            let created = Block(
+                noteId: note.id,
+                kind: .richText,
+                sortKey: 0,
+                payload: .richText(document),
+                lastModifiedDeviceId: DeviceIdentity.current.id
+            )
+            onStructuralBlocksChanged(blocks + [created])
+            return
         }
-        if let last = runs.last, last.endScalar < scalars.count {
-            runs.append(RichTextRun(startScalar: last.endScalar, endScalar: scalars.count, marks: []))
-        }
-        doc = RichTextDocument(
-            text: doc.text,
-            paragraphs: doc.paragraphs.isEmpty ? [RichTextParagraph(startScalar: 0, endScalar: scalars.count, style: .body, runs: runs)] : doc.paragraphs.map { p in
-                RichTextParagraph(startScalar: p.startScalar, endScalar: p.endScalar, style: p.style, runs: p.runs.isEmpty ? runs.filter { $0.startScalar >= p.startScalar && $0.endScalar <= p.endScalar } : p.runs)
-            }
-        )
 
         // FR-050 auto-link detection (T143): feed `link` marks.
+        var doc = document
         let links = AutoLinkDetector.detectLinks(in: doc.text, insideCodeBlock: false)
         if !links.isEmpty {
             var paragraphs = doc.paragraphs
