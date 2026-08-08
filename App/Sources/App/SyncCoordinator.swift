@@ -44,6 +44,25 @@ public struct SyncProviderCredentials: Sendable, Codable, Equatable {
     }
 }
 
+/// A vault discovered on a configured repository (scan-before-join).
+public struct DiscoveredVault: Sendable, Equatable, Identifiable {
+    /// The vault's stable identity (from its bootstrap — read-only, no
+    /// password needed to enumerate vaults).
+    public let vaultId: UUID
+    /// The opaque remote locator — what the join flow needs.
+    public let vaultLocator: String
+    /// When the vault was created (bootstrap `createdAt`).
+    public let createdAt: Date
+
+    public var id: UUID { vaultId }
+
+    public init(vaultId: UUID, vaultLocator: String, createdAt: Date) {
+        self.vaultId = vaultId
+        self.vaultLocator = vaultLocator
+        self.createdAt = createdAt
+    }
+}
+
 @MainActor
 @Observable
 public final class SyncCoordinator {
@@ -217,6 +236,72 @@ public final class SyncCoordinator {
         )
         let provider = try makeProvider(configuration: configuration, credentials: credentials)
         try await provider.verify()
+    }
+
+    /// Scans the configured repository (user prefix level, READ-ONLY) for
+    /// existing vaults and returns them without needing any vault password:
+    /// each vault's bootstrap is listed + fetched by its derived object
+    /// name, so the user can PICK a vault to join instead of typing the
+    /// locator. Returns vaults sorted by creation date.
+    ///
+    /// - Throws: provider connectivity/authorization errors; a repository
+    ///   with zero vaults returns an empty array (not an error).
+    public func discoverVaults(
+        providerType: ProviderType,
+        endpoint: String,
+        containerPath: String?,
+        bucket: String?,
+        region: String?,
+        credentials: SyncProviderCredentials
+    ) async throws -> [DiscoveredVault] {
+        // 1. Repository-level provider (user prefix only, NO vault locator).
+        let redacted = redactedConfig(providerType: providerType, endpoint: endpoint, bucket: bucket, region: region, containerPath: containerPath)
+        let repoConfiguration = VaultConfiguration(
+            vaultId: UUID(),
+            vaultLocator: "",
+            providerType: providerType,
+            providerConfig: redacted,
+            keychainCredentialRef: ""
+        )
+        let repoProvider = try makeProvider(configuration: repoConfiguration, credentials: credentials)
+
+        // 2. List everything under the user prefix. Each vault lives in its
+        //    own "<locator>/" subdirectory; the manifest + bootstrap objects
+        //    live inside it. Derive candidate locators from the first path
+        //    segment.
+        let objects = try await repoProvider.list()
+        var locators = Set<String>()
+        for metadata in objects {
+            let first = metadata.objectName.split(separator: "/").first.map(String.init) ?? metadata.objectName
+            if !first.isEmpty, first != ManifestStore.manifestObjectName {
+                locators.insert(first)
+            }
+        }
+
+        // 3. For each candidate locator, fetch the bootstrap (READ-ONLY) and
+        //    keep only those that parse as real vaults.
+        var vaults: [DiscoveredVault] = []
+        for locator in locators {
+            let config = VaultConfiguration(
+                vaultId: UUID(),
+                vaultLocator: locator,
+                providerType: providerType,
+                providerConfig: redacted,
+                keychainCredentialRef: ""
+            )
+            let provider = try makeProvider(configuration: config, credentials: credentials)
+            guard let data = try? await provider.fetch(
+                objectName: RemoteLayout.bootstrapObjectName(for: locator)
+            ), let bootstrap = try? VaultBootstrap.fromCanonicalJSON(data) else {
+                continue  // not a vault (or unreadable) — skip
+            }
+            vaults.append(DiscoveredVault(
+                vaultId: bootstrap.vaultId,
+                vaultLocator: locator,
+                createdAt: bootstrap.createdAt
+            ))
+        }
+        return vaults.sorted { $0.createdAt < $1.createdAt }
     }
 
     // MARK: - Join existing vault (T011/T012, US1)
@@ -500,9 +585,14 @@ public final class SyncCoordinator {
     /// providers (`"<prefix>/<locator>"`, or `"<locator>"` when no user
     /// prefix) so a join by locator reaches the same remote location and
     /// vaults on one repository stay isolated. Pure + testable.
+    ///
+    /// An EMPTY `vaultLocator` returns the bare user prefix (repository-level
+    /// addressing) — used by vault discovery to LIST the whole repository.
     static func remoteContainerPath(prefix: String?, vaultLocator: String) -> String {
         let base = (prefix ?? "").trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        return base.isEmpty ? vaultLocator : "\(base)/\(vaultLocator)"
+        let locator = vaultLocator.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        if locator.isEmpty { return base }
+        return base.isEmpty ? locator : "\(base)/\(locator)"
     }
 
     /// Builds the provider: test override or the real adapter (credentials

@@ -91,7 +91,7 @@ final class InMemorySyncProvider: SyncProviderProtocol, @unchecked Sendable {
 
     private static let deviceId = UUID(uuidString: "d0000000-0000-4000-8000-000000000005")!
 
-    private func makeCoordinator(provider: InMemorySyncProvider? = nil) throws -> (SyncCoordinator, DatabaseStore, InMemorySecretStore) {
+    private func makeCoordinator(provider: (any SyncProviderProtocol)? = nil) throws -> (SyncCoordinator, DatabaseStore, InMemorySecretStore) {
         let store = try DatabaseStore.inMemory()
         try InitialSchema.migrator().migrate(store.dbPool)
         let secretStore = InMemorySecretStore()
@@ -321,6 +321,81 @@ final class InMemorySyncProvider: SyncProviderProtocol, @unchecked Sendable {
 // sync. Tests use the shared in-memory provider to simulate device A's
 // vault on the remote; device B joins it.
 
+/// Shared storage for the repo-layout provider — all scoped instances see
+/// the same object map.
+final class RepoStore: @unchecked Sendable {
+    let lock = OSAllocatedUnfairLock(initialState: [String: Data]())
+}
+
+/// Repo-layout-aware in-memory provider for DISCOVERY tests: object names
+/// are stored under their vault locator directory (`"<locator>/<name>"`),
+/// exactly like the real WebDAV/S3 providers. The repository level (empty
+/// locator) lists every vault's objects; a vault-level provider fetches
+/// inside its own directory. All instances share one `RepoStore`.
+final class RepoLayoutInMemoryProvider: SyncProviderProtocol, @unchecked Sendable {
+    private let store: RepoStore
+    /// The vault locator this provider is scoped to ("" = repository level).
+    private let vaultLocator: String
+
+    init(store: RepoStore = RepoStore(), vaultLocator: String = "") {
+        self.store = store
+        self.vaultLocator = vaultLocator
+    }
+
+    private func key(_ objectName: String) -> String {
+        vaultLocator.isEmpty ? objectName : "\(vaultLocator)/\(objectName)"
+    }
+
+    /// Seeds a vault's bootstrap + manifest under its locator directory.
+    func seedVault(locator: String, bootstrapData: Data, manifestData: Data? = nil) {
+        store.lock.withLock { state in
+            state["\(locator)/\(RemoteLayout.bootstrapObjectName(for: locator))"] = bootstrapData
+            if let manifestData {
+                state["\(locator)/\(ManifestStore.manifestObjectName)"] = manifestData
+            }
+        }
+    }
+
+    func verify() async throws {}
+    func fetchMetadata(objectName: String) async throws -> ObjectMetadata? {
+        store.lock.withLock { state in
+            guard let data = state[key(objectName)] else { return nil }
+            return ObjectMetadata(objectName: objectName, versionToken: "t", byteSize: data.count, modifiedAt: nil)
+        }
+    }
+    func fetch(objectName: String) async throws -> Data {
+        try store.lock.withLock { state in
+            guard let data = state[key(objectName)] else { throw ProviderError.notFound }
+            return data
+        }
+    }
+    func upload(objectName: String, data: Data) async throws {
+        try store.lock.withLock { state in
+            let k = key(objectName)
+            if state[k] != nil { throw ProviderError.conditionalFailed }
+            state[k] = data
+        }
+    }
+    func replace(objectName: String, data: Data, ifMatch: String) async throws {
+        store.lock.withLock { state in state[key(objectName)] = data }
+    }
+    func delete(objectName: String, ifMatch: String?) async throws {
+        store.lock.withLock { state in state[key(objectName)] = nil }
+    }
+    func list() async throws -> [ObjectMetadata] {
+        store.lock.withLock { state in
+            let prefix = vaultLocator.isEmpty ? "" : "\(vaultLocator)/"
+            return state.keys
+                .filter { $0.hasPrefix(prefix) }
+                .map { ObjectMetadata(objectName: String($0.dropFirst(prefix.count)), versionToken: nil, byteSize: nil, modifiedAt: nil) }
+        }
+    }
+    func fetchManifest() async throws -> ManifestFetchResult {
+        throw ProviderError.notFound
+    }
+    func replaceManifest(data: Data, ifMatch: String) async throws {}
+}
+
 @MainActor
 @Suite struct JoinExistingVaultSuite {
 
@@ -544,6 +619,79 @@ final class InMemorySyncProvider: SyncProviderProtocol, @unchecked Sendable {
     }
 
     // MARK: T031 — no main-actor blocking during the join (FR-012)
+
+    // MARK: Discover vaults (scan-before-join)
+
+    @Test
+    func discoverVaultsListsExistingVaultsWithoutPassword() async throws {
+        // Two vaults live under the same repository, each in its own
+        // "<locator>/" directory (the real S3/WebDAV layout).
+        let repoStore = RepoStore()
+        let vaultA = try await VaultBootstrapService.createVault(
+            password: "pw-a", secretStore: InMemorySecretStore(), isTestFixture: true
+        )
+        let vaultB = try await VaultBootstrapService.createVault(
+            password: "pw-b", secretStore: InMemorySecretStore(), isTestFixture: true
+        )
+        // The repository-level provider seeds the vaults.
+        let repo = RepoLayoutInMemoryProvider(store: repoStore)
+        repo.seedVault(locator: vaultA.vaultLocator, bootstrapData: try vaultA.canonicalJSON())
+        repo.seedVault(locator: vaultB.vaultLocator, bootstrapData: try vaultB.canonicalJSON())
+
+        // The coordinator's providerOverride mimics makeProvider: scope the
+        // provider to the configuration's vault locator.
+        let db = try DatabaseStore.inMemory()
+        try InitialSchema.migrator().migrate(db.dbPool)
+        let coordinator = SyncCoordinator(
+            store: db,
+            secretStore: InMemorySecretStore(),
+            deviceId: Self.deviceBId,
+            providerOverride: { configuration, _ in
+                RepoLayoutInMemoryProvider(store: repoStore, vaultLocator: configuration.vaultLocator)
+            }
+        )
+        await coordinator.load()
+        let vaults = try await coordinator.discoverVaults(
+            providerType: .webdav,
+            endpoint: "https://example.com/dav",
+            containerPath: "stickynotes",
+            bucket: nil,
+            region: nil,
+            credentials: SyncProviderCredentials(username: "user", password: "secret")
+        )
+        #expect(vaults.count == 2, "both vaults are discovered")
+        #expect(vaults.contains { $0.vaultLocator == vaultA.vaultLocator })
+        #expect(vaults.contains { $0.vaultLocator == vaultB.vaultLocator })
+        #expect(vaults.contains { $0.vaultId == vaultA.vaultId })
+        #expect(vaults.contains { $0.vaultId == vaultB.vaultId })
+        // Sorted by creation date.
+        #expect(vaults == vaults.sorted { $0.createdAt < $1.createdAt })
+    }
+
+    @Test
+    func discoverVaultsReturnsEmptyForBareRepository() async throws {
+        let repoStore = RepoStore()
+        let db = try DatabaseStore.inMemory()
+        try InitialSchema.migrator().migrate(db.dbPool)
+        let coordinator = SyncCoordinator(
+            store: db,
+            secretStore: InMemorySecretStore(),
+            deviceId: Self.deviceBId,
+            providerOverride: { configuration, _ in
+                RepoLayoutInMemoryProvider(store: repoStore, vaultLocator: configuration.vaultLocator)
+            }
+        )
+        await coordinator.load()
+        let vaults = try await coordinator.discoverVaults(
+            providerType: .webdav,
+            endpoint: "https://example.com/dav",
+            containerPath: "stickynotes",
+            bucket: nil,
+            region: nil,
+            credentials: SyncProviderCredentials(username: "user", password: "secret")
+        )
+        #expect(vaults.isEmpty, "an empty repository yields no vaults")
+    }
 
     @Test
     func joinDoesNotBlockTheMainActor() async throws {

@@ -3894,6 +3894,91 @@
         }
       }
     },
+    "Scan for Existing Vaults…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan for Existing Vaults…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "扫描现有保险库…"
+          }
+        }
+      }
+    },
+    "Existing vaults": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Existing vaults"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "现有保险库"
+          }
+        }
+      }
+    },
+    "No existing vaults found in this repository.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No existing vaults found in this repository."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此仓库中未找到现有保险库。"
+          }
+        }
+      }
+    },
+    "Could not scan the repository:": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not scan the repository:"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法扫描仓库："
+          }
+        }
+      }
+    },
+    "No vaults scanned yet — scan the repository to pick an existing vault, or enter the locator manually.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No vaults scanned yet — scan the repository to pick an existing vault, or enter the locator manually."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "尚未扫描保险库 — 扫描仓库以选择现有保险库，或手动输入定位符。"
+          }
+        }
+      }
+    },
     "Synchronization mode": {
       "extractionState": "manual",
       "localizations": {

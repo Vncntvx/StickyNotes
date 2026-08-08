@@ -405,6 +405,13 @@ private struct SyncConfigureSheet: View {
     /// fails closed (wrong-vault), while manual locator entry (no profile)
     /// is free to join any vault (US1/AC6 replace semantics).
     @State private var expectedVaultId: UUID?
+    /// Scan-before-join state (discoverVaults): discovered vaults, the
+    /// selected one, and scan progress/errors.
+    @State private var discoveredVaults: [DiscoveredVault] = []
+    @State private var selectedVaultId: UUID?
+    @State private var isScanning = false
+    @State private var didScan = false
+    @State private var scanError: String?
     @State private var vaultPassword = ""
     @State private var confirmVaultPassword = ""
     @State private var rememberUnlock = false
@@ -475,12 +482,66 @@ private struct SyncConfigureSheet: View {
 
             if mode == .join {
                 Divider()
+
+                // Scan-before-join: list existing vaults on the configured
+                // repository so the user picks one instead of typing the
+                // opaque locator.
+                HStack {
+                    Button("Scan for Existing Vaults…") {
+                        Task { await scanForVaults() }
+                    }
+                    .disabled(isScanning || !isProviderFormValid)
+                    .accessibilityLabel("Scan the repository for existing vaults")
+                    if isScanning {
+                        ProgressView().controlSize(.small)
+                    }
+                }
+                if scanError != nil {
+                    Label(scanError!, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .accessibilityLabel("Vault scan error")
+                }
+                if !discoveredVaults.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Existing vaults")
+                            .font(.subheadline.bold())
+                        ForEach(discoveredVaults) { vault in
+                            Button {
+                                selectDiscoveredVault(vault)
+                            } label: {
+                                HStack {
+                                    Image(systemName: "lock.rectangle.stack.fill")
+                                    VStack(alignment: .leading) {
+                                        Text("Vault · \(DisplayFormatters.absoluteDate(vault.createdAt))")
+                                        Text(String(vault.vaultLocator.prefix(12)) + "…")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                            .monospaced()
+                                    }
+                                    Spacer()
+                                    if vault.id == selectedVaultId {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .accessibilityLabel("Join vault created on \(DisplayFormatters.absoluteDate(vault.createdAt))")
+                        }
+                    }
+                } else if !didScan && !isScanning {
+                    Text("No vaults scanned yet — scan the repository to pick an existing vault, or enter the locator manually.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 HStack {
                     TextField("Vault locator", text: $vaultLocator)
                         .textFieldStyle(.roundedBorder)
                         .accessibilityLabel("Vault locator")
                         .onChange(of: vaultLocator) { _, _ in
                             originDeviceName = nil
+                            selectedVaultId = nil
                         }
                     Button("Import from file…") { importProfile() }
                         .accessibilityLabel("Import sync profile from file")
@@ -570,6 +631,49 @@ private struct SyncConfigureSheet: View {
     private func isLocatorFormatValid(_ locator: String) -> Bool {
         let trimmed = locator.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.count == 32 && trimmed.allSatisfy { $0.isHexDigit }
+    }
+
+    /// The provider fields needed before a scan/join can run.
+    private var isProviderFormValid: Bool {
+        guard !endpoint.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
+        switch providerType {
+        case .webdav: return true
+        case .s3: return !bucket.trimmingCharacters(in: .whitespaces).isEmpty
+        }
+    }
+
+    /// Scans the configured repository for existing vaults (discoverVaults)
+    /// so the user can pick one to join instead of typing the locator.
+    private func scanForVaults() async {
+        isScanning = true
+        scanError = nil
+        defer { isScanning = false }
+        do {
+            let vaults = try await syncCoordinator?.discoverVaults(
+                providerType: providerType,
+                endpoint: endpoint,
+                containerPath: containerPath,
+                bucket: bucket,
+                region: region,
+                credentials: credentials
+            ) ?? []
+            discoveredVaults = vaults
+            didScan = true
+            if vaults.isEmpty {
+                scanError = String(localized: "No existing vaults found in this repository.")
+            }
+        } catch {
+            scanError = String(localized: "Could not scan the repository: \((error as? StickyError)?.sanitizedCode ?? "unavailable").")
+        }
+    }
+
+    /// Fills the join form from a discovered vault (locator + expected id).
+    private func selectDiscoveredVault(_ vault: DiscoveredVault) {
+        vaultLocator = vault.vaultLocator
+        expectedVaultId = vault.vaultId
+        originDeviceName = nil
+        selectedVaultId = vault.id
+        scanError = nil
     }
 
     /// FR-010/US2: imports a sync-profile file (v1/v2) and fills provider

@@ -8,61 +8,61 @@
 
 ## Requirement Completeness
 
-- [ ] CHK001 是否每个用户故事验收场景（US1 AC1-AC6、US2 AC1-AC3、US3 AC1-AC2）都有对应 FR 支撑？ [Completeness, Spec §User Scenarios]
-- [ ] CHK002 是否所有加入失败模式（错误密码/找不到/错误 vault/损坏）都明确 fail closed（无本地写入、无远程创建）？ [Completeness, Spec §FR-004/FR-005]
-- [ ] CHK003 是否明确要求加入路径只读（不创建/覆盖任何远程对象）？ [Completeness, Spec §FR-003]
-- [ ] CHK004 是否显式要求单配置替换语义（FR-154 复用），而非隐含？ [Completeness, Spec §FR-007]
-- [ ] CHK005 是否规定了导出/导入的内容边界（不含凭据/密钥/笔记内容）？ [Completeness, Spec §FR-009/FR-010]
-- [ ] CHK006 是否量化了加入与首次同步的性能要求？ [Completeness, Spec §Performance Expectations]
+- [X] CHK001 是否每个用户故事验收场景（US1 AC1-AC6、US2 AC1-AC3、US3 AC1-AC2）都有对应 FR 支撑？ [Completeness, Spec §User Scenarios]
+- [X] CHK002 是否所有加入失败模式（错误密码/找不到/错误 vault/损坏）都明确 fail closed（无本地写入、无远程创建）？ [Completeness, Spec §FR-004/FR-005]
+- [X] CHK003 是否明确要求加入路径只读（不创建/覆盖任何远程对象）？ [Completeness, Spec §FR-003]
+- [X] CHK004 是否显式要求单配置替换语义（FR-154 复用），而非隐含？ [Completeness, Spec §FR-007]
+- [X] CHK005 是否规定了导出/导入的内容边界（不含凭据/密钥/笔记内容）？ [Completeness, Spec §FR-009/FR-010]
+- [X] CHK006 是否量化了加入与首次同步的性能要求？ [Completeness, Spec §Performance Expectations]
 
 ## Requirement Clarity
 
-- [ ] CHK007 "加入成功后立即同步"是否无歧义（定义为成功即自动首次同步）？ [Clarity, Spec §FR-006]
-- [ ] CHK008 加入错误面是否明确为三种可区分结果（not found / wrong password / wrong vault）？ [Clarity, Spec §Failure & Recovery Behavior]
-- [ ] CHK009 `originDeviceName` 的定位是否明确（可选、仅展示、非身份标识）？ [Clarity, Spec §FR-009 + Data & Migration]
-- [ ] CHK010 "消息可区分"是否可客观验证（测试者能否仅凭消息区分密码错误与 locator 错误）？ [Measurability, Spec §FR-004]
+- [X] CHK007 "加入成功后立即同步"是否无歧义（定义为成功即自动首次同步）？ [Clarity, Spec §FR-006]
+- [X] CHK008 加入错误面是否明确为三种可区分结果（not found / wrong password / wrong vault）？ [Clarity, Spec §Failure & Recovery Behavior]
+- [X] CHK009 `originDeviceName` 的定位是否明确（可选、仅展示、非身份标识）？ [Clarity, Spec §FR-009 + Data & Migration]
+- [X] CHK010 "消息可区分"是否可客观验证（测试者能否仅凭消息区分密码错误与 locator 错误）？ [Measurability, Spec §FR-004]
 
 ## Requirement Consistency
 
-- [ ] CHK011 FR-003（只读加入）与 FR-006（首次同步上传本地笔记）是否存在表面冲突且未在 spec 中解释？ [Consistency, Spec §FR-003 vs FR-006]
-- [ ] CHK012 SC-002（<100 笔记 1 分钟）与 Performance Expectations 章节是否一致？ [Consistency, Spec §Success Criteria]
-- [ ] CHK013 plan.md 各 Phase 是否 1:1 覆盖 spec 全部 FR（无遗漏无孤儿）？ [Consistency, Plan §Phases]
-- [ ] CHK014 data-model.md 的 SyncProfile 字段是否与 contracts/sync-profile-v2-delta.md 一致（必填/可选、类型）？ [Consistency, data-model.md vs contracts]
-- [ ] CHK015 tasks.md 的测试任务是否覆盖 spec §Required Tests 列举的全部测试类别？ [Consistency, Spec §Required Tests vs tasks.md]
+- [X] CHK011 FR-003（只读加入）与 FR-006（首次同步上传本地笔记）是否存在表面冲突且未在 spec 中解释？ [Consistency, Spec §FR-003 vs FR-006]
+- [X] CHK012 SC-002（<100 笔记 1 分钟）与 Performance Expectations 章节是否一致？ [Consistency, Spec §Success Criteria]
+- [X] CHK013 plan.md 各 Phase 是否 1:1 覆盖 spec 全部 FR（无遗漏无孤儿）？ [Consistency, Plan §Phases]
+- [X] CHK014 data-model.md 的 SyncProfile 字段是否与 contracts/sync-profile-v2-delta.md 一致（必填/可选、类型）？ [Consistency, data-model.md vs contracts]
+- [X] CHK015 tasks.md 的测试任务是否覆盖 spec §Required Tests 列举的全部测试类别？ [Consistency, Spec §Required Tests vs tasks.md]
 
 ## Acceptance Criteria Quality
 
-- [ ] CHK016 全部成功标准是否可用数值度量（时间/百分比/数量）验证？ [Acceptance Criteria, Spec §Success Criteria]
-- [ ] CHK017 SC-003（错误路径 100% 无本地/远程写入）是否可客观验证（测试断言状态不变）？ [Measurability, Spec §SC-003]
-- [ ] CHK018 验收场景是否均为可观察的 Given/When/Then 形式（无不可观测描述）？ [Acceptance Criteria, Spec §User Scenarios]
+- [X] CHK016 全部成功标准是否可用数值度量（时间/百分比/数量）验证？ [Acceptance Criteria, Spec §Success Criteria]
+- [X] CHK017 SC-003（错误路径 100% 无本地/远程写入）是否可客观验证（测试断言状态不变）？ [Measurability, Spec §SC-003]
+- [X] CHK018 验收场景是否均为可观察的 Given/When/Then 形式（无不可观测描述）？ [Acceptance Criteria, Spec §User Scenarios]
 
 ## Scenario Coverage
 
-- [ ] CHK019 是否覆盖并发场景（两端同时加入同一 vault 无写入竞争）？ [Coverage, Spec §Edge Cases]
-- [ ] CHK020 是否覆盖加入过程中远程 bootstrap 被删除的场景？ [Coverage, Spec §Edge Cases]
-- [ ] CHK021 是否定义了失败后的恢复路径（可重试、无副作用累积）？ [Coverage, Exception Flow, Spec §Failure & Recovery]
-- [ ] CHK022 是否覆盖离线 >30 天设备的重新同步行为（不自动删本地）？ [Coverage, Spec §US3/AC2]
+- [X] CHK019 是否覆盖并发场景（两端同时加入同一 vault 无写入竞争）？ [Coverage, Spec §Edge Cases]
+- [X] CHK020 是否覆盖加入过程中远程 bootstrap 被删除的场景？ [Coverage, Spec §Edge Cases]
+- [X] CHK021 是否定义了失败后的恢复路径（可重试、无副作用累积）？ [Coverage, Exception Flow, Spec §Failure & Recovery]
+- [X] CHK022 是否覆盖离线 >30 天设备的重新同步行为（不自动删本地）？ [Coverage, Spec §US3/AC2]
 
 ## Edge Case Coverage
 
-- [ ] CHK023 是否规定了非法 locator 格式的加入前校验？ [Edge Cases, Spec §Edge Cases]
-- [ ] CHK024 是否规定了 schema 不支持版本（0/3）的拒绝行为？ [Edge Cases, Spec §FR-010]
+- [X] CHK023 是否规定了非法 locator 格式的加入前校验？ [Edge Cases, Spec §Edge Cases]
+- [X] CHK024 是否规定了 schema 不支持版本（0/3）的拒绝行为？ [Edge Cases, Spec §FR-010]
 
 ## Non-Functional Requirements
 
-- [ ] CHK025 是否规定了新增控件的无障碍要求（键盘可达 + VoiceOver 标签）？ [Coverage, Spec §Accessibility Implications]
-- [ ] CHK026 是否规定了新增文案的本地化要求（zh-Hans + en 完整）？ [Completeness, Spec §Required Tests]
-- [ ] CHK027 是否显式要求网络/加解密不在主线程（不阻塞本地编辑）？ [Coverage, Spec §FR-012 + Performance Expectations]
+- [X] CHK025 是否规定了新增控件的无障碍要求（键盘可达 + VoiceOver 标签）？ [Coverage, Spec §Accessibility Implications]
+- [X] CHK026 是否规定了新增文案的本地化要求（zh-Hans + en 完整）？ [Completeness, Spec §Required Tests]
+- [X] CHK027 是否显式要求网络/加解密不在主线程（不阻塞本地编辑）？ [Coverage, Spec §FR-012 + Performance Expectations]
 
 ## Dependencies & Assumptions
 
-- [ ] CHK028 关键假设是否成文（locator 已知、单配置、无账号系统、文件传递由用户负责）？ [Assumption, Spec §Assumptions]
-- [ ] CHK029 plan 是否记录了零新依赖约束？ [Dependency, Plan §Technical Context]
+- [X] CHK028 关键假设是否成文（locator 已知、单配置、无账号系统、文件传递由用户负责）？ [Assumption, Spec §Assumptions]
+- [X] CHK029 plan 是否记录了零新依赖约束？ [Dependency, Plan §Technical Context]
 
 ## Traceability
 
-- [ ] CHK030 每个 FR 是否至少映射到一个任务与一个 checklist 条目？ [Traceability, Spec §FR-001..FR-012 vs tasks.md]
-- [ ] CHK031 plan Constitution Check 是否覆盖新增的 Accessibility/Performance 章节（X/XI 行）？ [Traceability, Plan §Constitution Check]
+- [X] CHK030 每个 FR 是否至少映射到一个任务与一个 checklist 条目？ [Traceability, Spec §FR-001..FR-012 vs tasks.md]
+- [X] CHK031 plan Constitution Check 是否覆盖新增的 Accessibility/Performance 章节（X/XI 行）？ [Traceability, Plan §Constitution Check]
 
 ## Notes
 

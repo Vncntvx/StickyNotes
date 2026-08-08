@@ -139,22 +139,39 @@ consistency is a compile-time guarantee via the shared function.
   schema/parse failures → fail closed with sanitized code. Distinguishable
   messages (FR-004/FR-005).
 
+### Vault discovery (scan-before-join, FR-013)
+
+- `SyncCoordinator.discoverVaults(providerType:endpoint:containerPath:bucket:
+  region:credentials:)`: builds a REPOSITORY-LEVEL provider (user prefix
+  only, empty vault locator via `remoteContainerPath`), calls `provider.list()`
+  (S3 ListObjectsV2 / WebDAV PROPFIND), derives candidate locators from the
+  first path segment of each object name (`"<locator>/<object>"`), then for
+  each candidate builds a locator-scoped provider and fetches the bootstrap
+  under `bootstrapObjectName(locator)` (READ-ONLY, no vault password needed —
+  bootstrap metadata is enumerable by design, Constitution VII). Only
+  parseable bootstraps are returned, sorted by creation date.
+- UI: join mode gains "Scan for Existing Vaults…" — lists discovered vaults
+  (creation date + locator prefix); selecting one fills the locator + sets
+  `expectedVaultId` (the discovered vaultId — CHK025 wrong-vault protection).
+- Test seam: `RepoLayoutInMemoryProvider` models the real `"<locator>/<name>"`
+  layout with a shared store + locator-scoped instances.
+
 ## Constitution Check
 
 | # | Principle | Plan decision | Status |
 |---|-----------|---------------|--------|
-| I | Focused product | Join adds the promised multi-Mac sync; no new product scope. | PASS |
+| I | Focused product | Join adds the promised multi-Mac sync; vault discovery is a join-flow convenience, no new product scope. | PASS |
 | II | Native macOS/SwiftUI | Join UI is SwiftUI within the existing Settings sheet; macOS 26 target unchanged. | PASS |
 | III | Local-first | Join keeps local DB as source of truth; sync additive; local notes never blocked. | PASS |
 | IV | Versioned data | sync-profile schema v2 with v1 read-compat + tests; no layout changes to stored objects. | PASS |
-| VI | Privacy | Export contains no credentials/keys/content; device display name is non-sensitive; logs sanitized (no endpoint URL, locator is opaque). | PASS |
-| VII | E2E encryption | Join decrypts only with the correct password (key-confirmation); bootstrap read-only. | PASS |
+| VI | Privacy | Export contains no credentials/keys/content; device display name is non-sensitive; logs sanitized (no endpoint URL, locator is opaque); discovery lists only opaque locators + creation dates. | PASS |
+| VII | E2E encryption | Join decrypts only with the correct password (key-confirmation); bootstrap read-only; discovery enumerates bootstrap metadata only (vaultId/locator opaque — no key material, no content). | PASS |
 | VIII | Non-destructive sync | Join never overwrites local/remote; first sync uploads local notes (merge); conflicts via existing resolver. | PASS |
-| X | Accessible UX | New controls (mode picker, locator field, import/export buttons) keyboard-accessible with VoiceOver labels; error text not color-only. | PASS |
-| XI | Performance | Join network/decrypt off main actor; first sync <100 notes ≤1 min; large uploads chunked without UI freeze. | PASS |
-| XII | Tests mandatory | Join-verify, fail-closed, schema round-trip, import-validation, content-boundary, perf, localization, accessibility tests FIRST. | PASS |
+| X | Accessible UX | New controls (mode picker, locator field, scan button, vault list, import/export buttons) keyboard-accessible with VoiceOver labels; error text not color-only. | PASS |
+| XI | Performance | Join/scan network/decrypt off main actor; first sync <100 notes ≤1 min; large uploads chunked without UI freeze. | PASS |
+| XII | Tests mandatory | Join-verify, fail-closed, schema round-trip, import-validation, content-boundary, discovery, perf, localization, accessibility tests FIRST. | PASS |
 | XIII | Dependency discipline | Zero new dependencies. | PASS |
-| XIV | Traceability | Spec FR-001..FR-012 map 1:1 to tasks; spec Scope/Data&Migration/Privacy&Permission/Accessibility/Performance/Failure&Recovery/Required-Tests sections all addressed in this plan. | PASS |
+| XIV | Traceability | Spec FR-001..FR-013 map 1:1 to tasks; spec Scope/Data&Migration/Privacy&Permission/Accessibility/Performance/Failure&Recovery/Required-Tests sections all addressed in this plan. | PASS |
 
 No violations. No Complexity Tracking entries.
 
@@ -191,10 +208,12 @@ No violations. No Complexity Tracking entries.
 ### Phase 4 — App UI: join mode + export/import
 
 - SyncConfigureSheet mode picker + locator field + password label;
-  import-from-file (v1/v2, shows origin device name); Export Sync Profile…
-  (schema v2). Status rows show provider after join.
+  **Scan for Existing Vaults…** (discoverVaults → vault list → select fills
+  locator + expectedVaultId); import-from-file (v1/v2, shows origin device
+  name); Export Sync Profile… (schema v2). Status rows show provider after
+  join.
 - AppTests: import validation, export content boundary (no secrets), join
-  flow end-to-end with in-memory provider.
+  flow end-to-end with in-memory provider, discovery (repo-layout provider).
 
 ### Phase 5 — Polish & validation
 
