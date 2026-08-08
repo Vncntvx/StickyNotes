@@ -886,7 +886,7 @@
 /* Begin PBXTargetDependency section */
 		023059DFD5F7CABCA47FBFA2 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			productRef = "TEMP_B61188FB-2CDA-4B48-8A9D-1BA7519F1F52" /* SystemBridge */;
+			productRef = "TEMP_CAE4AD39-D7C8-498C-A5D3-914FD1BE1DB7" /* SystemBridge */;
 		};
 		208B5F7C95E524C074BFEA21 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -895,7 +895,7 @@
 		};
 		2CCA10F60EAE0ABC186D9562 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			productRef = "TEMP_5751CBDB-8825-4B1F-8AFC-05CB2E887C1C" /* GRDB */;
+			productRef = "TEMP_F1265C8E-3C2D-491D-A300-03BB2D0208E0" /* GRDB */;
 		};
 		46F33D36B2BAC3740EE896F7 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -904,15 +904,15 @@
 		};
 		7C31425EBA1B9D2B171A038D /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			productRef = "TEMP_A4763CCF-C4BD-41D6-B955-0438C5541A80" /* Domain */;
+			productRef = "TEMP_3292E0FE-3ADB-4EE5-922E-D857C980C7B8" /* Domain */;
 		};
 		BEAF6103BFDCA24A3D04399C /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			productRef = "TEMP_98AEAFAD-2F89-4F29-9493-5F2304B63F1B" /* Persistence */;
+			productRef = "TEMP_86C64AA3-3905-4CA0-8BE8-B2A58CBCADE1" /* Persistence */;
 		};
 		E955A8F681F660898712CB65 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			productRef = "TEMP_B2B723CC-15BF-4121-B268-9268C20C27A8" /* EditorCore */;
+			productRef = "TEMP_F8CD845F-127A-4718-A66E-87A41DEF5230" /* EditorCore */;
 		};
 		F6D75B224BD1ABAD7662B8FC /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -1321,26 +1321,26 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = Domain;
 		};
-		"TEMP_5751CBDB-8825-4B1F-8AFC-05CB2E887C1C" /* GRDB */ = {
+		"TEMP_3292E0FE-3ADB-4EE5-922E-D857C980C7B8" /* Domain */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Domain;
+		};
+		"TEMP_86C64AA3-3905-4CA0-8BE8-B2A58CBCADE1" /* Persistence */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Persistence;
+		};
+		"TEMP_CAE4AD39-D7C8-498C-A5D3-914FD1BE1DB7" /* SystemBridge */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SystemBridge;
+		};
+		"TEMP_F1265C8E-3C2D-491D-A300-03BB2D0208E0" /* GRDB */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 0A7913A0291CE7CDB8AEF30F /* XCRemoteSwiftPackageReference "GRDB.swift" */;
 			productName = GRDB;
 		};
-		"TEMP_98AEAFAD-2F89-4F29-9493-5F2304B63F1B" /* Persistence */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = Persistence;
-		};
-		"TEMP_A4763CCF-C4BD-41D6-B955-0438C5541A80" /* Domain */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = Domain;
-		};
-		"TEMP_B2B723CC-15BF-4121-B268-9268C20C27A8" /* EditorCore */ = {
+		"TEMP_F8CD845F-127A-4718-A66E-87A41DEF5230" /* EditorCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = EditorCore;
-		};
-		"TEMP_B61188FB-2CDA-4B48-8A9D-1BA7519F1F52" /* SystemBridge */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = SystemBridge;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

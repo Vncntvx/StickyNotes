@@ -57,6 +57,13 @@ DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild test -p
 ### Phase 7（QA 与迁移验证）
 - 旧数据/旧仓库夹具（001 fixtures + 真实旧 vault）升级后全部有效（SC-020/SC-025）；加密语义与仓库格式不变。
 
+## 实施验证记录（2026-08-09，/speckit.implement 完成）
+
+- **自动化全绿**：StickyCore 605 测试（7 模块）、AppTests 242 测试（53 套件）0 失败；Performance/Search/Keystroke 性能套件全绿（SC-024）。
+- **AppUITests**：本 headless 会话无法初始化 XCUITest runner（需交互桌面会话），T015/T016/T035/T040/T053/T060/T061 已在 `AppUITests/CriticalFlowsUITests.swift` 落地，待 CI/桌面环境执行。
+- **手动视觉 QA 矩阵（T074）**：浅/深、激活/失活、系统强调色、Reduce Transparency/Motion、Increase Contrast/Show Borders、显示比例、320pt 与宽 Library、紧凑笔记窗口、多窗口、纯键盘、VoiceOver —— **待人工执行**（本会话 MenuBarExtra 窗口无法经合成点击呈现，验证过 deep-link 窗口路径可用）。SC-018 HIG 走查清单条目逐面登记于本行后续人工执行。
+- **迁移验证（US7）**：001 旧六色/自定义颜色/Trash 笔记/窗口帧/快捷键/字体偏好夹具全过（T068-T070）。
+
 ## 验收驱动
 
 - 关键验收映射见 `spec.md` 各 User Story Acceptance Scenarios 与 Success Criteria SC-001..SC-025。

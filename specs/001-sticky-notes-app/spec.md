@@ -566,7 +566,7 @@ cited FR.
 - **FR-002**: The library MUST display notes as a compact card grid inspired by
   the Windows 11 Sticky Notes experience while following macOS interaction
   conventions.
-- **FR-002a**: The card grid MUST display notes in a grid with a default of 3
+- **FR-002a** [SUPERSEDED by 003 FR-020/FR-021 — see 003-macos27-liquid-glass-redesign]: The card grid MUST display notes in a grid with a default of 3
   columns, card width of exactly 220 points, card height of exactly 160
   points, and 12-point inter-card spacing (deterministic card dimensions,
   no tolerance — clarified 2026-08-07). The grid MUST
@@ -575,7 +575,7 @@ cited FR.
   system font at regular size.
 - **FR-003**: Clicking outside the menu-bar window MUST dismiss it
   automatically.
-- **FR-004**: From the library, the user MUST be able to create a note, search,
+- **FR-004** [SUPERSEDED by 003 FR-002/002a/003/004/005/006/007 — see 003-macos27-liquid-glass-redesign]: From the library, the user MUST be able to create a note, search,
   change sorting, open Trash, view synchronization status, initiate manual
   synchronization, open Settings and Help, and quit the application.
 - **FR-005**: Clicking a note card MUST open that note in an independent desktop
@@ -777,13 +777,13 @@ cited FR.
 
 - **FR-030**: Each note window SHOULD look like a lightweight sheet of note
   paper while retaining normal macOS window behavior.
-- **FR-030a**: A note window MUST have a borderless or thin-title-bar
+- **FR-030a** [SUPERSEDED by 003 FR-040/FR-041 — see 003-macos27-liquid-glass-redesign]: A note window MUST have a borderless or thin-title-bar
   appearance with a 1-point subtle border, corner radius of 8 points, and a
   soft shadow (radius 8, opacity 0.15). The window background MUST use the
   selected note color at the configured transparency. The title-bar area
   MUST be visually integrated with the note background (no distinct toolbar
   chrome).
-- **FR-031**: Most window controls SHOULD remain hidden until the pointer enters
+- **FR-031** [SUPERSEDED by 003 FR-044/FR-045 — see 003-macos27-liquid-glass-redesign]: Most window controls SHOULD remain hidden until the pointer enters
   the upper area; that area MUST allow editing an optional title, changing note
   color, changing transparency, changing text size, toggling Always on Top,
   adding a screenshot, adding a file reference, opening a contextual menu
@@ -822,7 +822,7 @@ cited FR.
 
 - **FR-040**: The user MUST be able to choose at least Yellow, Pink, Purple,
   Blue, Green, and Gray built-in colors, plus a custom color.
-- **FR-040a**: Each built-in note color (FR-040) MUST have exactly one
+- **FR-040a** [SUPERSEDED by 003 FR-030/031/032 — see 003-macos27-liquid-glass-redesign]: Each built-in note color (FR-040) MUST have exactly one
   canonical sRGB hex value shared across light and dark appearance: Yellow
   `#FFE08A`, Pink `#F9A8C4`, Purple `#C9A8E8`, Blue `#A8CFF9`, Green
   `#A8E8B8`, Gray `#D8D8DC`. These canonical values are the deterministic

@@ -14,15 +14,15 @@ Specs-first repository for "macOS Sticky Notes" — a native, menu-bar-primary s
 格式：`type(scope): :emoji: 主述`，空行后接中文无序列表 body。
 
 ```
-feat(core): :hammer_and_wrench: 落地 Phase 2 核心域/编辑器/持久化实现与测试
-- Domain: 新增 NoteLifecycle 状态机、NoteSummary 摘要与 FileReference 文件引用
-- EditorCore: 实现 MarkdownTransformer 行级/内联转换与 AutoSave 防抖
-- Persistence: 实现 NoteRepository 与 SearchService（FTS5 检索，隐私排除项不返回）
-- Tests: 覆盖 Domain 生命周期、EditorCore 转换/自动保存、Persistence 检索/回收站
+feat(app): :hammer_and_wrench: 落地 003 设计系统基础与菜单命令体系（FR-021/030-033/072）
+- DesignSystem: 新增 NotePalette（七色浅/深独立设计值），旧六色语义映射至新调色板（紫→薰衣草，FR-032），custom 颜色按原值保留
+- ReadableTheme: 内置颜色改经 NotePalette 取 per-appearance 设计值渲染（FR-033），custom 颜色保留 001 Domain projection 路径
+- App/MenuCommands: 新增 MenuCommandCatalog 作为菜单命令单一来源，动作复用既有 LibraryModel/NoteWindowCoordinator 方法（SC-017/FR-072）
+- Tests: 新增 PaletteContrast/Migration/MenuChecklist 覆盖对比度阈值、旧色映射与菜单清单
 ```
 
-**主述**：中文祈使，不加句号，≤ 50 字符，超限时用 `()` 补 FR/Phase/批次上下文。
-**body**：每条聚焦一个可独立追溯的变更点，引用模块/文件/FR/Phase/任务编号；单行琐碎变更可省略。
+**主述**：中文祈使，不加句号，≤ 50 字符。引用 **FR 编号**而非 Phase/US/任务编号；超限时用 `()` 补 FR 范围。
+**body**：每条以**模块/组件名**开头，描述代码**实际做了什么**（具体 API、数据流、关键值、技术决策），而非过程记录。引用 FR/SC/CHK 编号。单行琐碎变更可省略。
 **emoji**：按内容语义选取（非 type 绑定）——`✨`新功能 · `🐛`修复 · `📝`文档 · `♻️`重构 · `✅`测试 · `⚡`性能 · `🔧`工具/配置 · `📦`依赖/打包 · `👷`CI · `🏗️`脚手架 · `🗃️`归档/压缩 · `🔨`实现落地 · `🔒`安全 · `🎨`格式 · `🎉`初始化 · `⏪`回滚。
 **禁入**：secrets、真实笔记内容、内部链接（遵循 Constitution 净化要求）。
 
