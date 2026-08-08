@@ -72,11 +72,15 @@ public enum PermissionService {
     /// permission is granted after the request.
     @MainActor
     public static func requestAccessibility() -> Bool {
-        // kAXTrustedCheckOptionPrompt is a non-Sendable global `var`;
-        // snapshot it locally (the constant value is stable).
-        nonisolated(unsafe) let promptKey =
-            kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
-        return AXIsProcessTrustedWithOptions([promptKey: true] as CFDictionary)
+        // "AXTrustedCheckOptionPrompt" is the stable public value of
+        // kAXTrustedCheckOptionPrompt (AXUIElement.h); the non-Sendable
+        // global `var` constant cannot be referenced under Swift 6 strict
+        // concurrency.
+        let logger = StickyLogger(category: .systemBridge)
+        logger.debug("request-accessibility", code: "invoked")
+        let result = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
+        logger.debug("request-accessibility", code: result ? "granted" : "still-not-granted")
+        return result
     }
 
     /// Current accessibility status. NEVER called at startup or during

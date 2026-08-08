@@ -249,7 +249,9 @@ private struct SyncConfigureSheet: View {
     @State private var rememberUnlock = false
     @State private var isTesting = false
     @State private var isConfiguring = false
-    @State private var sheetError: String?
+    /// In-sheet status: success vs failure (the "Connection OK." message must
+    /// use a success icon, not the orange warning used for errors).
+    @State private var sheetStatus: (message: String, isError: Bool)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -292,10 +294,15 @@ private struct SyncConfigureSheet: View {
                 .textFieldStyle(.roundedBorder)
             Toggle("Remember unlocked vault on this Mac", isOn: $rememberUnlock)
 
-            if let sheetError {
-                Label(sheetError, systemImage: "exclamationmark.triangle")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
+            if let sheetStatus {
+                Label(
+                    sheetStatus.message,
+                    systemImage: sheetStatus.isError
+                        ? "exclamationmark.triangle.fill"
+                        : "checkmark.circle.fill"
+                )
+                .font(.caption)
+                .foregroundStyle(sheetStatus.isError ? .orange : .green)
             }
 
             HStack {
@@ -339,9 +346,12 @@ private struct SyncConfigureSheet: View {
                 region: region,
                 credentials: credentials
             )
-            sheetError = String(localized: "Connection OK.")
+            sheetStatus = (String(localized: "Connection OK."), false)
         } catch {
-            sheetError = String(localized: "Connection failed: \((error as? StickyError)?.sanitizedCode ?? "unavailable").")
+            sheetStatus = (
+                String(localized: "Connection failed: \((error as? StickyError)?.sanitizedCode ?? "unavailable")."),
+                true
+            )
         }
     }
 
