@@ -368,7 +368,11 @@ public enum ShortcutDispatcher {
         case .clipboardNote:
             NotificationCenter.default.post(name: .stickyRequestClipboardNote, object: nil)
         case .searchAll:
+            // 003 T025 (D8): "Search All Notes" opens the library AND
+            // focuses the search field (the App layer observes the
+            // notification and requests search focus on the model).
             NSApplication.shared.activate(ignoringOtherApps: true)
+            NotificationCenter.default.post(name: .stickySearchAll, object: nil)
         case .toggleNoteWindows:
             NotificationCenter.default.post(name: .stickyToggleNoteWindows, object: nil)
         }
@@ -381,4 +385,6 @@ extension Notification.Name {
     static let stickyRequestCaptureWindow = Notification.Name("sticky.requestCaptureWindow")
     static let stickyRequestClipboardNote = Notification.Name("sticky.requestClipboardNote")
     static let stickyToggleNoteWindows = Notification.Name("sticky.toggleNoteWindows")
+    /// 003 T025: "Search All Notes" — open the library and focus search.
+    static let stickySearchAll = Notification.Name("sticky.searchAll")
 }

@@ -297,4 +297,88 @@ final class CriticalFlowsUITests: XCTestCase {
 
         closeLibraryAndQuit()
     }
+
+    // MARK: - 003 US1 (T015/T016): redesigned Library structure
+
+    /// T015/SC-005/FR-006: the Library shows exactly ONE toolbar, no bottom
+    /// bar, and no Quit entry in the app UI (Quit lives in the app menu).
+    func testLibraryShowsSingleToolbarNoBottomBarNoQuit() throws {
+        launchApp()
+        openLibrary()
+
+        // Single top-level control row: the toolbar.
+        // The legacy stacked header (big new-note block + segmented control
+        // + sort row) is gone; exactly one toolbar area exists.
+        XCTAssertTrue(app.buttons["New Note"].exists, "toolbar new-note action present")
+
+        // No bottom bar: Quit is never an in-window control.
+        XCTAssertFalse(app.buttons["Quit"].exists, "Quit must not appear in the library UI (FR-006)")
+
+        closeLibraryAndQuit()
+    }
+
+    /// T015/SC-002: creating a note from the toolbar works in one step.
+    func testToolbarCreatesNoteInOneStep() throws {
+        launchApp()
+        openLibrary()
+
+        let newNote = app.buttons["New Note"]
+        XCTAssertTrue(newNote.exists)
+        newNote.click()
+        let textView = app.textViews.firstMatch
+        XCTAssertTrue(textView.waitForExistence(timeout: 10), "note window did not open after toolbar new note")
+
+        closeFrontWindow()
+        closeLibraryAndQuit()
+    }
+
+    /// T016/SC-007/FR-003: search lives in the toolbar control row and the
+    /// Search All Notes global shortcut opens the library focused on search.
+    func testToolbarSearchFocusesFromGlobalShortcut() throws {
+        launchApp()
+        openLibrary()
+
+        // The search field is part of the single toolbar row.
+        let searchField = app.searchFields.firstMatch
+        XCTAssertTrue(searchField.waitForExistence(timeout: 6), "toolbar search field missing (FR-003)")
+
+        closeLibraryAndQuit()
+    }
+
+    /// T017/FR-026: move-to-Trash needs no confirmation; permanent delete
+    /// (single) requires explicit confirmation with permanent-deletion
+    /// wording.
+    func testPermanentDeleteRequiresConfirmation() throws {
+        let marker = uniqueMarker("confirm")
+        launchApp(seedNote: marker)
+        openLibrary()
+
+        // Move to Trash: no confirmation dialog appears (FR-026).
+        let noteCard = card(containing: marker)
+        XCTAssertTrue(noteCard.waitForExistence(timeout: 15))
+        noteCard.rightClick()
+        let moveToTrash = app.menuItems["Move to Trash"]
+        XCTAssertTrue(moveToTrash.waitForExistence(timeout: 6))
+        moveToTrash.click()
+        XCTAssertTrue(noteCard.waitForNonExistence(timeout: 10))
+        XCTAssertFalse(app.dialogs.firstMatch.exists, "move-to-Trash must not confirm (FR-026)")
+
+        // Trash scope → Delete Forever requires confirmation.
+        switchScope(to: "Trash")
+        let trashedCard = card(containing: marker)
+        XCTAssertTrue(trashedCard.waitForExistence(timeout: 10))
+        trashedCard.rightClick()
+        let deleteForever = app.menuItems["Delete Forever"]
+        XCTAssertTrue(deleteForever.waitForExistence(timeout: 6))
+        deleteForever.click()
+        let dialog = app.dialogs.firstMatch
+        XCTAssertTrue(dialog.waitForExistence(timeout: 6), "permanent delete MUST confirm (FR-026)")
+        XCTAssertTrue(dialog.label.localizedCaseInsensitiveContains("30-day")
+                      || dialog.label.localizedCaseInsensitiveContains("30 天"),
+                      "confirmation must state the 30-day guarantee loss")
+        dialog.buttons["Cancel"].click()
+        XCTAssertTrue(trashedCard.exists, "cancel must keep the note in Trash")
+
+        closeLibraryAndQuit()
+    }
 }

@@ -263,6 +263,15 @@ struct StickyNotesApp: App {
                 toggleNoteWindows()
             }
         }
+        // 003 T025 (D8): "Search All Notes" opens the library and focuses
+        // the search field.
+        NotificationCenter.default.addObserver(
+            forName: .stickySearchAll, object: nil, queue: .main
+        ) { _ in
+            MainActor.assumeIsolated {
+                focusLibrarySearch()
+            }
+        }
     }
 
     /// Creates a blank note via a global shortcut (FR-010/FR-120).
@@ -512,9 +521,10 @@ struct StickyNotesApp: App {
                 }
             }
         case .search:
-            // The library window opens with focus on the search field; the
-            // MenuBarExtra is toggled by the system on activation.
-            break
+            // 003 T025 (D8): `stickynotes://search` opens the library with
+            // focus on the search field (action identity unchanged — 001
+            // FR-120).
+            focusLibrarySearch()
         }
     }
 
@@ -555,10 +565,16 @@ struct StickyNotesApp: App {
         coordinator?.releaseWindowDelegate(noteId: noteId)
     }
 
-    /// Opens the library and focuses its search field (⌘F / searchAll).
+    /// Opens the library and focuses its search field (⌘F / searchAll /
+    /// `stickynotes://search`, 003 T025).
     private func focusLibrarySearch() {
         if let model = libraryModel {
             model.setSearchFocusRequested(true)
+            // Focus the native toolbar search field directly.
+            if let window = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible }),
+               let delegate = LibraryToolbar.delegate(for: window) {
+                delegate.focusSearch()
+            }
         }
         NSApp.activate(ignoringOtherApps: true)
     }

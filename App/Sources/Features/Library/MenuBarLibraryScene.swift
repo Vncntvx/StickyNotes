@@ -3,21 +3,25 @@ import AppKit
 import Domain
 import SystemBridge
 
-// MARK: - MenuBarLibraryScene (T159/T268/T269/T255)
+// MARK: - MenuBarLibraryScene (003 US1, T019-T027)
 //
-// Per tasks.md T159/T268/T269/T255 and spec FR-001/FR-003/FR-004/FR-009/
-// FR-009a/FR-011a/FR-014a/FR-031a:
-// - Window-style MenuBarExtra library with search/sort/new/Trash/sync-
-//   status/Settings/Help/Quit affordances.
-// - FR-009 re-click behavior: MenuBarExtra natively toggles (focus if not
-//   focused, dismiss if focused, never a second window). The toggle path
-//   NEVER dismisses an open app-modal sheet (FR-009 sheet rule, T268).
-// - FR-001a positioning (T255): left edge aligned with the icon's left
-//   edge, clamped, 4 pt below the menu bar, NO animation — applied when the
-//   window appears.
-// - FR-011a (T269): library actions never crash; failures surface as a
-//   non-blocking localized status message; the library stays usable and
-//   permits retry.
+// Per tasks.md T019-T027 and spec FR-001..FR-007/SC-005..SC-008/FR-021/
+// FR-023/FR-024/FR-026:
+// - SINGLE native toolbar (AppKit NSToolbar attached via the window probe,
+//   T018 spike decision — plan.md §14/§15): New Note (⌘N), search
+//   (NSSearchField), sort popup, Notes/Trash destination. The legacy
+//   stacked header (big new-note block + segmented control + sort row) is
+//   removed (T019).
+// - No bottom bar / footer (FR-006): Help/About/Settings/Quit move to
+//   menus (T011 CommandGroups), toolbar overflow, and the menu-bar icon
+//   dropdown (T024). Quit never appears in app UI (Constitution X).
+// - Content area: adaptive card grid per FR-021 (NoteCardMetrics) with
+//   density bounds 72-128 (SC-022); keyboard navigation (FR-024); Trash
+//   destination with Empty Trash + single permanent-delete confirmations
+//   (FR-026); sync attention banner above the grid (T026 shell, complete
+//   in US5).
+// - FR-001a positioning (probe) unchanged: click-outside-close +
+//   4pt/left-edge alignment free from MenuBarExtra semantics.
 
 /// The menu-bar library scene content (wired into `MenuBarExtra`).
 public struct MenuBarLibraryScene: View {
@@ -30,8 +34,7 @@ public struct MenuBarLibraryScene: View {
     /// deletion outcome message ("Moved to Trash" / "Permanently Deleted").
     let deletionToast: (String) -> Void
     /// FR-009a (T246/T305): closes any open window(s) of a note the moment
-    /// it is deleted from the library or Trash. Wired to
-    /// `NoteWindowCoordinator.closeAll` by the App layer.
+    /// it is deleted from the library or Trash.
     let onCloseNoteWindows: (UUID) -> Void
 
     public init(
@@ -54,19 +57,18 @@ public struct MenuBarLibraryScene: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            header
-            Divider()
-
-            LibrarySearchView(model: model)
-                .padding(10)
-
-            Divider()
+            // Content area (the toolbar is attached to the NSWindow by the
+            // probe — FR-002 single native toolbar row).
+            SyncAttentionBanner(
+                presentation: model.bannerPresentation,
+                dismiss: { model.dismissBanner() },
+                action: { model.performBannerAction() }
+            )
 
             LibraryCardGrid(model: model, openNote: openNote, onTrash: { noteId in
                 Task {
                     if await model.trash(noteId: noteId) != nil {
                         deletionToast(String(localized: "Moved to Trash"))
-                        // FR-009a: an open window closes immediately.
                         onCloseNoteWindows(noteId)
                     }
                 }
@@ -74,142 +76,71 @@ public struct MenuBarLibraryScene: View {
                 Task { await model.restore(noteId: noteId) }
             }, onPermanentlyDelete: { noteId in
                 Task {
-                    // FR-014: Delete Forever removes the note beyond Trash
-                    // recovery (T305 — previously mis-routed to onTrash).
+                    // FR-026: single permanent delete is CONFIRMED in the
+                    // Trash destination view; the model performs the action.
                     if await model.permanentlyDelete(noteId: noteId) != nil {
                         deletionToast(String(localized: "Permanently Deleted"))
-                        // FR-009a: an open window closes immediately.
                         onCloseNoteWindows(noteId)
                     }
                 }
             })
                 .frame(minWidth: 340, minHeight: 320, idealHeight: 480)
-
-            Divider()
-
-            footer
         }
         .frame(width: 420)
-        // FR-001a (T286): position the library window deterministically when
-        // it appears — left-edge aligned with the icon, clamped, 4 pt below
-        // the menu bar, no animation.
-        .background(MenuBarLibraryWindowProbe())
+        // FR-001a (T286): position the library window deterministically
+        // when it appears AND attach the native toolbar (T018 spike).
+        .background(MenuBarLibraryWindowProbe(
+            model: model,
+            openNote: openNote
+        ))
         .task { await model.reload() }
-    }
-
-    // MARK: - Header (new note, Trash scope, sync status)
-
-    private var header: some View {
-        HStack(spacing: 8) {
-            Button {
-                Task {
-                    if let id = await model.createBlankNote() {
-                        openNote(id)
-                    }
-                }
-            } label: {
-                Label("New Note", systemImage: "square.and.pencil")
-            }
-            .keyboardShortcut("n", modifiers: .command)
-            .help("Create a new note")
-
-            Spacer()
-
-            Picker("", selection: Binding(
-                get: { model.scope },
-                set: { model.setScope($0) }
-            )) {
-                Label("Notes", systemImage: "square.grid.2x2").tag(LibraryModel.Scope.library)
-                Label("Trash", systemImage: "trash").tag(LibraryModel.Scope.trash)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-    }
-
-    // MARK: - Footer (sync status, Settings/Help/About/Quit)
-
-    private var footer: some View {
-        HStack(spacing: 6) {
-            // FR-004/FR-014a (T284): real sync state from the coordinator —
-            // "not configured" ONLY when sync is genuinely unconfigured;
-            // status/error + manual sync when configured.
-            let sync = model.syncCoordinator
-            SyncStatusView(
-                isConfigured: sync?.isConfigured ?? false,
-                lastSuccessfulSyncAt: sync?.lastSuccessfulSyncAt,
-                lastErrorCode: sync?.lastErrorCode,
-                isInProgress: sync?.isInProgress ?? false,
-                manualSync: {
-                    Task { await sync?.manualSync() }
-                }
-            )
-
-            Spacer()
-
-            Button {
-                openHelp()
-            } label: {
-                Image(systemName: "questionmark.circle")
-            }
-            .buttonStyle(.plain)
-            .help("Help")
-            .accessibilityLabel("Help")
-
-            Button {
-                openAbout()
-            } label: {
-                Image(systemName: "info.circle")
-            }
-            .buttonStyle(.plain)
-            .help("About Sticky Notes")
-            .accessibilityLabel("About Sticky Notes")
-
-            Button {
-                openSettings()
-            } label: {
-                Image(systemName: "gearshape")
-            }
-            .buttonStyle(.plain)
-            .help("Settings")
-            .accessibilityLabel("Settings")
-
-            Button("Quit") {
-                NSApplication.shared.terminate(nil)
-            }
-            .keyboardShortcut("q", modifiers: .command)
-            .controlSize(.small)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
     }
 }
 
-// MARK: - FR-001a window placement probe (T286)
+// MARK: - FR-001a window placement probe + toolbar attachment (T286/T018)
 
 /// Applies the FR-001a library-window frame as soon as the view gains its
 /// hosting window (MenuBarExtra presentation): left edge aligned with the
 /// status-item icon, clamped to the visible screen frame, 4 pt below the
-/// menu bar, NO animation.
+/// menu bar, NO animation. ALSO attaches the native library toolbar (003
+/// T018 spike decision — plan.md §14/§15): the toolbar lives on the
+/// window, so the content area below it is the pure grid + banner.
 public struct MenuBarLibraryWindowProbe: NSViewRepresentable {
-    public init() {}
+    let model: LibraryModel
+    let openNote: (UUID) -> Void
+
+    public init(model: LibraryModel, openNote: @escaping (UUID) -> Void) {
+        self.model = model
+        self.openNote = openNote
+    }
 
     public func makeNSView(context: Context) -> NSView {
-        let view = ProbeView()
+        let view = ProbeView(model: model, openNote: openNote)
         return view
     }
 
     public func updateNSView(_ nsView: NSView, context: Context) {}
 
     private final class ProbeView: NSView {
+        private let model: LibraryModel
+        private let openNote: (UUID) -> Void
+
+        init(model: LibraryModel, openNote: @escaping (UUID) -> Void) {
+            self.model = model
+            self.openNote = openNote
+            super.init(frame: .zero)
+        }
+
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
-            if let window {
-                MenuBarLibraryWindow.positionLibraryWindow(window)
-            }
+            guard let window else { return }
+            MenuBarLibraryWindow.positionLibraryWindow(window)
+            // T018 spike: attach the native toolbar once per window.
+            _ = LibraryToolbar.attach(to: window, model: model, openNote: openNote)
         }
     }
 }

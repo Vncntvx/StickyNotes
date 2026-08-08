@@ -3,70 +3,87 @@ import Foundation
 import SwiftUI
 @testable import StickyNotes
 
-// MARK: - Card-grid metrics tests (T287, FR-002a)
+// MARK: - Card-grid metrics tests (003 T013, FR-021/SC-021/SC-022)
 //
-// Per tasks.md T287: the card grid uses 3 columns at ≥600 pt window width,
-// 2 below 600, and 1 below 400; cards are ≈220×160 pt; inter-card spacing
-// is 12 pt.
+// Per tasks.md T013: the grid follows the FR-021 deterministic formula —
+// minCardWidth 180, spacing 12, columns = max(1, floor((w+12)/192)),
+// cardWidth = (w − (columns−1)×12) / columns. Deterministic column counts
+// at the SC-021 breakpoints (≥756→4, ≥564→3, ≥372→2, else 1); card widths
+// 180–228 in 4-column layout; 1 column = full width; sub-320 pt clamp to
+// 1 column with readable cards (FR-070).
 
 @Suite struct GridMetricsTests {
 
+    // MARK: - FR-021 formula (pure metrics)
+
     @Test
-    func columnCountFollowsResponsiveBreakpoints() {
-        #expect(LibraryCardGrid.columnCount(forWidth: 700) == 3, "3 columns at ≥600")
-        #expect(LibraryCardGrid.columnCount(forWidth: 600) == 3, "3 columns at exactly 600")
-        #expect(LibraryCardGrid.columnCount(forWidth: 599) == 2, "2 columns below 600")
-        #expect(LibraryCardGrid.columnCount(forWidth: 400) == 2, "2 columns at exactly 400")
-        #expect(LibraryCardGrid.columnCount(forWidth: 399) == 1, "1 column below 400")
-        #expect(LibraryCardGrid.columnCount(forWidth: 420) == 2, "the 420 pt library window renders 2 columns (FR-002a)")
+    func formulaGivesDeterministicColumnCounts() {
+        // SC-021 breakpoints: ≥756→4, ≥564→3, ≥372→2, else 1.
+        #expect(NoteCardMetrics.columnCount(forContentWidth: 756) == 4, "4 columns at ≥756")
+        #expect(NoteCardMetrics.columnCount(forContentWidth: 900) == 4)
+        #expect(NoteCardMetrics.columnCount(forContentWidth: 564) == 3, "3 columns at ≥564")
+        #expect(NoteCardMetrics.columnCount(forContentWidth: 700) == 3)
+        #expect(NoteCardMetrics.columnCount(forContentWidth: 372) == 2, "2 columns at ≥372")
+        #expect(NoteCardMetrics.columnCount(forContentWidth: 420) == 2, "the 420 pt library window renders 2 columns (FR-002a)")
+        #expect(NoteCardMetrics.columnCount(forContentWidth: 371) == 1, "1 column below 372")
+        #expect(NoteCardMetrics.columnCount(forContentWidth: 200) == 1)
+    }
+
+    @Test
+    func formulaHandlesBoundaryWidthsExactly() {
+        // Exact boundary widths: 756/564/372 must hit 4/3/2 (deterministic
+        // integer arithmetic, no off-by-one).
+        #expect(NoteCardMetrics.columnCount(forContentWidth: 756) == 4)
+        #expect(NoteCardMetrics.columnCount(forContentWidth: 755) == 3)
+        #expect(NoteCardMetrics.columnCount(forContentWidth: 564) == 3)
+        #expect(NoteCardMetrics.columnCount(forContentWidth: 563) == 2)
+        #expect(NoteCardMetrics.columnCount(forContentWidth: 372) == 2)
+        #expect(NoteCardMetrics.columnCount(forContentWidth: 371) == 1)
+    }
+
+    @Test
+    func cardWidthsFollowFormula() {
+        // 4-column layout: widths in 180–228 range.
+        let w4 = NoteCardMetrics.cardWidth(forContentWidth: 756)
+        #expect(w4 == 180, "4 columns at exactly 756 pt → 180 pt cards")
+        #expect(NoteCardMetrics.cardWidth(forContentWidth: 900) >= 180)
+        #expect(NoteCardMetrics.cardWidth(forContentWidth: 900) <= 228)
+
+        // 2-column layout: ≈276 max.
+        let w2 = NoteCardMetrics.cardWidth(forContentWidth: 563)
+        #expect(abs(w2 - 275.5) < 0.01, "2-column max ≈276 (at 563: (563−12)/2 = 275.5)")
+
+        // 1 column = full width.
+        let w1 = NoteCardMetrics.cardWidth(forContentWidth: 371)
+        #expect(w1 == 371, "1 column = full width")
+    }
+
+    @Test
+    func sub320ClampsToOneColumn() {
+        // FR-070: below 320 pt the grid clamps to 1 column with readable
+        // cards (full width).
+        #expect(NoteCardMetrics.columnCount(forContentWidth: 319) == 1)
+        #expect(NoteCardMetrics.columnCount(forContentWidth: 300) == 1)
+        let card = NoteCardMetrics.cardWidth(forContentWidth: 319)
+        #expect(card == 319, "1 column below 320 = full width, readable")
     }
 
     @Test
     func gridUsesTwelvePointSpacing() {
-        let columns = LibraryCardGrid.columns(forWidth: 700)
-        #expect(columns.count == 3)
-        #expect(columns.allSatisfy { $0.spacing == LibraryCardGrid.interCardSpacing })
-        #expect(LibraryCardGrid.interCardSpacing == 12, "12 pt inter-card spacing")
+        #expect(NoteCardMetrics.spacing == 12, "12 pt inter-card spacing")
+        #expect(NoteCardMetrics.minCardWidth == 180)
     }
 
-    @Test
-    func cardDimensionsMatchSpec() {
-        #expect(LibraryCardGrid.cardApproximateWidth == 220, "card width ≈ 220 pt")
-        #expect(LibraryCardGrid.cardApproximateHeight == 160, "card height ≈ 160 pt")
-    }
-
-    // MARK: - T003 pre-redesign snapshot (003-macos27-liquid-glass-redesign)
-    //
-    // These pins record the CURRENT grid behavior before the FR-021 formula
-    // redesign lands (tasks 003 T013/T014 migrate them to the new metric
-    // source). They must pass on the pre-redesign code and FAIL after the
-    // constants change — that failure is the explicit trigger for the
-    // migration, not a regression.
+    // MARK: - Grid wiring (fails until T021 replaces the 220×160 constants)
 
     @Test
-    func snapshotGridUsesFlexibleColumnsWithTwelvePointSpacing() {
-        // Grid structure snapshot: flexible items, 12 pt spacing, count
-        // derived from the column-count breakpoints.
-        let items = LibraryCardGrid.columns(forWidth: 700)
-        #expect(items.count == 3)
-        #expect(items.allSatisfy { item in
-            if case .flexible = item.size { return true } else { return false }
-        })
-        #expect(items.allSatisfy { $0.spacing == LibraryCardGrid.interCardSpacing })
-    }
-
-    @Test
-    func snapshotLibraryWindowWidthYieldsTwoColumnsAtRedesignBoundary() {
-        // The library scene is fixed at 420 pt wide (FR-001); at that width
-        // the pre-redesign grid renders 2 columns. The FR-021 formula will
-        // change the exact column count here — T013 asserts the new value.
-        #expect(LibraryCardGrid.columnCount(forWidth: 420) == 2)
-    }
-
-    @Test
-    func snapshotCardHeightBoundsAreFixed() {
-        // The card's height frame is content-bounded between 140 and the
-        // 160 pt constant (SC-022 density bounds arrive with the redesign).
-        #expect(LibraryCardGrid.cardApproximateHeight >= 140, "cards are ≤160 pt tall, min frame 140")
+    func gridColumnCountFollowsFormula() {
+        // The GRID must expose the FR-021 column count (current 001 code
+        // returns 3/2/1 at 600/400 — fails until the grid delegates to
+        // NoteCardMetrics).
+        #expect(LibraryCardGrid.columnCount(forWidth: 756) == 4, "grid: 4 columns at ≥756 (FR-021)")
+        #expect(LibraryCardGrid.columnCount(forWidth: 564) == 3, "grid: 3 columns at ≥564")
+        #expect(LibraryCardGrid.columnCount(forWidth: 372) == 2, "grid: 2 columns at ≥372")
+        #expect(LibraryCardGrid.columnCount(forWidth: 300) == 1, "grid: 1 column below 372")
     }
 }

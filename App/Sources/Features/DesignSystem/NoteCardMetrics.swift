@@ -26,10 +26,10 @@ public enum NoteCardMetrics {
     }
 
     /// FR-021: the card width for a given content width — the grid width
-    /// minus inter-card gaps, divided by the column count.
+    /// minus inter-card gaps, divided by the column count. One column =
+    /// full content width.
     public static func cardWidth(forContentWidth contentWidth: CGFloat) -> CGFloat {
         let columns = columnCount(forContentWidth: contentWidth)
-        guard columns > 1 else { return max(contentWidth, minCardWidth) }
         return (contentWidth - CGFloat(columns - 1) * spacing) / CGFloat(columns)
     }
 

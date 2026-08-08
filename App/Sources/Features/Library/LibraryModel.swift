@@ -65,6 +65,23 @@ public final class LibraryModel {
     /// the library view consumes it to focus the native search field.
     public private(set) var searchFocusRequested = false
 
+    // MARK: - Sync attention banner (003 T026 shell → US5)
+
+    /// The sync attention banner presentation (nil = zero footprint,
+    /// FR-007). Filled by `SyncStatusPresentation` in US5 (T055); the shell
+    /// keeps the scene layout complete from US1.
+    public private(set) var bannerPresentation: SyncBannerPresentation?
+
+    /// Dismisses the banner (FR-010: while the underlying state is
+    /// unchanged the banner does not reappear — the re-presentation rules
+    /// land in US5 T052/T056).
+    public func dismissBanner() {
+        bannerPresentation = nil
+    }
+
+    /// Performs the banner's action (retry/unlock/… — wired in US5).
+    public func performBannerAction() {}
+
     /// First-launch onboarding hint visibility (FR-014a).
     public var showOnboardingHint: Bool {
         let state = preferences.firstLaunchState

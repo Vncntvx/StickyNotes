@@ -1,27 +1,37 @@
 import SwiftUI
 import Domain
 
-// MARK: - NoteCardView (T162/T244/T256)
+// MARK: - NoteCardView (003 T022, FR-020/FR-023/FR-025/SC-022)
 //
-// Per tasks.md T162/T244/T256 and spec FR-002/FR-002a/FR-020/FR-020a/
-// FR-021/FR-072b:
-// - Card shows: manual title / generated summary (display-only, FR-045),
-//   body preview truncated at 2 rendered lines with a trailing ellipsis
-//   drawn from the FIRST rich-text block (never duplicating the summary
-//   title — FR-020a), note color, last-modified time (relative within 7
-//   days, absolute beyond — FR-020a), todo progress ("completed/total",
-//   "99+ completed" above 99 — FR-072b), screenshot/image/file-ref
-//   indicators, conflict/sync warning.
-// - FR-021: byte-identical first meaningful content MAY produce identical
-//   summaries; cards remain distinguishable via the other fields.
+// Per tasks.md T022 and spec FR-020/FR-023/FR-025/SC-022:
+// - Density: card height 72–128 pt (NoteCardMetrics bounds), no large
+//   blank areas; information priority title/first line → 2-line preview →
+//   modified time (FR-020).
+// - Selection state clear but not dominant and NOT color-only (FR-023):
+//   keyboard selection adds a visible ring + the readable-foreground
+//   accent; hover context actions never change card size (FR-023/CHK036).
+// - FR-025 fields preserved: 2-line preview truncation, relative/absolute
+//   time boundary, todo progress, cover thumbnail, conflict/sync badges —
+//   CardProjection semantics and 001 rules unchanged (layout only).
+// - Background from the palette (FR-022/FR-030 per-appearance design);
+//   foreground via ReadableTheme (FR-033).
 
 /// The card-grid note card.
 public struct NoteCardView: View {
     let card: LibraryModel.NoteCardRow
+    let isKeyboardSelected: Bool
     let action: () -> Void
 
-    public init(card: LibraryModel.NoteCardRow, action: @escaping () -> Void) {
+    /// SC-022 density bounds (003 T014 asserts the view uses these).
+    public static let contentHeightBounds = NoteCardMetrics.minCardHeight...NoteCardMetrics.maxCardHeight
+
+    public init(
+        card: LibraryModel.NoteCardRow,
+        isKeyboardSelected: Bool = false,
+        action: @escaping () -> Void
+    ) {
         self.card = card
+        self.isKeyboardSelected = isKeyboardSelected
         self.action = action
     }
 
@@ -51,7 +61,7 @@ public struct NoteCardView: View {
                 if let preview = card.previewSource {
                     Text(preview)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(secondaryText)
                         .lineLimit(2)
                         .truncationMode(.tail)
                 }
@@ -62,62 +72,89 @@ public struct NoteCardView: View {
                     if let progress = card.todoProgress {
                         Label(progress, systemImage: "checkmark.circle")
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(secondaryText)
                     }
                     if card.hasScreenshot {
                         Image(systemName: "camera")
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(secondaryText)
                             .accessibilityLabel("Has screenshot")
                     }
                     if card.hasImage {
                         Image(systemName: "photo")
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(secondaryText)
                             .accessibilityLabel("Has image")
                     }
                     if card.hasFileReference {
                         Image(systemName: "doc")
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(secondaryText)
                             .accessibilityLabel("Has file reference")
                     }
                     Spacer(minLength: 0)
                     Text(DisplayFormatters.lastModified(card.modifiedAt))
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(secondaryText)
                 }
             }
             .padding(10)
-            // FR-002a: card height ≈ 160 pt (grid column count handled by
-            // LibraryCardGrid; the 2-line title + 2-line preview bounds the
-            // content so the height is stable).
-            .frame(maxWidth: .infinity, minHeight: 140, maxHeight: LibraryCardGrid.cardApproximateHeight, alignment: .leading)
-            .background(cardColor, in: RoundedRectangle(cornerRadius: 12))
+            // SC-022 (003 T022): content-driven height within 72–128.
+            .frame(
+                maxWidth: .infinity,
+                minHeight: NoteCardMetrics.minCardHeight,
+                maxHeight: NoteCardMetrics.maxCardHeight,
+                alignment: .leading
+            )
+            .background(cardColor, in: RoundedRectangle(cornerRadius: AppMetrics.surfaceRadius))
+            .overlay {
+                // FR-023: keyboard selection is a clear-but-restrained ring
+                // PLUS the foreground accent — never color-only.
+                if isKeyboardSelected {
+                    RoundedRectangle(cornerRadius: AppMetrics.surfaceRadius)
+                        .strokeBorder(primaryText, lineWidth: 2)
+                }
+            }
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isKeyboardSelected ? [.isSelected] : [])
     }
 
     private var titleText: Text {
         if let title = card.title, !title.isEmpty {
-            return Text(title).font(.headline).foregroundStyle(.primary)
+            return Text(title).font(.headline).foregroundStyle(primaryText)
         }
         if let summary = card.summary {
-            return Text(summary).font(.headline).foregroundStyle(.primary)
+            return Text(summary).font(.headline).foregroundStyle(primaryText)
         }
-        return Text("Untitled note").font(.headline).foregroundStyle(.secondary)
+        return Text("Untitled note").font(.headline).foregroundStyle(secondaryText)
     }
 
     private var cardColor: Color {
-        // FR-040a canonical hexes rendered via the Domain projection.
-        let rgb = card.colorKey.builtinRGB
-        guard let rgb else { return Color(nsColor: .textBackgroundColor) }
-        return Color(
-            red: rgb.red,
-            green: rgb.green,
-            blue: rgb.blue,
-            opacity: 1.0
-        )
+        // FR-022/FR-030 (003 T022): built-in colors resolve through the
+        // palette (per-appearance design); custom colors keep the Domain
+        // projection (001 FR-040a).
+        if let paletteKey = NotePalette.paletteKey(for: card.colorKey) {
+            return NotePalette.dynamicColor(for: paletteKey)
+        }
+        if let hex = card.colorKey.builtinRGB {
+            return Color(red: hex.red, green: hex.green, blue: hex.blue, opacity: 1.0)
+        }
+        return Color(nsColor: .textBackgroundColor)
+    }
+
+    private var primaryText: Color {
+        if let paletteKey = NotePalette.paletteKey(for: card.colorKey) {
+            return NotePalette.dynamicForeground(for: paletteKey)
+        }
+        return .primary
+    }
+
+    private var secondaryText: Color {
+        if let paletteKey = NotePalette.paletteKey(for: card.colorKey) {
+            return NotePalette.dynamicSecondaryForeground(for: paletteKey)
+        }
+        return .secondary
     }
 }
