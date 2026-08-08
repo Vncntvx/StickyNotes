@@ -171,6 +171,28 @@ struct StickyNotesApp: App {
                 sortSubmenu()
             }
 
+            // 003 T032 (SC-004): block insertion via Edit/Insert menu
+            // commands (the persistent "Add Block" control is removed).
+            CommandMenu("Insert") {
+                Button("Add Todo") {
+                    postInsertion(.stickyRequestInsertTodo)
+                }
+                .keyboardShortcut("t", modifiers: [.command, .shift])
+
+                Button("Add Code Block") {
+                    postInsertion(.stickyRequestInsertCode)
+                }
+                .keyboardShortcut("c", modifiers: [.command, .shift])
+
+                Divider()
+                Button("Add File Reference…") {
+                    postInsertion(.stickyRequestInsertFileReference)
+                }
+                Button("Capture Screenshot…") {
+                    postInsertion(.stickyRequestCaptureScreenshot)
+                }
+            }
+
             CommandGroup(after: .toolbar) {
                 Button("Search") {
                     focusLibrarySearch()
@@ -593,6 +615,12 @@ struct StickyNotesApp: App {
         Button("Created") { model?.setSort(.created) }
         Button("Title") { model?.setSort(.title) }
         Button("Manual") { model?.setSort(.manual) }
+    }
+
+    /// Posts a block-insertion request to the KEY note window (Edit/Insert
+    /// menu, 003 T032 — the coordinator dispatches to the focused host).
+    private func postInsertion(_ name: Notification.Name) {
+        NotificationCenter.default.post(name: name, object: nil)
     }
 }
 

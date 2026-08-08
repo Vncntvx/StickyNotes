@@ -387,4 +387,10 @@ extension Notification.Name {
     static let stickyToggleNoteWindows = Notification.Name("sticky.toggleNoteWindows")
     /// 003 T025: "Search All Notes" — open the library and focus search.
     static let stickySearchAll = Notification.Name("sticky.searchAll")
+    /// 003 T032 (SC-004): Edit/Insert menu block-insertion requests,
+    /// dispatched to the key note window's host by the coordinator.
+    static let stickyRequestInsertTodo = Notification.Name("sticky.requestInsertTodo")
+    static let stickyRequestInsertCode = Notification.Name("sticky.requestInsertCode")
+    static let stickyRequestInsertFileReference = Notification.Name("sticky.requestInsertFileReference")
+    static let stickyRequestCaptureScreenshot = Notification.Name("sticky.requestCaptureScreenshot")
 }

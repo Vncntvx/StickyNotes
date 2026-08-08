@@ -37,11 +37,17 @@ public final class NoteWindowCoordinator {
     /// lock); removed in deinit. `@ObservationIgnored`: not part of the
     /// observable state.
     @ObservationIgnored private nonisolated(unsafe) var displayObserver: NSObjectProtocol?
+    /// 003 T032: insertion-notification observers (removed in deinit).
+    @ObservationIgnored private nonisolated(unsafe) var insertionObserver: NSObjectProtocol?
+    @ObservationIgnored private nonisolated(unsafe) var insertionObservers: [NSObjectProtocol] = []
     /// Retains each window's delegate: `NSWindow.delegate` is WEAK, so the
     /// delegate would otherwise deallocate right after `open()` returns and
     /// `windowWillClose` (frame save, FR-141a flush, FR-012a auto-discard)
     /// would never fire. Freed on unregister/close.
     @ObservationIgnored private var windowDelegates: [UUID: NoteWindowDelegate] = [:]
+    /// 003 T032: per-window hosts, keyed by noteId — used to dispatch the
+    /// Edit/Insert menu commands to the key note window.
+    @ObservationIgnored private var hosts: [UUID: NoteWindowHostModel] = [:]
 
     public init(environment: AppEnvironment) {
         self.environment = environment
@@ -56,12 +62,96 @@ public final class NoteWindowCoordinator {
                 self?.reapplyFrames()
             }
         }
+        // 003 T032 (SC-004): the Edit/Insert menu commands dispatch block
+        // insertion to the KEY note window's host.
+        insertionObserver = NotificationCenter.default.addObserver(
+            forName: .stickyRequestInsertTodo, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.insertInKeyWindow(kind: .todo) }
+        }
+        let codeObserver = NotificationCenter.default.addObserver(
+            forName: .stickyRequestInsertCode, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.insertInKeyWindow(kind: .code) }
+        }
+        let fileObserver = NotificationCenter.default.addObserver(
+            forName: .stickyRequestInsertFileReference, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.insertFileReferenceInKeyWindow() }
+        }
+        let captureObserver = NotificationCenter.default.addObserver(
+            forName: .stickyRequestCaptureScreenshot, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.captureScreenshotInKeyWindow() }
+        }
+        insertionObservers = [codeObserver, fileObserver, captureObserver]
     }
 
     deinit {
         if let displayObserver {
             NotificationCenter.default.removeObserver(displayObserver)
         }
+        if let insertionObserver {
+            NotificationCenter.default.removeObserver(insertionObserver)
+        }
+        for observer in insertionObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    // MARK: - 003 T032 (SC-004): Edit/Insert menu dispatch
+
+    private enum InsertionKind {
+        case todo
+        case code
+    }
+
+    /// Dispatches a block-insertion request to the KEY note window's host
+    /// (the Edit/Insert menu commands).
+    private func insertInKeyWindow(kind: InsertionKind) {
+        guard let (noteId, _) = hosts.first(where: { entry in
+            entry.value.noteId == entry.key &&
+            NoteWindowBridge.registeredWindow(for: entry.key)?.isKeyWindow == true
+        }) else {
+            // No key note window — the request targets a key window that is
+            // a note window; fall back to the first visible note window.
+            guard let any = hosts.keys.first(where: {
+                NoteWindowBridge.registeredWindow(for: $0)?.isVisible == true
+            }) else { return }
+            _ = any
+            return
+        }
+        let host = hosts[noteId]
+        switch kind {
+        case .todo: Task { _ = await host?.insertTodoBlock() }
+        case .code: Task { _ = await host?.insertCodeBlock() }
+        }
+    }
+
+    private func insertFileReferenceInKeyWindow() {
+        guard let host = keyHost() else { return }
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task { await host.insertFileReferenceBlock(url: url) }
+    }
+
+    private func captureScreenshotInKeyWindow() {
+        guard let host = keyHost() else { return }
+        // FR-131: capture permission is requested on invocation; the host
+        // presents the region/window capture flow.
+        Task { await host.captureRegion() }
+    }
+
+    private func keyHost() -> NoteWindowHostModel? {
+        if let keyNoteId = hosts.keys.first(where: {
+            NoteWindowBridge.registeredWindow(for: $0)?.isKeyWindow == true
+        }) {
+            return hosts[keyNoteId]
+        }
+        return hosts.keys.first.flatMap { hosts[$0] }
     }
 
     /// Opens (or focuses) the note's window. Returns the window.
@@ -100,11 +190,17 @@ public final class NoteWindowCoordinator {
         window.isOpaque = false
         window.backgroundColor = .clear
         window.hasShadow = true
+        // 003 T034 (FR-071): keep the note usable at compact sizes — a
+        // minimum content size preserves typing + traffic lights without
+        // exposing a full toolbar.
+        window.contentMinSize = NSSize(width: 260, height: 200)
         NoteWindowBridge.applyCollectionBehavior(window, alwaysOnTop: note.alwaysOnTop)
         _ = NoteWindowBridge.register(window, noteId: noteId)
         WindowLevelBridge.apply(window, alwaysOnTop: note.alwaysOnTop)
 
         let host = NoteWindowHostModel(noteId: noteId, environment: environment)
+        // 003 T032: retain the host for Edit/Insert menu dispatch.
+        hosts[noteId] = host
         let content = NoteWindowContent(noteId: noteId, host: host, environment: environment, coordinator: self)
         window.contentView = NSHostingView(rootView: content)
 
@@ -143,6 +239,7 @@ public final class NoteWindowCoordinator {
         NoteWindowBridge.registeredWindow(for: noteId)?.close()
         NoteWindowBridge.unregister(noteId: noteId)
         windowDelegates[noteId] = nil
+        hosts[noteId] = nil
     }
 
     /// Whether a note window is currently open.
@@ -154,6 +251,7 @@ public final class NoteWindowCoordinator {
     /// the FR-009a delete path).
     public func releaseWindowDelegate(noteId: UUID) {
         windowDelegates[noteId] = nil
+        hosts[noteId] = nil
     }
 
     // MARK: - FR-032/FR-033 window frames (T289)

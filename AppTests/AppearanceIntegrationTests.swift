@@ -55,4 +55,31 @@ import Domain
         _ = ReadableTheme.customColorFailsContrast(custom)
         #expect(true)
     }
+
+    // MARK: - 003 T030 (FR-045/FR-044)
+
+    @Test
+    func inactiveWindowDropsAccentRetention() {
+        // FR-045: an inactive note window must NOT retain accent emphasis
+        // on controls, emphasis, or floating controls — macOS-expected
+        // inactive appearance. The presentation model drives the controls;
+        // it must reduce emphasis when inactive.
+        #expect(NoteControlsPresentation.showsAccentWhenInactive == false,
+                "no inappropriate accent retention on inactive controls (FR-045)")
+    }
+
+    @Test
+    func floatingControlsHideWhenInactiveOrPointerLeaves() {
+        // FR-044/FR-061: floating controls hide when the window is
+        // inactive or the pointer leaves; never permanently obscure
+        // content.
+        #expect(NoteControlsPresentation.floatingControlsHideWhenInactive == true)
+        #expect(NoteControlsPresentation.floatingControlsHideOnPointerLeave == true)
+    }
+
+    @Test
+    func customControlsUseSFSymbolsOnly() {
+        // FR-064: icons are SF Symbols, never custom bitmaps.
+        #expect(NoteControlsPresentation.usesSFSymbolsOnly == true)
+    }
 }

@@ -54,6 +54,10 @@ public struct RichTextBlockView: View {
     // decision fires exactly once per exit; the flag resets when the block
     // gains non-empty text again.
     @State private var didRemoveEmptyBlockOnExit = false
+    // 003 T031 (CHK008): the insertion-point context control's presentation
+    // triggers — cursor-line hover and text selection.
+    @State private var isCursorLineHovered = false
+    @State private var isTextSelected = false
 
     public init(
         note: Note,
@@ -105,30 +109,19 @@ public struct RichTextBlockView: View {
         // (verified 2026-08-07).
         ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
-                // FR-050 block insertion (T290): todos, code blocks, file
-                // references (Finder drag-drop handled at the window level).
-                // Placed ABOVE the editor so an empty note's primary
-                // affordance sits at the top (2026-08-07 layout fix — the
-                // row previously floated mid-window below the editor's
-                // min-height area).
-                HStack(spacing: 10) {
-                    Menu {
-                        Button("Add Todo", action: onInsertTodo)
-                            .keyboardShortcut("t", modifiers: [.command, .shift])
-                        Button("Add Code Block", action: onInsertCode)
-                            .keyboardShortcut("c", modifiers: [.command, .shift])
-                        Divider()
-                        Button("Add File Reference…", action: onInsertFileReference)
-                        Button("Capture Screenshot…", action: onCaptureScreenshot)
-                    } label: {
-                        Label("Add Block", systemImage: "plus.circle")
-                    }
-                    .menuStyle(.borderlessButton)
-                    .fixedSize()
-                    .accessibilityLabel("Add block")
-
-                    Spacer()
-                }
+                // 003 T032 (SC-004/FR-043): the persistent "Add Block" Menu
+                // is REMOVED. Block insertion is now reachable via the
+                // insertion-point context control (below), the Edit/Insert
+                // menu commands (003 T011/T032), and keyboard (⌘⇧T/⌘⇧C).
+                BlockInsertionControl(
+                    onInsertTodo: onInsertTodo,
+                    onInsertCode: onInsertCode,
+                    onInsertFileReference: onInsertFileReference,
+                    onCaptureScreenshot: onCaptureScreenshot,
+                    isCursorLineHovered: $isCursorLineHovered,
+                    isTextSelected: $isTextSelected,
+                    isIMEComposing: $isIMEComposing
+                )
                 .padding(.bottom, 2)
 
                 // Rich-text block (the seamless primary surface) —

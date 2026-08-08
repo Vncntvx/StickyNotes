@@ -58,6 +58,8 @@ public enum MenuCommandCatalog {
         // Edit (standard edit commands + block insertion)
         MenuCommand(title: "Insert Todo", location: .edit, shortcut: "t", modifiers: [.command, .shift]),
         MenuCommand(title: "Insert Code Block", location: .edit, shortcut: "c", modifiers: [.command, .shift]),
+        MenuCommand(title: "Insert File Reference…", location: .edit),
+        MenuCommand(title: "Capture Screenshot…", location: .edit),
         // View
         MenuCommand(title: "Search", location: .view, shortcut: "f"),
         MenuCommand(title: "Sort", location: .view),

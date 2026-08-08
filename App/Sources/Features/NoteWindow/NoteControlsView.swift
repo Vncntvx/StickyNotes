@@ -30,6 +30,10 @@ public struct NoteControlsView: View {
     let onAddFileReference: () -> Void
 
     @State private var isVisible = false
+    // 003 T033 (FR-045): the window's active state drives the controls'
+    // appearance — inactive windows never show accent-emphasized floating
+    // controls.
+    @Environment(\.appearsActive) private var appearsActive
 
     public init(
         note: Note,
@@ -106,11 +110,21 @@ public struct NoteControlsView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .opacity(isVisible ? 1 : 0)
+            // 003 T033 (FR-045): inactive windows drop the control emphasis
+            // entirely (macOS-expected inactive appearance — no accent
+            // retention); the bar only becomes visible on hover WHILE
+            // active.
+            .opacity(controlsOpacity)
             .animation(.easeInOut(duration: 0.15), value: isVisible)
+            .animation(.easeInOut(duration: 0.15), value: appearsActive)
         }
         .onHover { hovering in
             isVisible = hovering
+        }
+        .onChange(of: appearsActive) { _, active in
+            if !active {
+                isVisible = false
+            }
         }
         .contextMenu {
             // FR-031 contextual menu (T248): duplicate + copy-as-Markdown.
@@ -287,6 +301,14 @@ public struct NoteControlsView: View {
     }
 
     // MARK: - Close (handled by the hosting NSWindow)
+
+    /// 003 T033 (FR-045): visible only when hovered AND the window is
+    /// active; fully hidden when inactive (no accent retention on floating
+    /// controls).
+    private var controlsOpacity: Double {
+        guard appearsActive else { return 0 }
+        return isVisible ? 1 : 0
+    }
 
     private func onClose() {
         // The window close is handled by the hosting NSWindow.

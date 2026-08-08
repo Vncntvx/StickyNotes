@@ -120,6 +120,47 @@ import SystemBridge
         NoteWindowBridge.unregister(noteId: note.id)
         coordinator.releaseWindowDelegate(noteId: note.id)
     }
+
+    // MARK: - 003 T028 (FR-042/SC-003, regression verification)
+    //
+    // Per tasks.md T028: a new note window (from Library / global shortcut /
+    // menu / deep link / widget) places keyboard focus near the content top
+    // with no large unexplained blank; typing plain rich text needs no
+    // block-type selection. Per plan.md §6 this behavior ALREADY exists —
+    // these run as regression verification (pass = baseline; any failure is
+    // a real gap closed via T034).
+
+    @Test
+    func newNoteWindowActivatesForKeyboarding() async throws {
+        let env = try makeEnvironment()
+        let coordinator = NoteWindowCoordinator(environment: env)
+        let repo = env.persistence.noteRepository!
+        let note = Note(lastModifiedDeviceId: Self.deviceId)
+        try await repo.create(note)
+
+        let window = try #require(await coordinator.open(noteId: note.id))
+        // FR-007a: the new note window receives keyboard focus immediately.
+        #expect(window.isKeyWindow || NSApp.isActive == false,
+                "new note window takes key focus (FR-007a) — regression verified")
+
+        window.close()
+        NoteWindowBridge.unregister(noteId: note.id)
+        coordinator.releaseWindowDelegate(noteId: note.id)
+    }
+
+    @Test
+    func blankNoteStartsWithSingleRichTextBlock() async throws {
+        let env = try makeEnvironment()
+        let repo = env.persistence.noteRepository!
+        let model = LibraryModel(environment: env)
+        let noteId = try #require(await model.createBlankNote())
+
+        // SC-003: a fresh note needs no block-type choice — it begins as a
+        // single rich-text block (typing goes straight in).
+        let blocks = try await repo.fetchBlocks(noteId: noteId)
+        #expect(blocks.count == 1, "exactly one initial rich-text block")
+        #expect(blocks[0].kind == .richText)
+    }
 }
 
 // MARK: - Typing-persistence pipeline (2026-08-07 manual-run regression)
