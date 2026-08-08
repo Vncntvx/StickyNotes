@@ -53,23 +53,59 @@ public enum RegionCapture {
         rect.width >= minimumSide && rect.height >= minimumSide
     }
 
+    /// A single-frame capture provider: returns the captured image, or nil
+    /// when the capture produced no image (the fail-closed input — the SDK
+    /// has been observed reporting nil image with nil error; see below).
+    public typealias SingleFrameCapture = (CGRect) async throws -> CGImage?
+
     /// Captures a single static frame of the given region (ScreenCaptureKit
     /// coordinates — see `normalizeSelection`).
     ///
     /// - Throws: `.capture(.permissionDenied)` when screen-recording is not
-    ///   granted.
+    ///   granted; `.capture(.captureStreamFailed)` on capture errors or when
+    ///   the SDK reports a nil image without an error.
     public static func capture(in rect: CGRect) async throws -> Data {
         guard PermissionService.screenRecordingGranted else {
             throw StickyError.capture(.permissionDenied)
         }
+        return try await capture(in: rect, using: Self.captureViaScreenCaptureKit)
+    }
+
+    /// The fail-closed capture core (T303): maps the provider outcome to the
+    /// sanitized `.capture(.captureStreamFailed)` error. A nil image — with
+    /// or without an error — MUST NOT crash the application (FR-011a/FR-092/
+    /// FR-153): no partial asset or note is created, and the rest of the app
+    /// stays fully usable.
+    public static func capture(in rect: CGRect, using provider: SingleFrameCapture) async throws -> Data {
         do {
-            let image = try await SCScreenshotManager.captureImage(in: rect)
+            guard let image = try await provider(rect) else {
+                throw StickyError.capture(.captureStreamFailed)
+            }
             guard let png = WindowCapture.pngData(from: image) else {
                 throw StickyError.capture(.captureStreamFailed)
             }
             return png
+        } catch let StickyError.capture(code) {
+            throw StickyError.capture(code)
         } catch {
             throw StickyError.capture(.captureStreamFailed)
+        }
+    }
+
+    /// Wraps the ScreenCaptureKit completion-handler API with explicit
+    /// nil-image/nil-error handling (T303).
+    ///
+    /// The SDK's Swift async `captureImage(in:)` bridge crashes with an
+    /// implicitly-unwrapped-nil fatal error when the underlying completion
+    /// reports a nil image WITH a nil error (observed on macOS 27 beta with
+    /// screen-recording granted). Calling the block form directly and
+    /// treating a nil image as a failed capture makes the path fail closed
+    /// instead of crashing.
+    public static func captureViaScreenCaptureKit(in rect: CGRect) async -> CGImage? {
+        await withCheckedContinuation { continuation in
+            SCScreenshotManager.captureImage(in: rect) { image, _ in
+                continuation.resume(returning: image)
+            }
         }
     }
 

@@ -214,11 +214,31 @@ public enum MenuBarLibraryWindow {
             width: 24,
             height: 22
         )
-        let size = windowSize ?? window.frame.size
+        positionLibraryWindow(
+            window,
+            iconFrame: iconFrame,
+            windowSize: windowSize ?? window.frame.size
+        )
+    }
+
+    /// Applies the FR-001a library-window frame from an EXPLICIT icon frame
+    /// (T304): the deterministic core of `positionLibraryWindow`. The
+    /// environment-dependent status-item resolution (above) is kept separate
+    /// so the frame application is testable in isolation — the result must
+    /// not depend on which status-item windows exist at test time. Product
+    /// behavior is unchanged: the resolved icon frame (real status item when
+    /// found, deterministic fallback otherwise) is fed through here.
+    public static func positionLibraryWindow(
+        _ window: NSWindow,
+        iconFrame: NSRect,
+        windowSize: NSSize
+    ) {
+        guard let screen = window.screen ?? NSScreen.main else { return }
+        let visible = screen.visibleFrame
         let frame = MenuBarWindowFrame.libraryWindowFrame(
             iconFrame: iconFrame,
             visibleScreenFrame: visible,
-            windowSize: size
+            windowSize: windowSize
         )
         // FR-001a: no animation — set the frame directly.
         window.setFrame(frame, display: true, animate: false)
@@ -228,7 +248,23 @@ public enum MenuBarLibraryWindow {
     /// addressable; the rightmost 32pt of the menu bar is a reliable
     /// approximation for a right-aligned status item).
     private static func statusItemIconFrame(on screen: NSScreen) -> NSRect? {
-        guard let menuBarWindow = NSApp.windows.first(where: { $0.className.contains("StatusBarWindow") || $0.isFloatingPanel == false && $0.level == .statusBar }) else {
+        guard let menuBarWindow = NSApp.windows.first(where: { window in
+            guard window.className.contains("StatusBarWindow") ||
+                  window.isFloatingPanel == false && window.level == .statusBar else {
+                return false
+            }
+            // Only a status-ITEM-sized window is usable: the menu-bar
+            // window itself spans the full bar (origin at the screen's
+            // left edge), which would mis-place the library (FR-001a
+            // deterministic positioning).
+            guard window.frame.width <= 120, window.frame.height <= 40 else { return false }
+            // The status-bar window may live on a different display
+            // (multi-display setups), where its frame is in a different
+            // coordinate space. Only use it when it is actually on the
+            // target screen.
+            guard let statusScreen = window.screen, statusScreen === screen else { return false }
+            return true
+        }) else {
             return nil
         }
         return menuBarWindow.frame

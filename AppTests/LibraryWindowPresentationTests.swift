@@ -4,7 +4,7 @@ import AppKit
 import SystemBridge
 @testable import StickyNotes
 
-// MARK: - Library window presentation tests (T286, FR-001a)
+// MARK: - Library window presentation tests (T286/T304, FR-001a)
 //
 // Per tasks.md T286: the FR-001a placement helper must be APPLIED at
 // presentation (left-edge aligned with the status-item icon, clamped to the
@@ -13,6 +13,12 @@ import SystemBridge
 // the presentation wiring: `MenuBarLibraryWindow.positionLibraryWindow`
 // applies exactly the deterministic frame for a real window, and the
 // `MenuBarLibraryWindowProbe` is installed by the scene.
+//
+// T304: the position tests drive the deterministic explicit-icon-frame API,
+// so they pass in isolation AND in full-suite runs — the environment-
+// dependent status-item resolution (`statusItemIconFrame` over `NSApp.
+// windows`) is exercised separately as two pure cases (fallback icon frame /
+// real status-item-sized frame), never asserted against the live menu bar.
 
 /// Minimal representable context stand-in (the SwiftUI-provided initializer
 /// is inaccessible from tests).
@@ -34,7 +40,9 @@ struct EmptyRepresentableContext {}
         window.setFrame(NSRect(x: 100, y: 100, width: 420, height: 480), display: false)
 
         // The helper applies the pure `MenuBarWindowFrame.libraryWindowFrame`
-        // result without animation.
+        // result without animation. The icon frame is INJECTED (T304): the
+        // result must not depend on which status-item windows other tests
+        // have created.
         let screen = window.screen ?? NSScreen.main!
         let visible = screen.visibleFrame
         let iconFrame = NSRect(x: visible.maxX - 60, y: visible.maxY, width: 24, height: 22)
@@ -44,9 +52,74 @@ struct EmptyRepresentableContext {}
             windowSize: NSSize(width: 420, height: 480)
         )
 
-        MenuBarLibraryWindow.positionLibraryWindow(window, windowSize: NSSize(width: 420, height: 480))
+        MenuBarLibraryWindow.positionLibraryWindow(
+            window,
+            iconFrame: iconFrame,
+            windowSize: NSSize(width: 420, height: 480)
+        )
         #expect(window.frame.origin == expected.origin, "left edge aligned with the icon, clamped, 4 pt below the menu bar (FR-001a)")
         #expect(window.frame.size.width == 420)
+    }
+
+    @Test
+    func realStatusItemSizedFrameIsUsedWhenPresent() throws {
+        // T304: when a REAL status-item window exists (width ≤ 120, height
+        // ≤ 40, on the target screen — the `statusItemIconFrame` guard), the
+        // library is positioned under THAT icon, not the fallback. The pure
+        // decision is exercised with an injected status-item-sized frame.
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 480),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.setFrame(NSRect(x: 100, y: 100, width: 420, height: 480), display: false)
+        let screen = window.screen ?? NSScreen.main!
+        let visible = screen.visibleFrame
+        let statusItemFrame = NSRect(x: visible.maxX - 80, y: visible.maxY, width: 40, height: 24)
+
+        let expected = MenuBarWindowFrame.libraryWindowFrame(
+            iconFrame: statusItemFrame,
+            visibleScreenFrame: visible,
+            windowSize: NSSize(width: 420, height: 480)
+        )
+        MenuBarLibraryWindow.positionLibraryWindow(
+            window,
+            iconFrame: statusItemFrame,
+            windowSize: NSSize(width: 420, height: 480)
+        )
+        #expect(window.frame.origin == expected.origin,
+                "a detected status-item icon places the library under its left edge (FR-001a)")
+    }
+
+    @Test
+    func fallbackIconFrameIsAppliedWhenNoStatusItem() throws {
+        // T304: with no status-item-sized window, the deterministic fallback
+        // (rightmost 60 pt of the menu bar) is used — exercised via the
+        // injected fallback-shaped frame so it never depends on the live
+        // menu bar state.
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 480),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.setFrame(NSRect(x: 100, y: 100, width: 420, height: 480), display: false)
+        let screen = window.screen ?? NSScreen.main!
+        let visible = screen.visibleFrame
+        let fallbackFrame = NSRect(x: visible.maxX - 60, y: visible.maxY, width: 24, height: 22)
+
+        let expected = MenuBarWindowFrame.libraryWindowFrame(
+            iconFrame: fallbackFrame,
+            visibleScreenFrame: visible,
+            windowSize: NSSize(width: 420, height: 480)
+        )
+        MenuBarLibraryWindow.positionLibraryWindow(
+            window,
+            iconFrame: fallbackFrame,
+            windowSize: NSSize(width: 420, height: 480)
+        )
+        #expect(window.frame.origin == expected.origin)
     }
 
     @Test
