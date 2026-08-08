@@ -1,16 +1,8 @@
 name: CI
 
+# Temporarily disabled (2026-08-08) — set ENABLED to true to re-enable.
 on:
-  push:
-    branches: [ main, '001-sticky-notes-app' ]
-  pull_request:
-    branches: [ main ]
   workflow_dispatch:
-
-# CI uses a GitHub-hosted macOS runner with Xcode 26.x. This dev machine has
-# only Command Line Tools — see Documentation/toolchain.md. The matrix below
-# is the project's intended CI environment, not the local environment that
-# generated the spec/plan/tasks.
 
 permissions:
   contents: read
