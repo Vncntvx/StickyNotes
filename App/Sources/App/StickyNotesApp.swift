@@ -329,9 +329,46 @@ struct StickyNotesApp: App {
         Task { _ = await coordinator.open(noteId: noteId) }
     }
 
+    /// The manually-managed Settings window. The SwiftUI `Settings` scene's
+    /// `showSettingsWindow:` action is unreliable for LSUIElement (accessory)
+    /// apps on macOS 27 beta — the menu-bar Settings button did nothing even
+    /// after activating the app first (verified 2026-08-08). The About/Help
+    /// manual-window pattern is used instead; the `Settings { … }` scene
+    /// declaration stays for the ⌘, system menu item.
+    @State private var settingsWindow: NSWindow?
+
     private func openSettingsWindow() {
-        // Settings scene opens on demand.
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        // Reuse any existing settings window (scene- or manual-created).
+        if let existing = NSApp.windows.first(where: {
+            $0.title.contains("Settings")
+        }) {
+            existing.makeKeyAndOrderFront(nil)
+            settingsWindow = existing
+            StickyLogger(category: .app).debug("open-settings", code: "existing-window")
+            return
+        }
+        if let settingsWindow {
+            settingsWindow.makeKeyAndOrderFront(nil)
+            StickyLogger(category: .app).debug("open-settings", code: "owned-window")
+            return
+        }
+        let window = NSWindow(
+            contentRect: NSRect(x: 300, y: 300, width: 480, height: 540),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        // Retain ownership (double-release guard — see openAboutWindow).
+        window.isReleasedWhenClosed = false
+        window.title = "Settings"
+        window.contentView = NSHostingView(
+            rootView: SettingsView(syncCoordinator: environment.syncCoordinator)
+        )
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        settingsWindow = window
+        StickyLogger(category: .app).debug("open-settings", code: "created-window")
     }
 
     private func openAboutWindow() {
