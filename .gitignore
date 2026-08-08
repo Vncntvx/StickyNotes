@@ -252,6 +252,9 @@ Prototypes/*/
 *.keychain
 *.keychain-db
 
-# Xcode中风 generated source files (defensive — should not be committed)
+# Xcode generated source files (defensive — should not be committed)
 *.generated.swift
 
+
+# Opencode image
+.opencode/images

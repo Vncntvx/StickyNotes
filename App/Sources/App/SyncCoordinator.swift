@@ -52,6 +52,9 @@ public final class SyncCoordinator {
     public private(set) var lastErrorCode: String?
     public private(set) var isInProgress = false
     public private(set) var autoSyncEnabled = false
+    /// The user-selected automatic-sync strategy (FR-152, clarified
+    /// 2026-08-08): change-only or a fixed periodic interval.
+    public private(set) var autoSyncPolicy: AutoSyncPolicy = .default
 
     private let store: DatabaseStore
     private let configStore: SQLiteVaultConfigurationStore
@@ -62,6 +65,8 @@ public final class SyncCoordinator {
     private let assetStore: AssetStore?
     private var engine: SyncEngine?
     private var debouncer: SyncDebouncer?
+    /// The periodic-sync task (FR-152 periodic strategy; changeOnly stops it).
+    private var periodicTask: Task<Void, Never>?
     /// The unlocked vault (FR-162a remember-unlock needs the master key).
     private var vault: Vault?
     /// Test seam: replaces the real provider construction.
@@ -95,6 +100,7 @@ public final class SyncCoordinator {
                 self.lastErrorCode = state.lastError
             }
             autoSyncEnabled = LocalPreferences().autoSyncEnabled
+            autoSyncPolicy = LocalPreferences().autoSyncPolicy
             // FR-162a: silent launch unlock when remembered + no restart.
             if let vault = launchUnlockVault(configuration: config) {
                 wireEngine(configuration: config, vault: vault)
@@ -218,6 +224,47 @@ public final class SyncCoordinator {
     public func setAutoSyncEnabled(_ enabled: Bool) {
         autoSyncEnabled = enabled
         LocalPreferences().autoSyncEnabled = enabled
+        if enabled {
+            startPeriodicSync()
+        } else {
+            stopPeriodicSync()
+        }
+    }
+
+    /// Selects the automatic-sync strategy (FR-152, clarified 2026-08-08):
+    /// persists the device-local preference and restarts the periodic timer
+    /// (a `changeOnly` policy stops it; the FR-152a change debounce always
+    /// applies when auto-sync is enabled).
+    public func setAutoSyncPolicy(_ policy: AutoSyncPolicy) {
+        autoSyncPolicy = policy
+        LocalPreferences().autoSyncPolicy = policy
+        if autoSyncEnabled {
+            startPeriodicSync()
+        }
+    }
+
+    // MARK: - Periodic sync (FR-152 periodic strategy, clarified 2026-08-08)
+
+    /// Starts (or restarts) the periodic-sync task per the selected policy.
+    /// `changeOnly` or a disabled auto-sync stops it. The loop sleeps for the
+    /// policy interval and runs one sync pass; overlapping runs are excluded
+    /// by the engine's single-transaction actor.
+    private func startPeriodicSync() {
+        stopPeriodicSync()
+        guard autoSyncEnabled, let interval = autoSyncPolicy.interval else { return }
+        periodicTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+                guard !Task.isCancelled else { return }
+                guard let self, self.engine != nil, self.autoSyncEnabled else { return }
+                await self.runSync()
+            }
+        }
+    }
+
+    private func stopPeriodicSync() {
+        periodicTask?.cancel()
+        periodicTask = nil
     }
 
     // MARK: - Remove / replace (FR-151/FR-154)
@@ -234,6 +281,7 @@ public final class SyncCoordinator {
         }
         engine = nil
         debouncer = nil
+        stopPeriodicSync()
         self.configuration = nil
         lastSuccessfulSyncAt = nil
         lastErrorCode = nil
@@ -280,6 +328,13 @@ public final class SyncCoordinator {
         let provider = try makeProvider(configuration: newConfiguration, credentials: credentials)
         try await provider.verify()
         try await configStore.saveConfiguration(newConfiguration)
+
+        // FR-154: switch atomically — stop the OLD provider's debounce and
+        // periodic tasks BEFORE wiring the new engine, so both providers are
+        // never active at the same time (any in-flight old-engine request
+        // still completes; nothing new is scheduled on it).
+        await debouncer?.cancel()
+        stopPeriodicSync()
 
         self.configuration = newConfiguration
         self.vault = vault
@@ -331,7 +386,9 @@ public final class SyncCoordinator {
         case .webdav:
             return RedactedSyncConfig(endpoint: endpoint, region: nil, bucket: nil, prefix: containerPath)
         case .s3:
-            return RedactedSyncConfig(endpoint: endpoint, region: region, bucket: bucket, prefix: nil)
+            // The optional user folder/prefix is persisted here and combined
+            // with the vault locator by makeProvider.
+            return RedactedSyncConfig(endpoint: endpoint, region: region, bucket: bucket, prefix: containerPath)
         }
     }
 
@@ -360,11 +417,16 @@ public final class SyncCoordinator {
                   let bucket = configuration.providerConfig.bucket else {
                 throw StickyError.credentials(.invalidEndpoint)
             }
+            // The user-configured folder/prefix (optional) is combined with
+            // the vault locator so multiple vaults stay isolated under the
+            // chosen prefix (e.g. "mynotes/451aa6fbf…/").
+            let base = configuration.providerConfig.prefix?.trimmingCharacters(in: CharacterSet(charactersIn: "/")) ?? ""
+            let prefix = base.isEmpty ? configuration.vaultLocator : "\(base)/\(configuration.vaultLocator)"
             return S3Provider(config: S3Configuration(
                 endpoint: url,
                 region: configuration.providerConfig.region ?? "us-east-1",
                 bucket: bucket,
-                prefix: configuration.vaultLocator,
+                prefix: prefix,
                 accessKey: credentials.accessKey ?? "",
                 secretKey: credentials.secretKey ?? ""
             ))
@@ -387,16 +449,24 @@ public final class SyncCoordinator {
             )
             self.engine = engine
             self.debouncer = SyncDebouncer(engine: engine)
+            // FR-152 periodic strategy: start the timer when auto-sync is on.
+            startPeriodicSync()
         } catch {
             self.engine = nil
             self.debouncer = nil
+            stopPeriodicSync()
             lastErrorCode = StickyError.credentials(.accessDenied).sanitizedCode
         }
     }
 
     /// Runs one sync pass and records the sanitized outcome (FR-165).
+    /// Mutual exclusion: manual / periodic / debounced / startup triggers all
+    /// funnel here; a pass already in progress is skipped so triggers can
+    /// never queue duplicate syncs (the engine actor additionally serializes
+    /// `syncNow`).
     private func runSync() async {
         guard let engine else { return }
+        guard !isInProgress else { return }
         isInProgress = true
         defer { isInProgress = false }
         do {

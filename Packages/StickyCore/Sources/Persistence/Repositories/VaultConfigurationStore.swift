@@ -29,9 +29,14 @@ public final class SQLiteVaultConfigurationStore: Sendable {
     // MARK: - VaultConfiguration
 
     /// Fetches the locally-configured vault, or nil when sync is unconfigured.
+    /// Ordered by createdAt (newest first) so a stale row left by a replaced
+    /// repository can never shadow the current configuration.
     public func fetchConfiguration() async throws -> VaultConfiguration? {
         try await store.read { db in
-            guard let row = try Row.fetchOne(db, sql: "SELECT * FROM vaultConfiguration LIMIT 1") else {
+            guard let row = try Row.fetchOne(
+                db,
+                sql: "SELECT * FROM vaultConfiguration ORDER BY createdAt DESC LIMIT 1"
+            ) else {
                 return nil
             }
             return try self.decodeConfiguration(row)
@@ -39,11 +44,19 @@ public final class SQLiteVaultConfigurationStore: Sendable {
     }
 
     /// Inserts or replaces the local vault configuration (one at a time —
-    /// FR-150/FR-154).
+    /// FR-150/FR-154). The PK is `vaultId`, so replacing a repository would
+    /// previously INSERT a second row while the old one stayed behind; an
+    /// unordered `LIMIT 1` fetch could then return the STALE configuration
+    /// after a restart (verified 2026-08-08). Old rows are therefore purged
+    /// in the same transaction.
     public func saveConfiguration(_ configuration: VaultConfiguration) async throws {
         try await store.write { db in
             let json = try self.encoder.encode(configuration.providerConfig)
             let jsonString = String(data: json, encoding: .utf8) ?? "{}"
+            try db.execute(
+                sql: "DELETE FROM vaultConfiguration WHERE vaultId != ?",
+                arguments: [configuration.vaultId.uuidString]
+            )
             try db.execute(
                 sql: """
                     INSERT INTO vaultConfiguration (

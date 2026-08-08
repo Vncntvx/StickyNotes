@@ -23,8 +23,7 @@ import SystemBridge
 /// `@unchecked Sendable`: `UserDefaults` is not statically Sendable, but
 /// UserDefaults access is thread-safe (Apple documentation). The stored
 /// keys are simple booleans with no intermediate inconsistent state.
-public final class LocalPreferences: @unchecked Sendable {
-    private let defaults: UserDefaults
+public final class LocalPreferences: @unchecked Sendable {    private let defaults: UserDefaults
 
     /// The App Group UserDefaults suite. The widget does NOT read these
     /// keys (data-model.md §LocalPreferences).
@@ -36,6 +35,7 @@ public final class LocalPreferences: @unchecked Sendable {
         static let onboardingHintDismissed = "local.stickynotes.onboardingHintDismissed"
         static let hasCreatedFirstNote = "local.stickynotes.hasCreatedFirstNote"
         static let autoSyncEnabled = "local.stickynotes.autoSyncEnabled"
+        static let autoSyncPolicy = "local.stickynotes.autoSyncPolicy"
         static let globalShortcuts = "local.stickynotes.globalShortcuts"
     }
 
@@ -88,12 +88,26 @@ public final class LocalPreferences: @unchecked Sendable {
         defaults.removeObject(forKey: Key.hasCreatedFirstNote)
     }
 
-    // MARK: - Auto-sync preference (FR-152, T285)
+    // MARK: - Auto-sync preference (FR-152/FR-152a, T285 + clarified 2026-08-08)
 
     /// Whether automatic synchronization is enabled (device-local).
     public var autoSyncEnabled: Bool {
         get { defaults.bool(forKey: Key.autoSyncEnabled) }
         set { defaults.set(newValue, forKey: Key.autoSyncEnabled) }
+    }
+
+    /// The user-selected automatic-sync strategy (FR-152, clarified
+    /// 2026-08-08): change-only or a fixed periodic interval. Device-local,
+    /// never synchronized.
+    public var autoSyncPolicy: AutoSyncPolicy {
+        get {
+            guard let raw = defaults.string(forKey: Key.autoSyncPolicy),
+                  let policy = AutoSyncPolicy(rawValue: raw) else {
+                return .every15
+            }
+            return policy
+        }
+        set { defaults.set(newValue.rawValue, forKey: Key.autoSyncPolicy) }
     }
 
     // MARK: - Global shortcuts (FR-120/FR-121, T296)
@@ -144,6 +158,44 @@ public final class LocalPreferences: @unchecked Sendable {
         let payload: [String: Int] = ["keyCode": Int(key.keyCode), "modifiers": Int(key.modifiers)]
         if let data = try? JSONSerialization.data(withJSONObject: payload) {
             defaults.set(String(data: data, encoding: .utf8), forKey: defaultsKey)
+        }
+    }
+}
+
+// MARK: - AutoSyncPolicy (FR-152, clarified 2026-08-08)
+
+/// The user-selectable automatic-synchronization strategy: sync only after
+/// local content changes (the FR-152a debounce), or additionally on a fixed
+/// periodic interval. Device-local preference; never synchronized, never in
+/// canonical JSON (FR-152).
+public enum AutoSyncPolicy: String, CaseIterable, Sendable {
+    case changeOnly
+    case every5
+    case every15
+    case every30
+    case every60
+
+    /// The periodic interval in seconds; nil = no periodic sync.
+    public var interval: TimeInterval? {
+        switch self {
+        case .changeOnly: return nil
+        case .every5: return 5 * 60
+        case .every15: return 15 * 60
+        case .every30: return 30 * 60
+        case .every60: return 60 * 60
+        }
+    }
+
+    /// The default strategy: periodic every 15 minutes (FR-152).
+    public static let `default` = AutoSyncPolicy.every15
+
+    public var displayName: String {
+        switch self {
+        case .changeOnly: return String(localized: "After changes only")
+        case .every5: return String(localized: "Every 5 minutes")
+        case .every15: return String(localized: "Every 15 minutes")
+        case .every30: return String(localized: "Every 30 minutes")
+        case .every60: return String(localized: "Every hour")
         }
     }
 }

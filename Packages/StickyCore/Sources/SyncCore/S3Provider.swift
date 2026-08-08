@@ -231,8 +231,41 @@ public final class S3Provider: SyncProviderProtocol, @unchecked Sendable {
     public func fetchManifest() async throws -> ManifestFetchResult {
         let data = try await fetch(objectName: ManifestStore.manifestObjectName)
         let metadata = try await fetchMetadata(objectName: ManifestStore.manifestObjectName)
-        guard let token = metadata?.versionToken else { throw ProviderError.corrupt }
+        var token: String?
+        if let versionToken = metadata?.versionToken {
+            token = versionToken
+        } else if let modified = metadata?.modifiedAt {
+            // The gateway does not expose an ETag on HEAD — fall back to the
+            // Last-Modified timestamp as the version token.
+            token = Self.versionTokenFromHTTPDate(modified)
+        } else {
+            // Some S3-compatible gateways omit BOTH the ETag and
+            // Last-Modified headers on HEAD responses; retry via a ranged
+            // GET, which usually carries them.
+            var request = URLRequest(url: objectURL(key: objectKey(ManifestStore.manifestObjectName)))
+            request.httpMethod = "GET"
+            request.setValue("bytes=0-0", forHTTPHeaderField: "Range")
+            let (_, rangeResponse) = try await perform(request)
+            token = rangeResponse.value(forHTTPHeaderField: "ETag")
+            if token == nil, let lastModified = rangeResponse.value(forHTTPHeaderField: "Last-Modified") {
+                token = lastModified
+            }
+        }
+        guard let token else {
+            // No version token is obtainable from this gateway at all
+            // (diagnostic, not `corrupt`).
+            throw ProviderError.unmapped("manifestNoETag")
+        }
         return ManifestFetchResult(data: data, versionToken: token)
+    }
+
+    /// Renders a Date as a stable, server-comparable version token
+    /// (ISO 8601 UTC — used when the gateway provides Last-Modified but no
+    /// ETag).
+    private static func versionTokenFromHTTPDate(_ date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: date)
     }
 
     public func replaceManifest(data: Data, ifMatch: String) async throws {
@@ -247,12 +280,19 @@ public final class S3Provider: SyncProviderProtocol, @unchecked Sendable {
         signer.sign(&request, at: now)
         do {
             let (data, response) = try await session.data(for: request)
-            guard let http = response as? HTTPURLResponse else { throw ProviderError.unknown }
+            guard let http = response as? HTTPURLResponse else {
+                throw ProviderError.unmapped("notHTTPResponse")
+            }
             return (data, http)
         } catch is CancellationError {
             throw ProviderError.canceled
         } catch {
-            throw ProviderErrorMapping.classify(error)
+            let providerError = ProviderErrorMapping.classify(error)
+            if providerError == .unknown {
+                let ns = error as NSError
+                throw ProviderError.unmapped("\(ns.domain).\(ns.code)")
+            }
+            throw providerError
         }
     }
 

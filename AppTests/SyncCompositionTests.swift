@@ -265,4 +265,36 @@ final class InMemorySyncProvider: SyncProviderProtocol, @unchecked Sendable {
         #expect(model.syncCoordinator?.isConfigured == true)
         #expect(model.syncCoordinator?.lastSuccessfulSyncAt != nil)
     }
+
+    @Test
+    func autoSyncPolicyPersistsAndSwitches() async throws {
+        // FR-152 (clarified 2026-08-08): the user-selectable strategy.
+        // Restore the defaults afterwards so manual test runs are unaffected.
+        defer {
+            LocalPreferences().autoSyncPolicy = .default
+            LocalPreferences().autoSyncEnabled = false
+        }
+        let provider = InMemorySyncProvider()
+        let (coordinator, _, _) = try makeCoordinator(provider: provider)
+        await coordinator.load()
+        #expect(coordinator.autoSyncPolicy == .default, "defaults to periodic 15 min")
+
+        coordinator.setAutoSyncEnabled(true)
+        #expect(coordinator.autoSyncEnabled)
+
+        coordinator.setAutoSyncPolicy(.every30)
+        #expect(coordinator.autoSyncPolicy == .every30)
+        #expect(LocalPreferences().autoSyncPolicy == .every30, "persisted device-locally")
+        #expect(coordinator.autoSyncPolicy.interval == 30.0 * 60.0)
+
+        coordinator.setAutoSyncPolicy(.changeOnly)
+        #expect(coordinator.autoSyncPolicy == .changeOnly)
+        #expect(coordinator.autoSyncPolicy.interval == nil, "changeOnly disables periodic sync")
+
+        // Policy changes while auto-sync is off are still persisted.
+        coordinator.setAutoSyncEnabled(false)
+        coordinator.setAutoSyncPolicy(.every5)
+        #expect(coordinator.autoSyncPolicy == .every5)
+        #expect(coordinator.autoSyncPolicy.interval == 5.0 * 60.0)
+    }
 }

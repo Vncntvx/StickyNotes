@@ -1226,7 +1226,11 @@ cited FR.
 - **FR-152**: Synchronization SHOULD occur through a combination of a short
   delay after content changes, periodic synchronization, application startup,
   application shutdown when practical, manual synchronization, and network
-  reconnection.
+  reconnection. The user MAY choose the automatic-synchronization strategy in
+  Settings: sync only after local content changes (no periodic sync), or
+  periodic sync every 5 / 15 / 30 / 60 minutes (the periodic default is 15
+  minutes; the selected strategy is a device-local preference, never
+  synchronized, and never stored in canonical JSON) (clarified 2026-08-08).
 - **FR-152a**: The "short delay after content changes" in FR-152 MUST be
   implemented as a debounce window of 2 to 4 seconds after the last local
   change. The sync engine MUST NOT fire while local edits are still arriving
