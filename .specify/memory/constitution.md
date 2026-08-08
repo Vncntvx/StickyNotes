@@ -1,38 +1,22 @@
 <!--
 Sync Impact Report
-===================
-Version change: (uninitialized template) → 1.0.0
+==================
+Version change: 1.0.0 → 2.0.0
 
 Modified principles:
-  None. This is the initial adoption of the constitution from an unfilled
-  template. No prior principles existed to rename or weaken.
+  VI (Privacy and Least Privilege) — amended 2026-08-08: the accessibility
+  permission clause now permits an EXPLICIT, user-initiated request from the
+  Settings permissions page (an informed user action), while keeping the
+  prohibitions on startup/first-launch/ordinary-use requests and on requests
+  made merely because a future feature might use the permission. This is a
+  MAJOR version change because it redefines a non-negotiable privacy
+  guarantee (when the accessibility permission may be requested).
 
 Added sections:
-  - Core Principles: I–XIV (all fourteen principles below are new)
-    I. Focused Sticky-Notes Product
-    II. Native macOS and SwiftUI-First
-    III. Local-First and Offline-Complete
-    IV. Explicit, Durable, and Versioned Data
-    V. Structured Editor Integrity
-    VI. Privacy and Least Privilege
-    VII. End-to-End Encryption by Design
-    VIII. Correct and Non-Destructive Synchronization
-    IX. File References Are Not Cloud Attachments
-    X. Consistent, Accessible, and Reversible UX
-    XI. Performance and Responsiveness Are Product Requirements
-    XII. Verification and Testing Are Mandatory
-    XIII. Dependency Discipline and Maintainability
-    XIV. Spec-Driven Traceability
-  - Governance: Constitutional Authority, Amendment Process,
-    Constitution Versioning, Compliance Review
+  None.
 
 Removed sections:
-  - Template placeholders [SECTION_2_NAME] / [SECTION_2_CONTENT] and
-    [SECTION_3_NAME] / [SECTION_3_CONTENT]. The fourteen principles above
-    (notably XIII Dependency Discipline and XIV Spec-Driven Traceability)
-    together with Governance fully cover the engineering, product, and
-    process guidance that those generic template slots were intended to
-    hold. No governance content was lost.
+  None.
 
 Files changed by this operation:
   - .specify/memory/constitution.md (this file)
@@ -288,11 +272,16 @@ Logs MUST NOT contain:
 - Unredacted server responses containing user data.
 
 Permissions MUST be requested only when the user invokes a feature that
-requires them. Screen-recording permission MUST be requested only when
-the user first attempts screenshot capture or window capture.
-Accessibility permission MUST be reserved for explicit advanced
-window-identification functionality and MUST NOT be requested merely
-because the application might need it in the future.
+requires them. Screen-recording permission MUST be requested only when the
+user first attempts screenshot capture or window capture. Accessibility
+permission MUST be reserved for explicit advanced window-identification
+functionality; the application MUST NOT request it during startup, on first
+launch, or during ordinary note editing, and MUST NOT request it merely
+because the application might need it in the future. The application MAY
+request accessibility permission when the user explicitly and knowingly
+chooses to grant it from the Settings permissions page — a user-initiated
+action that invokes the system accessibility prompt, never an automatic or
+startup-time request (amended 2026-08-08, Constitution 2.0.0).
 
 Declining a permission MUST degrade only the affected feature; ordinary
 notes MUST remain fully usable.
@@ -685,4 +674,4 @@ A Constitution Check MUST be performed during:
 Reviewers MUST reject changes that violate the constitution without an
 approved amendment or time-limited exception.
 
-**Version**: 1.0.0 | **Ratified**: 2026-08-06 | **Last Amended**: 2026-08-06
+**Version**: 2.0.0 | **Ratified**: 2026-08-06 | **Last Amended**: 2026-08-08
