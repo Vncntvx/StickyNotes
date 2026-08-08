@@ -421,7 +421,19 @@ public final class SyncCoordinator {
                 WidgetRefreshCoordinator.reload(for: .conflictCopyCreated)
             }
         } catch {
-            let code = (error as? StickyError)?.sanitizedCode ?? "syncFailed"
+            // FR-165: sanitized codes only. Map every error family — a
+            // non-StickyError (e.g. ProviderError or a raw URLSession error
+            // that escaped the provider adapter) previously collapsed to the
+            // uninformative "syncFailed" fallback.
+            let code: String
+            if let sticky = error as? StickyError {
+                code = sticky.sanitizedCode
+            } else if let provider = error as? ProviderError {
+                code = "provider.\(provider.sanitizedCode)"
+            } else {
+                let ns = error as NSError
+                code = "syncFailed.\(ns.domain).\(ns.code)"
+            }
             lastErrorCode = code
             try? await configStore.upsertState(SyncState(
                 vaultId: configuration?.vaultId ?? UUID(),

@@ -22,6 +22,10 @@ public struct SettingsView: View {
     /// the user may change them in System Settings and come back).
     @State private var screenRecordingStatus: PermissionStatus = .notDetermined
     @State private var accessibilityPermissionStatus: PermissionStatus = .notDetermined
+    /// Visible feedback for the last accessibility-request outcome (the
+    /// system prompt may be suppressed on some configurations — e.g.
+    /// ad-hoc-signed builds — so the user must see what happened).
+    @State private var accessibilityRequestResult: String?
 
     /// Navigation between the settings sections. A segmented control (not a
     /// `TabView`) is used so the window stays a plain macOS settings window:
@@ -116,6 +120,11 @@ public struct SettingsView: View {
                         permissionActionButtons(for: .accessibility)
                     }
                 }
+                if let accessibilityRequestResult {
+                    Label(accessibilityRequestResult, systemImage: "info.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             } header: {
                 Text("Permissions are requested only when you use the related feature (FR-131).")
             }
@@ -145,9 +154,14 @@ public struct SettingsView: View {
             } else {
                 Button("Allow Screen Recording…") {
                     // Presents the system authorization dialog (or routes to
-                    // the Screen Capture pane when previously denied).
-                    _ = PermissionService.requestScreenRecording()
+                    // the Screen Capture pane when previously denied). On
+                    // ad-hoc-signed builds / macOS 27 beta the system prompt
+                    // may not appear — fall back to opening the pane.
+                    let granted = PermissionService.requestScreenRecording()
                     refreshPermissionStatuses()
+                    if !granted {
+                        _ = PermissionService.openSystemSettings(for: .screenRecording)
+                    }
                 }
                 .controlSize(.small)
                 if screenRecordingStatus == .denied {
@@ -163,8 +177,17 @@ public struct SettingsView: View {
                 // user-initiated request from the Settings page is allowed —
                 // never automatic, never at startup.
                 Button("Allow Accessibility…") {
-                    _ = PermissionService.requestAccessibility()
+                    let granted = PermissionService.requestAccessibility()
                     refreshPermissionStatuses()
+                    if granted {
+                        accessibilityRequestResult = String(localized: "Accessibility granted.")
+                    } else {
+                        // The system prompt is suppressed for ad-hoc-signed
+                        // builds / macOS 27 beta — open the Accessibility
+                        // pane directly so the user can enable the app.
+                        _ = PermissionService.openSystemSettings(for: .accessibility)
+                        accessibilityRequestResult = String(localized: "Accessibility not granted yet. If no dialog appeared, enable it in System Settings > Privacy & Security > Accessibility.")
+                    }
                 }
                 .controlSize(.small)
                 if accessibilityPermissionStatus == .denied {

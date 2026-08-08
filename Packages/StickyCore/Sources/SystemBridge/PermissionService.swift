@@ -76,7 +76,11 @@ public enum PermissionService {
         // kAXTrustedCheckOptionPrompt (AXUIElement.h); the non-Sendable
         // global `var` constant cannot be referenced under Swift 6 strict
         // concurrency.
-        return AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
+        let logger = StickyLogger(category: .systemBridge)
+        logger.debug("request-accessibility", code: "invoked")
+        let result = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
+        logger.debug("request-accessibility", code: result ? "granted" : "still-not-granted")
+        return result
     }
 
     /// Current accessibility status. NEVER called at startup or during
