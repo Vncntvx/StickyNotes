@@ -14,6 +14,8 @@ import SwiftUI
 /// The banner's three-element presentation (what happened / local data
 /// safe / action). Fleshed out per seven categories in US5 (T055).
 public struct SyncBannerPresentation: Sendable, Equatable {
+    /// The FR-012 category (drives dismiss-suppression, FR-010).
+    public let category: SyncStatusCategory?
     /// What happened (human-readable, no internal identifiers — FR-012).
     public let title: String
     /// The "your notes are safe locally" reassurance.
@@ -26,12 +28,14 @@ public struct SyncBannerPresentation: Sendable, Equatable {
     public let symbolName: String
 
     public init(
+        category: SyncStatusCategory? = nil,
         title: String,
         localDataSafe: String,
         actionTitle: String? = nil,
         isDismissible: Bool = true,
         symbolName: String = "exclamationmark.triangle"
     ) {
+        self.category = category
         self.title = title
         self.localDataSafe = localDataSafe
         self.actionTitle = actionTitle

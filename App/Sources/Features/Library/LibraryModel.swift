@@ -65,22 +65,51 @@ public final class LibraryModel {
     /// the library view consumes it to focus the native search field.
     public private(set) var searchFocusRequested = false
 
-    // MARK: - Sync attention banner (003 T026 shell → US5)
+    // MARK: - Sync attention banner (003 T026 shell → T056 complete)
 
-    /// The sync attention banner presentation (nil = zero footprint,
-    /// FR-007). Filled by `SyncStatusPresentation` in US5 (T055); the shell
-    /// keeps the scene layout complete from US1.
-    public private(set) var bannerPresentation: SyncBannerPresentation?
+    /// The sync attention banner state machine (FR-010 dismiss/re-present
+    /// semantics; driven by the sync coordinator's state).
+    public let bannerState = SyncBannerStateModel()
 
-    /// Dismisses the banner (FR-010: while the underlying state is
-    /// unchanged the banner does not reappear — the re-presentation rules
-    /// land in US5 T052/T056).
-    public func dismissBanner() {
-        bannerPresentation = nil
+    /// The banner presentation derived from the current sync state (nil =
+    /// zero footprint, FR-007).
+    public var bannerPresentation: SyncBannerPresentation? {
+        bannerState.current
     }
 
-    /// Performs the banner's action (retry/unlock/… — wired in US5).
-    public func performBannerAction() {}
+    /// Refreshes the banner from the sync coordinator's current state
+    /// (FR-012 mapping). Called on reload and on coordinator state changes.
+    public func refreshBanner() {
+        guard let coordinator = syncCoordinator else { return }
+        guard let presentation = SyncStatusResolver.resolve(
+            isConfigured: coordinator.isConfigured,
+            lastErrorCode: coordinator.lastErrorCode,
+            vaultLocked: false,
+            hasOfflineChangesPending: coordinator.isInProgress,
+            summary: .empty
+        ) else {
+            bannerState.clearAll()
+            return
+        }
+        bannerState.present(category: presentation.category)
+    }
+
+    /// Dismisses the banner (FR-010: while the underlying state is
+    /// unchanged the banner does not reappear).
+    public func dismissBanner() {
+        bannerState.dismiss()
+    }
+
+    /// Performs the banner's action (retry/unlock/…).
+    public func performBannerAction() {
+        guard let category = bannerState.current?.category else { return }
+        switch category {
+        case .cannotConnect:
+            Task { await syncCoordinator?.manualSync() }
+        default:
+            break
+        }
+    }
 
     /// First-launch onboarding hint visibility (FR-014a).
     public var showOnboardingHint: Bool {

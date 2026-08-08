@@ -93,7 +93,10 @@ public struct MenuBarLibraryScene: View {
             model: model,
             openNote: openNote
         ))
-        .task { await model.reload() }
+        .task {
+            await model.reload()
+            model.refreshBanner()
+        }
     }
 }
 

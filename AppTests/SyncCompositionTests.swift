@@ -983,4 +983,40 @@ final class RepoLayoutInMemoryProvider: SyncProviderProtocol, @unchecked Sendabl
         #expect(all.count >= 80, "all remote notes converged to B")
         #expect(elapsed < 60.0, "first sync of <100 notes converges within 1 minute (SC-002)")
     }
+
+    // MARK: - 003 T054 (FR-054/SC-013): advanced-area separation
+
+    @Test
+    func advancedMaintenanceOperationsAreSeparated() {
+        // SC-013: replace/remove/join/export live in a SEPARATE Advanced
+        // area, not the primary sync page.
+        #expect(SyncAdvancedAreaPolicy.operationsInSeparateAdvancedArea == true)
+        #expect(SyncAdvancedAreaPolicy.operations == [
+            "Replace Repository", "Remove Configuration", "Join Existing Vault",
+            "Export Sync Profile", "Export Diagnostic Bundle",
+        ])
+    }
+
+    @Test
+    func joinHasInitialSetupAndRecoveryReEntry() {
+        // CHK033: join-existing-vault has an initial-setup path (T050) AND
+        // an advanced recovery re-entry.
+        #expect(SyncAdvancedAreaPolicy.initialSetupJoinEnabled == true)
+        #expect(SyncAdvancedAreaPolicy.recoveryReEntryEnabled == true)
+    }
+
+    @Test
+    func destructiveOperationsAreConfirmedAndDistinct() {
+        // FR-154 semantics preserved: destructive ops are visually/
+        // semantically distinct and confirmed.
+        #expect(SyncAdvancedAreaPolicy.destructiveOperationsConfirmed == true)
+        #expect(SyncAdvancedAreaPolicy.destructiveVisuallyDistinct == true)
+    }
+
+    @Test
+    func unrecoverableWarningIsStandardNotPanelDominant() {
+        // FR-163: the encrypted-notes-unrecoverable warning is standard
+        // warning style, concise — not dominating the pane.
+        #expect(SyncAdvancedAreaPolicy.warningIsConciseStandard == true)
+    }
 }

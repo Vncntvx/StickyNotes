@@ -115,8 +115,18 @@ public struct SyncSettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
                     } else {
+                        // 003 T058 (FR-011/SC-012): the settings surface shows
+                        // the HUMAN-READABLE FR-012 mapping — never the raw
+                        // internal code (codes stay in the diagnostic export
+                        // experience only).
                         LabeledContent("Last error") {
-                            Text(error)
+                            Text(SyncStatusResolver.resolve(
+                                isConfigured: true,
+                                lastErrorCode: error,
+                                vaultLocked: false,
+                                hasOfflineChangesPending: false,
+                                summary: .empty
+                            )?.title ?? "Sync needs attention")
                                 .foregroundStyle(.orange)
                         }
                     }
@@ -176,7 +186,9 @@ public struct SyncSettingsView: View {
                 }
             }
 
-            Section {
+            // 003 T057 (FR-054/SC-013): the advanced maintenance area —
+            // separate from the primary sync status page.
+            Section("Advanced") {
                 if syncCoordinator?.isConfigured == true {
                     // FR-002/US1/AC6 (T029): joining a DIFFERENT existing
                     // vault from the configured state applies replace
