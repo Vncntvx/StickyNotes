@@ -172,20 +172,23 @@ public final class NoteWindowCoordinator {
 
         let window = NSWindow(
             contentRect: NSRect(x: 200, y: 200, width: 420, height: 480),
-            styleMask: [.titled, .closable, .resizable],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
         // FR-030a (T298): note-paper chrome. The titlebar appears
         // TRANSPARENT and the window background is the OPAQUE note color,
         // so the titlebar area renders as note-colored paper (never a
-        // white bar, never see-through) with the title text + traffic
-        // lights on it — Apple Sticky Notes style. User decision
-        // 2026-08-09: a standard white titlebar was rejected as ugly; a
-        // clear background made the top show the desktop.
+        // white bar, never see-through) with the traffic lights on it —
+        // Apple Sticky Notes style. User decisions 2026-08-09: a standard
+        // white titlebar was rejected as ugly; a clear background made the
+        // top show the desktop. The TITLE TEXT stays hidden in the
+        // titlebar — the editable title field lives in the controls row,
+        // and showing it in BOTH places duplicated it (screenshot
+        // 2026-08-09).
         window.title = note.title ?? ""
         window.titlebarAppearsTransparent = true
-        window.titleVisibility = .visible
+        window.titleVisibility = .hidden
         window.backgroundColor = ReadableTheme.windowBackground(for: note)
         window.isReleasedWhenClosed = false
         window.hasShadow = true

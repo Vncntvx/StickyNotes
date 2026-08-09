@@ -65,7 +65,7 @@ public struct RichTextView: NSViewRepresentable {
     }
 
     public func makeNSView(context: Context) -> NSTextView {
-        let textView = NSTextView()
+        let textView = NotePaperTextView()
         textView.isRichText = true
         textView.allowsUndo = true
         textView.isEditable = true
@@ -76,7 +76,14 @@ public struct RichTextView: NSViewRepresentable {
         textView.isAutomaticTextReplacementEnabled = false
         textView.isAutomaticSpellingCorrectionEnabled = false
         textView.isAutomaticLinkDetectionEnabled = true
-        textView.textContainerInset = NSSize(width: 2, height: 6)
+        // Text insets are the NSTextView-native way to give the paper's
+        // first line breathing room under the controls row: the inset is
+        // part of the text view's intrinsic size, so it always applies
+        // (unlike SwiftUI container padding, which ScrollView layout can
+        // eat — verified 2026-08-09: a 24pt SwiftUI top padding rendered
+        // as ~12pt). The caret starts at the inset, so the typing
+        // position matches the visual inset.
+        textView.textContainerInset = NSSize(width: 4, height: 16)
         textView.font = fontResolver.font(size: textSize, for: "")
         textView.delegate = context.coordinator
         textView.autoresizingMask = [.width]
@@ -253,5 +260,29 @@ public struct RichTextView: NSViewRepresentable {
             let current = textView.textStorage ?? NSTextStorage()
             current.setAttributedString(attributed)
         }
+    }
+}
+
+/// The note-paper text view: content-sized, but never shorter than a
+/// comfortable typing surface. Verified 2026-08-09: a purely content-sized
+/// NSTextView collapsed to a ~49pt strip for a short note, so clicks on
+/// the empty paper never landed on the editor (could not focus / type);
+/// the old "fixed 300pt slot" instead bottom-anchored the text because
+/// SwiftUI frame alignment does not apply to representable frames. The
+/// intrinsic-size override keeps the text top-anchored (with the native
+/// inset) while giving the paper a full-height click target, and grows
+/// naturally for long notes (the enclosing SwiftUI ScrollView scrolls).
+final class NotePaperTextView: NSTextView {
+    /// The minimum paper height: an empty note is a comfortable clickable
+    /// typing surface that still leaves headroom for the ScrollView.
+    static let minimumPaperHeight: CGFloat = 320
+
+    override var intrinsicContentSize: NSSize {
+        let used = layoutManager?.usedRect(for: textContainer ?? NSTextContainer()).height ?? 0
+        let contentHeight = used + textContainerInset.height * 2
+        return NSSize(
+            width: NSView.noIntrinsicMetric,
+            height: max(contentHeight, Self.minimumPaperHeight)
+        )
     }
 }

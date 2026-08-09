@@ -102,13 +102,16 @@ public struct RichTextBlockView: View {
     }
 
     public var body: some View {
-        // Fixed editor slot (300 pt): large enough that an empty note has a
-        // substantial typing surface without a large void, while the
-        // NSTextView keeps its natural size — dynamically resizing the text
-        // view (GeometryReader / `.infinity`) broke input caret placement
-        // (verified 2026-08-07).
+        // The editor text view sizes to its CONTENT (natural height): a
+        // short note starts typing at the top of the paper, right under
+        // the controls. The former "fixed 300 pt slot" (`minHeight: 300`)
+        // rendered the first line at the BOTTOM of the slot (~60% down
+        // the window, verified 2026-08-09 screenshot) — NSTextView text
+        // was laid out at the bottom of the oversized frame. The caret
+        // placement regression that motivated the slot (2026-08-07) was
+        // the host-instance duplication fixed in NoteWindowContent.load().
         ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 10) {
                 // 003 T032 (SC-004/FR-043): the persistent "Add Block" Menu
                 // is REMOVED. Block insertion is now reachable via the
                 // insertion-point context control (below), the Edit/Insert
@@ -128,8 +131,8 @@ public struct RichTextBlockView: View {
                 // NSTextView-backed (verified 2026-08-07: SwiftUI
                 // `TextEditor`'s binding never writes back on macOS 27
                 // beta; plan-sanctioned fallback, canonical format
-                // unchanged). Natural height (min 120 pt) so short notes
-                // fit without a scroll track.
+                // unchanged). Natural height so short notes fit without a
+                // scroll track.
                 RichTextView(
                     document: canonicalDocument,
                     textSize: ReadableTheme.textSize(for: note),
@@ -162,7 +165,7 @@ public struct RichTextBlockView: View {
                         onStructuralBlocksChanged(updated)
                     }
                 )
-                .frame(minHeight: 300, alignment: .topLeading)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
 
                 // Special blocks rendered beneath (todo/code/file/image/
                 // screenshot) with the unified container (FR-050b).
@@ -176,7 +179,14 @@ public struct RichTextBlockView: View {
                     }
                 }
             }
-            .padding(10)
+            // Structural spacing only: the paper's horizontal margins and
+            // a small bottom inset. The FIRST LINE's breathing room below
+            // the controls row comes from the NSTextView's native
+            // `textContainerInset` (RichTextView) — SwiftUI container
+            // padding is unreliable inside a ScrollView (verified
+            // 2026-08-09: 24pt of top padding rendered as ~12pt).
+            .padding(.horizontal, 10)
+            .padding(.bottom, 10)
         }
     }
 
