@@ -128,40 +128,106 @@ public final class NoteWindowHostModel {
 
     // MARK: - Block insertion (T290, FR-050/FR-070/FR-080/FR-100)
 
-    /// Inserts a new todo block (stable TodoItem identity — FR-071) and
-    /// returns its id.
+    // MARK: 004 (FR-010/Q4, contracts §5): insertion targets
+    //
+    // All window-level insertion paths (toolbar Insert menu, app menus,
+    // BlockInsertionControl) converge on the host methods below, carrying a
+    // resolved `InsertionTarget`. Stale contexts degrade to `.append`.
+
+    /// Applies an insertion target to the block list. `makeBlock(sortKey:)`
+    /// produces the block to insert; the returned array already contains the
+    /// split-trailing rich-text block when the target splits one.
+    private func blocksApplyingTarget(
+        _ target: InsertionTarget,
+        makeBlock: (Int) -> Block
+    ) -> [Block] {
+        func appendFallback() -> [Block] {
+            self.blocks + [makeBlock((self.blocks.map(\.sortKey).max() ?? 0) + 1024)]
+        }
+        switch target {
+        case .append:
+            return appendFallback()
+        case .afterBlock(let blockId):
+            guard let idx = self.blocks.firstIndex(where: { $0.id == blockId }) else {
+                return appendFallback()
+            }
+            let before = blocks[idx].sortKey
+            let after = blocks.indices.contains(idx + 1) ? blocks[idx + 1].sortKey : before + 1024
+            var updated = blocks
+            updated.insert(makeBlock((before + after) / 2), at: idx + 1)
+            return updated
+        case .caretSplit(let blockId, let offset):
+            guard let idx = self.blocks.firstIndex(where: { $0.id == blockId }),
+                  case .richText(let doc) = self.blocks[idx].payload else {
+                return appendFallback()
+            }
+            let split = NoteWindowDerivations.splitRichTextBlock(payload: doc, offset: offset)
+            let s = blocks[idx].sortKey
+            let after = blocks.indices.contains(idx + 1) ? blocks[idx + 1].sortKey : s + 1024
+            let trailingSort = (s + after) / 2
+            let newSort = (s + trailingSort) / 2
+            var updated = blocks
+            // The block keeps its id; its payload becomes the LEADING text.
+            updated[idx] = Block(
+                id: blockId, noteId: noteId, kind: .richText, sortKey: s,
+                payload: .richText(split.leading),
+                versionId: blocks[idx].versionId, parentVersionId: blocks[idx].parentVersionId,
+                lastModifiedDeviceId: blocks[idx].lastModifiedDeviceId,
+                createdAt: blocks[idx].createdAt, modifiedAt: Date()
+            )
+            // The trailing text becomes a NEW rich-text block (the editor
+            // renders it after the primary surface).
+            let trailing = Block(
+                id: UUID(), noteId: noteId, kind: .richText, sortKey: trailingSort,
+                payload: .richText(split.trailing),
+                lastModifiedDeviceId: DeviceIdentity.current.id
+            )
+            updated.insert(trailing, at: idx + 1)
+            // The new block lands between the leading and trailing parts.
+            updated.insert(makeBlock(newSort), at: idx + 1)
+            return updated
+        }
+    }
+
+    /// Inserts a new todo block (stable TodoItem identity — FR-071) at the
+    /// resolved target and returns its id.
     @discardableResult
-    public func insertTodoBlock() async -> UUID? {
-        guard let repo = environment.persistence.noteRepository,
-              let todoRepo = environment.persistence.todoRepository else { return nil }
+    public func insertTodoBlock(target: InsertionTarget? = nil) async -> UUID? {
+        guard let todoRepo = environment.persistence.todoRepository else { return nil }
         let now = Date()
         let deviceId = DeviceIdentity.current.id
         let todoId = UUID()
         let blockId = UUID()
-        let block = Block(
-            id: blockId,
-            noteId: noteId,
-            kind: .todo,
-            sortKey: (blocks.map(\.sortKey).max() ?? 0) + 1024,
-            payload: .todo(TodoPayload(todoId: todoId, richText: RichTextDocument.plain(""))),
-            lastModifiedDeviceId: deviceId,
-            createdAt: now,
-            modifiedAt: now
-        )
+        let newBlocks = blocksApplyingTarget(target ?? .append) { sortKey in
+            Block(
+                id: blockId,
+                noteId: noteId,
+                kind: .todo,
+                sortKey: sortKey,
+                payload: .todo(TodoPayload(todoId: todoId, richText: RichTextDocument.plain(""))),
+                lastModifiedDeviceId: deviceId,
+                createdAt: now,
+                modifiedAt: now
+            )
+        }
+        let blockSortKey = newBlocks.first(where: { $0.id == blockId })?.sortKey ?? 0
         let item = TodoItem(
             id: todoId,
             noteId: noteId,
             blockId: blockId,
-            sortKey: (blocks.map(\.sortKey).max() ?? 0) + 1024,
+            sortKey: blockSortKey,
             depth: 0,
             lastModifiedDeviceId: deviceId,
             createdAt: now,
             modifiedAt: now
         )
         do {
-            try await repo.insert(block)
+            // The TodoItem references the block (FK) — persist the block
+            // first (FR-141a: structural ops save immediately; await the
+            // autosave so the block exists before the item insert).
+            updateBlocks(newBlocks, isStructural: true)
+            await flush()
             try await todoRepo.insert(item)
-            await reloadBlocks()
             notifyWidgetRefresh(.todoToggled)
             return blockId
         } catch {
@@ -169,56 +235,61 @@ public final class NoteWindowHostModel {
         }
     }
 
-    /// Inserts a new code block and returns its id.
+    /// Inserts a new code block at the resolved target and returns its id.
     @discardableResult
-    public func insertCodeBlock() async -> UUID? {
-        guard let repo = environment.persistence.noteRepository else { return nil }
-        let block = Block(
-            noteId: noteId,
-            kind: .code,
-            sortKey: (blocks.map(\.sortKey).max() ?? 0) + 1024,
-            payload: .code(CodePayload(text: "", language: nil)),
-            lastModifiedDeviceId: DeviceIdentity.current.id
-        )
-        do {
-            try await repo.insert(block)
-            await reloadBlocks()
-            notifyWidgetRefresh(.noteCreatedEditedDeletedTrashedRestored)
-            return block.id
-        } catch {
-            return nil
+    public func insertCodeBlock(target: InsertionTarget? = nil) async -> UUID? {
+        let blockId = UUID()
+        let newBlocks = blocksApplyingTarget(target ?? .append) { sortKey in
+            Block(
+                id: blockId,
+                noteId: noteId,
+                kind: .code,
+                sortKey: sortKey,
+                payload: .code(CodePayload(text: "", language: nil)),
+                lastModifiedDeviceId: DeviceIdentity.current.id
+            )
         }
+        updateBlocks(newBlocks, isStructural: true)
+        await flush()
+        notifyWidgetRefresh(.noteCreatedEditedDeletedTrashedRestored)
+        return blockId
     }
 
     /// Inserts a file-reference block for a user-selected/dropped file
     /// (FR-100): generic metadata in the payload (FR-105), security-scoped
     /// bookmark bytes device-local via FileLocator. The bookmark-creation
-    /// step is injectable for tests.
+    /// step is injectable for tests. `target` places the block at the
+    /// resolved insertion point (004 FR-010).
     public func insertFileReferenceBlock(
         url: URL,
-        bookmarkCreator: ((URL) throws -> Data)? = nil
+        bookmarkCreator: ((URL) throws -> Data)? = nil,
+        target: InsertionTarget? = nil
     ) async -> UUID? {
-        guard let repo = environment.persistence.noteRepository,
-              let locatorRepo = environment.persistence.fileLocatorRepository else { return nil }
+        guard let locatorRepo = environment.persistence.fileLocatorRepository else { return nil }
         do {
             let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentTypeKey, .contentModificationDateKey])
             let blockId = UUID()
-            let block = Block(
-                id: blockId,
-                noteId: noteId,
-                kind: .fileRef,
-                sortKey: (blocks.map(\.sortKey).max() ?? 0) + 1024,
-                payload: .fileReference(FileReferencePayload(
-                    displayName: url.lastPathComponent,
-                    contentType: (values?.contentType?.identifier) ?? "public.data",
-                    approximateSize: values?.fileSize,
-                    originDeviceId: DeviceIdentity.current.id,
-                    addedAt: Date()
-                )),
-                lastModifiedDeviceId: DeviceIdentity.current.id
-            )
+            let newBlocks = blocksApplyingTarget(target ?? .append) { sortKey in
+                Block(
+                    id: blockId,
+                    noteId: noteId,
+                    kind: .fileRef,
+                    sortKey: sortKey,
+                    payload: .fileReference(FileReferencePayload(
+                        displayName: url.lastPathComponent,
+                        contentType: (values?.contentType?.identifier) ?? "public.data",
+                        approximateSize: values?.fileSize,
+                        originDeviceId: DeviceIdentity.current.id,
+                        addedAt: Date()
+                    )),
+                    lastModifiedDeviceId: DeviceIdentity.current.id
+                )
+            }
             let bookmark = try (bookmarkCreator ?? Self.defaultBookmarkCreator)(url)
-            try await repo.insert(block)
+            // The locator references the block (FK) — persist the block
+            // first.
+            updateBlocks(newBlocks, isStructural: true)
+            await flush()
             try await locatorRepo.upsert(FileLocator(
                 blockId: blockId,
                 bookmarkData: bookmark,
@@ -227,7 +298,6 @@ public final class NoteWindowHostModel {
                 stale: false,
                 verifiedAt: Date()
             ))
-            await reloadBlocks()
             notifyWidgetRefresh(.noteCreatedEditedDeletedTrashedRestored)
             return blockId
         } catch {
@@ -395,43 +465,85 @@ public final class NoteWindowHostModel {
     /// Captures a screen region into a new screenshot block. The capture
     /// data source is injectable for tests; the default presents the
     /// region-selection overlay (permission prompted only on invocation —
-    /// FR-131).
-    public func captureRegion(dataProvider: (@Sendable () async throws -> Data)? = nil) async -> Bool {
-        await captureScreenshot(dataProvider: dataProvider ?? { try await CaptureFlow.captureRegionPNG() })
+    /// FR-131). `target` places the block at the resolved insertion point
+    /// (004 FR-010 — captured up front, degraded to `.append` on stale
+    /// contexts per contracts §5).
+    public func captureRegion(dataProvider: (@Sendable () async throws -> Data)? = nil, target: InsertionTarget? = nil) async -> Bool {
+        await captureScreenshot(dataProvider: dataProvider ?? { try await CaptureFlow.captureRegionPNG() }, target: target)
     }
 
     /// Captures an application window via the system picker (FR-091).
-    public func captureWindow(dataProvider: (@Sendable () async throws -> Data)? = nil) async -> Bool {
-        await captureScreenshot(dataProvider: dataProvider ?? { try await CaptureFlow.captureWindowPNG() })
+    public func captureWindow(dataProvider: (@Sendable () async throws -> Data)? = nil, target: InsertionTarget? = nil) async -> Bool {
+        await captureScreenshot(dataProvider: dataProvider ?? { try await CaptureFlow.captureWindowPNG() }, target: target)
     }
 
-    private func captureScreenshot(dataProvider: @escaping @Sendable () async throws -> Data) async -> Bool {
+    private func captureScreenshot(dataProvider: @escaping @Sendable () async throws -> Data, target: InsertionTarget? = nil) async -> Bool {
         guard let assetStore = environment.assets.store else { return false }
         do {
             let png = try await dataProvider()
             let (original, thumbnail) = try await assetStore.importScreenshot(originalData: png, contentType: "public.png")
-            let block = Block(
-                noteId: noteId,
-                kind: .screenshot,
-                sortKey: (blocks.map(\.sortKey).max() ?? 0) + 1024,
-                payload: .screenshot(ScreenshotPayload(
-                    originalAssetId: original.id,
-                    thumbnailAssetId: thumbnail?.id ?? original.id,
-                    applicationName: nil,
-                    windowTitle: nil,
-                    caption: nil,
-                    capturedAt: Date(),
-                    isCover: false
-                )),
-                lastModifiedDeviceId: DeviceIdentity.current.id
-            )
-            guard let repo = environment.persistence.noteRepository else { return false }
-            try await repo.insert(block)
-            await reloadBlocks()
+            let blockId = UUID()
+            let newBlocks = blocksApplyingTarget(target ?? .append) { sortKey in
+                Block(
+                    id: blockId,
+                    noteId: noteId,
+                    kind: .screenshot,
+                    sortKey: sortKey,
+                    payload: .screenshot(ScreenshotPayload(
+                        originalAssetId: original.id,
+                        thumbnailAssetId: thumbnail?.id ?? original.id,
+                        applicationName: nil,
+                        windowTitle: nil,
+                        caption: nil,
+                        capturedAt: Date(),
+                        isCover: false
+                    )),
+                    lastModifiedDeviceId: DeviceIdentity.current.id
+                )
+            }
+            updateBlocks(newBlocks, isStructural: true)
+            await flush()
             notifyWidgetRefresh(.noteCreatedEditedDeletedTrashedRestored)
             return true
         } catch {
             return false
+        }
+    }
+
+    // MARK: - 004 T031 (FR-010): embedded image insertion (new path)
+
+    /// Inserts an image file (user-picked via NSOpenPanel by the caller) as
+    /// an `.image` block. The asset pipeline mirrors the screenshot path
+    /// (original + thumbnail import — 004 plan §4.3). `target` places the
+    /// block at the resolved insertion point.
+    @discardableResult
+    public func insertImageBlock(url: URL, target: InsertionTarget? = nil) async -> UUID? {
+        guard let assetStore = environment.assets.store else { return nil }
+        do {
+            let contentType = (try? url.resourceValues(forKeys: [.contentTypeKey]).contentType)?.identifier ?? "public.image"
+            let data = try Data(contentsOf: url)
+            let (original, thumbnail) = try await assetStore.importScreenshot(originalData: data, contentType: contentType)
+            let blockId = UUID()
+            let newBlocks = blocksApplyingTarget(target ?? .append) { sortKey in
+                Block(
+                    id: blockId,
+                    noteId: noteId,
+                    kind: .image,
+                    sortKey: sortKey,
+                    payload: .image(EmbeddedImagePayload(
+                        originalAssetId: original.id,
+                        thumbnailAssetId: thumbnail?.id ?? original.id,
+                        caption: nil
+                    )),
+                    lastModifiedDeviceId: DeviceIdentity.current.id
+                )
+            }
+            updateBlocks(newBlocks, isStructural: true)
+            await flush()
+            notifyWidgetRefresh(.noteCreatedEditedDeletedTrashedRestored)
+            return blockId
+        } catch {
+            return nil
         }
     }
 

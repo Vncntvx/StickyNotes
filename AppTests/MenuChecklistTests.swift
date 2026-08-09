@@ -79,4 +79,34 @@ import SwiftUI
             #expect(titles.contains(required), "menu catalog must contain '\(required)' (SC-017)")
         }
     }
+
+    // MARK: - 004 T047 (FR-011/FR-029, 003 FR-072 semantics)
+
+    @Test
+    func alwaysOnTopHasMenuCommand() {
+        // 004 T021: the pin must exist as a View menu command (toggle on
+        // the key note window — the toolbar is not the only path).
+        #expect(MenuCommandCatalog.commands(located: .view).contains { $0.title == "Always on Top" },
+                "View > Always on Top must exist (004 T021/FR-029)")
+    }
+
+    @Test
+    func insertImageHasMenuCommand() {
+        // 004 T035: the unified image insertion path in the menu.
+        #expect(MenuCommandCatalog.commands(located: .edit).contains { $0.title == "Insert Image…" },
+                "Edit/Insert > Insert Image… must exist (004 T035/FR-010)")
+    }
+
+    @Test
+    func formatCommandsHaveMenuEntries() {
+        // 004 T040: the Format group (B/I/U/strikethrough/code/size) — the
+        // stable formatting entry point (FR-011/FR-012).
+        let editTitles = Set(MenuCommandCatalog.commands(located: .edit).map(\.title))
+        for required in ["Bold", "Italic", "Underline", "Strikethrough", "Code Style", "Text Size"] {
+            #expect(editTitles.contains(required), "Format command '\(required)' must be in the catalog (004 T040)")
+        }
+        #expect(MenuCommandCatalog.command(located: .edit, withShortcut: "b", modifiers: .command)?.title == "Bold")
+        #expect(MenuCommandCatalog.command(located: .edit, withShortcut: "i", modifiers: .command)?.title == "Italic")
+        #expect(MenuCommandCatalog.command(located: .edit, withShortcut: "u", modifiers: .command)?.title == "Underline")
+    }
 }

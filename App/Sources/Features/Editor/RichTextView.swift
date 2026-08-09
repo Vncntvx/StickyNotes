@@ -45,19 +45,29 @@ public struct RichTextView: NSViewRepresentable {
     /// Reports focus changes with the IME marked-text state (FR-050a
     /// removal must not fire during composition — FR-063).
     let onFocusChange: (Bool, Bool) -> Void
+    /// 004 T037 (FR-012): the note's selection bridge (published into by
+    /// this editor's Coordinator).
+    let selectionBridge: EditorSelectionBridge?
+    /// 004 T037: the block id backing this editor (insertion-target
+    /// resolution).
+    let richTextBlockId: UUID?
 
     public init(
         document: RichTextDocument,
         textSize: CGFloat,
         fontResolver: NoteFontResolver = .load(),
         onCommit: @escaping (RichTextDocument) -> Void,
-        onFocusChange: @escaping (Bool, Bool) -> Void = { _, _ in }
+        onFocusChange: @escaping (Bool, Bool) -> Void = { _, _ in },
+        selectionBridge: EditorSelectionBridge? = nil,
+        richTextBlockId: UUID? = nil
     ) {
         self.document = document
         self.textSize = textSize
         self.fontResolver = fontResolver
         self.onCommit = onCommit
         self.onFocusChange = onFocusChange
+        self.selectionBridge = selectionBridge
+        self.richTextBlockId = richTextBlockId
     }
 
     public func makeCoordinator() -> Coordinator {
@@ -92,6 +102,8 @@ public struct RichTextView: NSViewRepresentable {
     }
 
     public func updateNSView(_ textView: NSTextView, context: Context) {
+        // 004 T037: keep the bridge attached to the live text view.
+        context.coordinator.attach(textView, bridge: selectionBridge, blockId: richTextBlockId)
         // Push model changes only when the document actually differs (the
         // user is editing — never clobber the live text).
         if textView.string != document.text {
@@ -109,9 +121,25 @@ public struct RichTextView: NSViewRepresentable {
         /// Suppresses delegate-driven commits while the model is pushing a
         /// document in (avoid echo loops).
         private var isPushing = false
+        /// 004 T037: the live text view + bridge (weak text view — the
+        /// bridge must never outlive the editor).
+        private weak var liveTextView: NSTextView?
+        private weak var liveBridge: EditorSelectionBridge?
+        private var liveBlockId: UUID?
 
         init(_ parent: RichTextView) {
             self.parent = parent
+        }
+
+        /// 004 T037: attaches the selection bridge to this editor's text
+        /// view.
+        func attach(_ textView: NSTextView, bridge: EditorSelectionBridge?, blockId: UUID?) {
+            liveTextView = textView
+            liveBridge = bridge
+            liveBlockId = blockId
+            if bridge != nil {
+                publishSelection(from: textView)
+            }
         }
 
         func apply(document: RichTextDocument, textSize: CGFloat, resolver: NoteFontResolver, to textView: NSTextView) {
@@ -134,10 +162,44 @@ public struct RichTextView: NSViewRepresentable {
         public func textDidEndEditing(_ notification: Notification) {
             guard !isPushing, let textView = notification.object as? NSTextView else { return }
             parent.onFocusChange(false, textView.hasMarkedText())
+            publishSelection(from: textView)
         }
 
         public func textDidBeginEditing(_ notification: Notification) {
             parent.onFocusChange(true, false)
+            if let textView = notification.object as? NSTextView {
+                publishSelection(from: textView)
+            }
+        }
+
+        // MARK: - 004 T037 (FR-012): selection observation
+
+        public func textViewDidChangeSelection(_ notification: Notification) {
+            guard !isPushing, let textView = notification.object as? NSTextView else { return }
+            // FR-063: do not publish selection during IME composition.
+            guard !textView.hasMarkedText() else { return }
+            publishSelection(from: textView)
+        }
+
+        /// Publishes the current selection/focus snapshot into the bridge.
+        func publishSelection(from textView: NSTextView) {
+            guard let bridge = liveBridge else { return }
+            let range = textView.selectedRange()
+            let hasFocus = (textView.window?.isKeyWindow ?? false) && (textView.window?.firstResponder === textView)
+            var rect: CGRect?
+            if range.length > 0 {
+                let screenRect = textView.firstRect(forCharacterRange: range, actualRange: nil)
+                rect = textView.window?.convertFromScreen(screenRect) ?? textView.bounds
+            }
+            bridge.publish(
+                caretBlockId: liveBlockId,
+                isTextSelected: range.length > 0,
+                hasFocus: hasFocus,
+                caretOffset: range.length > 0 ? range.location : range.location,
+                selectedRange: range,
+                selectionRectInWindow: rect,
+                focusedSpecialBlockId: nil
+            )
         }
 
         // MARK: - Canonical conversion (FR-053: supported attributes only)

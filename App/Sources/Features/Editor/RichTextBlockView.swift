@@ -8,17 +8,15 @@ import SystemBridge
 // MARK: - RichTextBlockView (T161/T211/T259)
 //
 // Per tasks.md T161/T211/T259 and spec FR-050/FR-051/FR-052/FR-053/FR-054/
-// FR-060/FR-061/FR-062/FR-063:
-// - SwiftUI `TextEditor` + `AttributedString` rich-text block.
-// - The canonical rich-text document is the source of truth; the view
-//   bridges to SwiftUI attributed state via `RichTextAdapter` (T161) and
-//   back (only supported marks survive — FR-053).
-// - Markdown transforms fire IME-safely (FR-063); keystroke path is
-//   signpost-bracketed (SC-004a, T211); auto-link detection feeds the
-//   `link` mark (FR-050, T143).
-// - Cross-block selection semantics (FR-054) are provided by
-//   `CrossBlockSelectionCore`; the empty-block removal rule (FR-050a) by
-//   `BlockMergeOperation`.
+// FR-060/FR-061/FR-062/FR-063 + 004 redesign:
+// - 004 T017 (FR-003): the title field lives at the top of the note paper
+//   (the window titlebar shows a DERIVED display title; editing happens
+//   here — 001 FR-050 "optional title" semantics).
+// - 004 (FR-010): caret-split insertions produce a trailing rich-text
+//   block — every rich-text block AFTER the primary surface renders as an
+//   editable block (the primary surface stays the first one).
+// - 004 T034 (FR-010/FR-043): the insertion-point context control's
+//   triggers (cursor-line hover + text selection) are actually wired.
 
 /// The rich-text block editor (one note = one seamless rich-text block
 /// surface per note window; special blocks are rendered around it by the
@@ -26,6 +24,9 @@ import SystemBridge
 public struct RichTextBlockView: View {
     let note: Note
     let blocks: [Block]
+    /// 004 T017: appearance edits (title field) — persisted immediately by
+    /// the host.
+    let onAppearanceChange: (Note) -> Void
     let onBlocksChanged: ([Block]) -> Void
     /// Structural changes (todo toggle, block insert/delete/reorder) — saved
     /// immediately per FR-141a (T281).
@@ -57,11 +58,14 @@ public struct RichTextBlockView: View {
     // 003 T031 (CHK008): the insertion-point context control's presentation
     // triggers — cursor-line hover and text selection.
     @State private var isCursorLineHovered = false
-    @State private var isTextSelected = false
+    // 004 T037: the per-window selection bridge (shared with the toolbar's
+    // insertion-target resolution).
+    @State private var selectionBridge: EditorSelectionBridge?
 
     public init(
         note: Note,
         blocks: [Block],
+        onAppearanceChange: @escaping (Note) -> Void = { _ in },
         onBlocksChanged: @escaping ([Block]) -> Void,
         onStructuralBlocksChanged: @escaping ([Block]) -> Void = { _ in },
         onInsertTodo: @escaping () -> Void = {},
@@ -82,6 +86,7 @@ public struct RichTextBlockView: View {
     ) {
         self.note = note
         self.blocks = blocks
+        self.onAppearanceChange = onAppearanceChange
         self.onBlocksChanged = onBlocksChanged
         self.onStructuralBlocksChanged = onStructuralBlocksChanged
         self.onInsertTodo = onInsertTodo
@@ -102,103 +107,182 @@ public struct RichTextBlockView: View {
     }
 
     public var body: some View {
-        // The editor text view sizes to its CONTENT (natural height): a
-        // short note starts typing at the top of the paper, right under
-        // the controls. The former "fixed 300 pt slot" (`minHeight: 300`)
-        // rendered the first line at the BOTTOM of the slot (~60% down
-        // the window, verified 2026-08-09 screenshot) — NSTextView text
-        // was laid out at the bottom of the oversized frame. The caret
-        // placement regression that motivated the slot (2026-08-07) was
-        // the host-instance duplication fixed in NoteWindowContent.load().
         ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
-                // 003 T032 (SC-004/FR-043): the persistent "Add Block" Menu
-                // is REMOVED. Block insertion is now reachable via the
-                // insertion-point context control (below), the Edit/Insert
-                // menu commands (003 T011/T032), and keyboard (⌘⇧T/⌘⇧C).
-                BlockInsertionControl(
-                    onInsertTodo: onInsertTodo,
-                    onInsertCode: onInsertCode,
-                    onInsertFileReference: onInsertFileReference,
-                    onCaptureScreenshot: onCaptureScreenshot,
-                    isCursorLineHovered: $isCursorLineHovered,
-                    isTextSelected: $isTextSelected,
-                    isIMEComposing: $isIMEComposing
-                )
-                .padding(.bottom, 2)
+            // 004 T042 (FR-019): the ONLY custom width-aware rule — two
+            // semantic content insets (compact 10pt / regular 14–16pt,
+            // switching at 480pt; capped at 24pt so wide windows never
+            // center the text into a document column). NSToolbar cannot
+            // express content insets, so this stays the single exception
+            // (plan §5/§8).
+            GeometryReader { proxy in
+                // 004 T037: read the bridge state during body evaluation so
+                // SwiftUI observes it (the insertion-control trigger).
+                let textSelected = selectionBridge?.isTextSelected ?? false
+                let compact = proxy.size.width < 480
+                let inset: CGFloat = compact ? 10 : min(14 + (proxy.size.width - 480) / 240, 24)
+                VStack(alignment: .leading, spacing: 10) {
+                    // 004 T017 (FR-003): the editable title lives in the
+                    // paper, above the first content line (001 FR-050:
+                    // optional title; empty → nil).
+                    titleField
 
-                // Rich-text block (the seamless primary surface) —
-                // NSTextView-backed (verified 2026-08-07: SwiftUI
-                // `TextEditor`'s binding never writes back on macOS 27
-                // beta; plan-sanctioned fallback, canonical format
-                // unchanged). Natural height so short notes fit without a
-                // scroll track.
-                RichTextView(
-                    document: canonicalDocument,
-                    textSize: ReadableTheme.textSize(for: note),
-                    onCommit: { document in
-                        didRemoveEmptyBlockOnExit = false
-                        commit(document)
-                        let state = StickyLogger.editor.signpostBegin("editor.keystroke")
-                        StickyLogger.editor.signpostEnd(state, op: "editor.keystroke")
-                    },
-                    onFocusChange: { focused, hasMarkedText in
-                        // FR-063: the IME composition state drives every
-                        // transformation/removal decision.
-                        isIMEComposing = hasMarkedText
-                        // T300 (FR-050a): when the cursor exits an emptied
-                        // block, remove it — merge into the FOLLOWING block
-                        // or delete outright (clarified 2026-08-07); the
-                        // final block is never removed; suppressed while an
-                        // IME composition is active (FR-063).
-                        guard !focused, !hasMarkedText, !didRemoveEmptyBlockOnExit else { return }
-                        didRemoveEmptyBlockOnExit = true
-                        guard let richIndex = blocks.firstIndex(where: { $0.kind == .richText }),
-                              let updated = EditorAppBridge.applyEmptyBlockRemoval(
-                                  blocks: blocks,
-                                  emptiedBlockIndex: richIndex,
-                                  hasIMEComposition: false
-                              ) else { return }
-                        // ONE undo group: the removal restores the block on
-                        // a single Undo (FR-050a). Structural change persists
-                        // immediately per FR-141a.
-                        onStructuralBlocksChanged(updated)
-                    }
-                )
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+                    BlockInsertionControl(
+                        onInsertTodo: onInsertTodo,
+                        onInsertCode: onInsertCode,
+                        onInsertFileReference: onInsertFileReference,
+                        onCaptureScreenshot: onCaptureScreenshot,
+                        isCursorLineHovered: $isCursorLineHovered,
+                        isTextSelected: Binding(
+                            get: { textSelected },
+                            set: { _ in }
+                        ),
+                        isIMEComposing: $isIMEComposing
+                    )
+                    .padding(.bottom, 2)
 
-                // Special blocks rendered beneath (todo/code/file/image/
-                // screenshot) with the unified container (FR-050b).
-                // LazyVStack: FR-072b — only visible rows are realized for
-                // notes with 100+ todo blocks (bounded row realization).
-                LazyVStack(alignment: .leading, spacing: 10) {
-                    ForEach(Array(specialBlocks.enumerated()), id: \.element.id) { index, block in
-                        BlockContainer {
-                            blockView(block, index: index)
+                    // Rich-text block (the seamless primary surface) —
+                    // NSTextView-backed (verified 2026-08-07: SwiftUI
+                    // `TextEditor`'s binding never writes back on macOS 27
+                    // beta; plan-sanctioned fallback, canonical format
+                    // unchanged). Natural height so short notes fit without
+                    // a scroll track.
+                    primaryEditor
+
+                    // Special blocks rendered beneath (todo/code/file/image/
+                    // screenshot) with the unified container (FR-050b).
+                    // LazyVStack: FR-072b — only visible rows are realized
+                    // for notes with 100+ todo blocks (bounded row
+                    // realization). 004 FR-010: trailing rich-text blocks
+                    // (caret splits) render as editable blocks too.
+                    LazyVStack(alignment: .leading, spacing: 10) {
+                        ForEach(Array(secondaryBlocks.enumerated()), id: \.element.id) { index, block in
+                            BlockContainer {
+                                blockView(block, index: index)
+                            }
                         }
                     }
                 }
+                .padding(.horizontal, inset)
+                .padding(.bottom, 10)
+                .padding(.top, 8)
             }
-            // Structural spacing only: the paper's horizontal margins and
-            // a small bottom inset. The FIRST LINE's breathing room below
-            // the controls row comes from the NSTextView's native
-            // `textContainerInset` (RichTextView) — SwiftUI container
-            // padding is unreliable inside a ScrollView (verified
-            // 2026-08-09: 24pt of top padding rendered as ~12pt).
-            .padding(.horizontal, 10)
-            .padding(.bottom, 10)
+        }
+        // 004 T037: the selection bridge (per window, @State — created
+        // here so the primary editor can publish into it).
+        .task {
+            if selectionBridge == nil {
+                selectionBridge = EditorSelectionBridge(noteId: note.id)
+            }
+        }
+        // 004 T039 (FR-012): the contextual format row, anchored above the
+        // selection (bridge rect in window coordinates, flipped into the
+        // SwiftUI space; clamped so it never slides under the toolbar).
+        .overlay {
+            if let bridge = selectionBridge, bridge.isTextSelected, bridge.hasFocus,
+               let rect = bridge.selectionRectInWindow {
+                GeometryReader { proxy in
+                    let flippedY = proxy.size.height - rect.minY
+                    let clampedY = max(flippedY - 10, 56)
+                    let clampedX = min(max(rect.midX, 90), max(proxy.size.width - 90, 90))
+                    ContextualFormatBar(bridge: bridge)
+                        .position(x: clampedX, y: clampedY)
+                }
+                .allowsHitTesting(true)
+            }
+        }
+    }
+
+    // MARK: - 004 T017 title field (FR-003)
+
+    private var titleField: some View {
+        TextField("Title", text: Binding(
+            get: { note.title ?? "" },
+            set: { newValue in
+                var updated = note
+                updated.title = newValue.isEmpty ? nil : newValue
+                onAppearanceChange(updated)
+            }
+        ))
+        .textFieldStyle(.plain)
+        .font(.title3.weight(.semibold))
+        .lineLimit(1)
+        .truncationMode(.tail)
+        .accessibilityLabel(String(localized: "Note Title"))
+    }
+
+    // MARK: - 004 T037 selection wiring (FR-010/FR-043)
+
+    // MARK: - Editor surfaces
+
+    /// The primary seamless rich-text surface (first rich-text block).
+    private var primaryEditor: some View {
+        RichTextView(
+            document: canonicalDocument,
+            textSize: ReadableTheme.textSize(for: note),
+            onCommit: { document in
+                didRemoveEmptyBlockOnExit = false
+                commit(document)
+                let state = StickyLogger.editor.signpostBegin("editor.keystroke")
+                StickyLogger.editor.signpostEnd(state, op: "editor.keystroke")
+            },
+            onFocusChange: { focused, hasMarkedText in
+                // FR-063: the IME composition state drives every
+                // transformation/removal decision.
+                isIMEComposing = hasMarkedText
+                // T300 (FR-050a): when the cursor exits an emptied
+                // block, remove it — merge into the FOLLOWING block
+                // or delete outright (clarified 2026-08-07); the
+                // final block is never removed; suppressed while an
+                // IME composition is active (FR-063).
+                guard !focused, !hasMarkedText, !didRemoveEmptyBlockOnExit else { return }
+                didRemoveEmptyBlockOnExit = true
+                guard let richIndex = blocks.firstIndex(where: { $0.kind == .richText }),
+                      let updated = EditorAppBridge.applyEmptyBlockRemoval(
+                          blocks: blocks,
+                          emptiedBlockIndex: richIndex,
+                          hasIMEComposition: false
+                      ) else { return }
+                // ONE undo group: the removal restores the block on
+                // a single Undo (FR-050a). Structural change persists
+                // immediately per FR-141a.
+                onStructuralBlocksChanged(updated)
+            },
+            selectionBridge: selectionBridge,
+            richTextBlockId: primaryRichTextBlock?.id
+        )
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        // 004 T034 (FR-010): cursor-line hover triggers the insertion
+        // control.
+        .onHover { hovering in
+            isCursorLineHovered = hovering
         }
     }
 
     // MARK: - Block rendering
 
-    private var specialBlocks: [Block] {
-        blocks.filter { $0.kind != .richText }
+    /// All non-primary blocks: special blocks + trailing rich-text blocks
+    /// (caret splits — 004 FR-010).
+    private var secondaryBlocks: [Block] {
+        guard let primaryId = primaryRichTextBlock?.id else { return blocks }
+        return blocks.filter { $0.id != primaryId }
     }
 
     @ViewBuilder
     private func blockView(_ block: Block, index: Int) -> some View {
         switch block.kind {
+        case .richText:
+            // 004 FR-010: a trailing rich-text block (the caret split's
+            // second half) is editable like the primary surface.
+            if case .richText(let doc) = block.payload {
+                RichTextView(
+                    document: doc,
+                    textSize: ReadableTheme.textSize(for: note),
+                    onCommit: { document in
+                        replaceBlock(document, in: block)
+                    }
+                )
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
         case .todo:
             TodoBlockView(
                 block: block,
@@ -232,17 +316,39 @@ public struct RichTextBlockView: View {
             EmbeddedImageBlockView(block: block, onAction: { action in
                 Task { await onEmbeddedImageAction(block.id, action) }
             })
-        case .richText:
-            EmptyView()
         }
+    }
+
+    /// Commits a trailing rich-text block edit (004 FR-010).
+    private func replaceBlock(_ document: RichTextDocument, in block: Block) {
+        var updated = blocks
+        guard let idx = updated.firstIndex(where: { $0.id == block.id }) else { return }
+        updated[idx] = Block(
+            id: block.id,
+            noteId: block.noteId,
+            kind: .richText,
+            sortKey: block.sortKey,
+            payload: .richText(document),
+            versionId: block.versionId,
+            parentVersionId: block.parentVersionId,
+            lastModifiedDeviceId: DeviceIdentity.current.id,
+            createdAt: block.createdAt,
+            modifiedAt: Date()
+        )
+        onBlocksChanged(updated)
     }
 
     // MARK: - Canonical ↔ AppKit bridging (T161; NSTextView fallback 2026-08-07)
 
+    /// The primary rich-text block (the editor's main surface).
+    private var primaryRichTextBlock: Block? {
+        blocks.first(where: { $0.kind == .richText })
+    }
+
     /// The canonical document backing the editor (the model owns it; the
     /// representable mirrors it).
     private var canonicalDocument: RichTextDocument {
-        guard let richBlock = blocks.first(where: { $0.kind == .richText }),
+        guard let richBlock = primaryRichTextBlock,
               case .richText(let doc) = richBlock.payload else {
             return .empty
         }
@@ -253,7 +359,7 @@ public struct RichTextBlockView: View {
     /// FR-050 auto-link detection (T143) and persists through the host's
     /// debounced autosave (FR-141a).
     private func commit(_ document: RichTextDocument) {
-        guard var richBlock = blocks.first(where: { $0.kind == .richText }) else {
+        guard var richBlock = primaryRichTextBlock else {
             // Defensive (verified 2026-08-07): notes created before the
             // initial-block fix may lack the rich-text surface. Create it on
             // first commit so typed input is never dropped.
@@ -316,5 +422,60 @@ public struct RichTextBlockView: View {
         } else {
             onBlocksChanged(updated)
         }
+    }
+}
+
+// MARK: - ContextualFormatBar (004 T039, FR-012/FR-013/FR-022/FR-029)
+
+/// The floating glass format row: appears while text is selected (or a
+/// format command is active), anchored over the editor, never stealing
+/// focus (FR-012/FR-029). Buttons are standard SwiftUI controls inside a
+/// single glass group (FR-022 — one grouped surface, not scattered
+/// capsules). The only custom glass in the feature (plan §5.2).
+struct ContextualFormatBar: View {
+    @Bindable var bridge: EditorSelectionBridge
+
+    var body: some View {
+        if bridge.isTextSelected && bridge.hasFocus {
+            HStack(spacing: 2) {
+                formatButton("bold", mark: .bold, help: String(localized: "Bold"))
+                formatButton("italic", mark: .italic, help: String(localized: "Italic"))
+                formatButton("underline", mark: .underline, help: String(localized: "Underline"))
+                formatButton("strikethrough", mark: .strikethrough, help: String(localized: "Strikethrough"))
+                formatButton("chevron.left.forwardslash.chevron.right", mark: .inlineCode, help: String(localized: "Code Style"))
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+            .background(formatBarMaterial)
+            .clipShape(Capsule())
+            .accessibilityElement(children: .contain)
+        }
+    }
+
+    @ViewBuilder
+    private var formatBarMaterial: some View {
+        if #available(macOS 26.0, *) {
+            Capsule()
+                .fill(.regularMaterial)
+                .glassEffect(.regular, in: Capsule())
+        } else {
+            Capsule().fill(.regularMaterial)
+        }
+    }
+
+    private func formatButton(_ systemImage: String, mark: RichTextMark, help: String) -> some View {
+        Button {
+            bridge.applyMarks([mark])
+            // FR-029: the row never steals editing focus — restore the
+            // editor as first responder after each action.
+            bridge.textView?.window?.makeFirstResponder(bridge.textView)
+        } label: {
+            Image(systemName: systemImage)
+                .font(.system(size: 12, weight: .medium))
+                .frame(width: 26, height: 22)
+        }
+        .buttonStyle(.plain)
+        .help(help)
+        .accessibilityLabel(help)
     }
 }

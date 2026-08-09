@@ -60,10 +60,21 @@ public enum MenuCommandCatalog {
         MenuCommand(title: "Insert Code Block", location: .edit, shortcut: "c", modifiers: [.command, .shift]),
         MenuCommand(title: "Insert File Reference…", location: .edit),
         MenuCommand(title: "Capture Screenshot…", location: .edit),
+        // 004 T035 (FR-010): unified image insertion.
+        MenuCommand(title: "Insert Image…", location: .edit),
+        // 004 T040 (FR-012): Format group — marks + text size.
+        MenuCommand(title: "Bold", location: .edit, shortcut: "b"),
+        MenuCommand(title: "Italic", location: .edit, shortcut: "i"),
+        MenuCommand(title: "Underline", location: .edit, shortcut: "u"),
+        MenuCommand(title: "Strikethrough", location: .edit),
+        MenuCommand(title: "Code Style", location: .edit),
+        MenuCommand(title: "Text Size", location: .edit),
         // View
         MenuCommand(title: "Search", location: .view, shortcut: "f"),
         MenuCommand(title: "Sort", location: .view),
         MenuCommand(title: "Trash", location: .view),
+        // 004 T021 (FR-007): the pin as a menu command (toggle).
+        MenuCommand(title: "Always on Top", location: .view),
         MenuCommand(title: "Show/Hide Note Windows", location: .view),
         // Window
         MenuCommand(title: "Minimize", location: .window, shortcut: "m"),

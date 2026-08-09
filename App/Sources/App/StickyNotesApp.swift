@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 import Domain
 import Persistence
 import EditorCore
@@ -191,9 +192,56 @@ struct StickyNotesApp: App {
                 Button("Capture Screenshot…") {
                     postInsertion(.stickyRequestCaptureScreenshot)
                 }
+                // 004 T035 (FR-010): the unified image insertion path.
+                Button("Insert Image…") {
+                    insertImageInKeyWindow()
+                }
+            }
+
+            // 004 T040 (FR-012): Format menu — the stable formatting entry
+            // point (contextual row + shortcuts always work; FR-011).
+            CommandMenu("Format") {
+                Button("Bold") {
+                    coordinator?.applyMarksInKeyWindow([.bold])
+                }
+                .keyboardShortcut("b", modifiers: .command)
+
+                Button("Italic") {
+                    coordinator?.applyMarksInKeyWindow([.italic])
+                }
+                .keyboardShortcut("i", modifiers: .command)
+
+                Button("Underline") {
+                    coordinator?.applyMarksInKeyWindow([.underline])
+                }
+                .keyboardShortcut("u", modifiers: .command)
+
+                Divider()
+                Button("Strikethrough") {
+                    coordinator?.applyMarksInKeyWindow([.strikethrough])
+                }
+                Button("Code Style") {
+                    coordinator?.applyMarksInKeyWindow([.inlineCode])
+                }
+
+                Divider()
+                // FR-043a: whole-note text size, 9–24 (001 semantics).
+                Menu("Text Size") {
+                    ForEach(NoteAppearance.TextSizeBounds.allSizes, id: \.self) { size in
+                        Button("\(size) pt") {
+                            coordinator?.setTextSizeInKeyWindow(size)
+                        }
+                    }
+                }
             }
 
             CommandGroup(after: .toolbar) {
+                // 004 T021 (FR-007/FR-026): Always on Top as a menu command
+                // (toggle, acting on the key note window).
+                Button("Always on Top") {
+                    coordinator?.toggleAlwaysOnTopInKeyWindow()
+                }
+
                 Button("Search") {
                     focusLibrarySearch()
                 }
@@ -270,16 +318,35 @@ struct StickyNotesApp: App {
     }
 
     /// Show/hide all open note windows (menu "Show/Hide Note Windows").
+    /// 004 T023 (R2): filtered by the window REGISTRY — never by title
+    /// (titles are now derived and may repeat/truncate).
     private func toggleNoteWindows() {
-        let windows = NSApp.windows.filter { $0.title != "Sticky Notes Help" && $0.title != "About Sticky Notes" }
-        let anyVisible = windows.contains { $0.isVisible }
-        for window in windows {
+        let noteWindows = NoteWindowBridge.allRegistrations().compactMap { _, registration in
+            registration.windowRef.window()
+        }
+        let anyVisible = noteWindows.contains { $0.isVisible }
+        for window in noteWindows {
             if anyVisible {
                 window.orderOut(nil)
             } else {
                 window.makeKeyAndOrderFront(nil)
             }
         }
+    }
+
+    /// 004 T035 (FR-010): "Insert Image…" menu command — picks an image and
+    /// inserts it into the KEY note window (same host path as the toolbar).
+    private func insertImageInKeyWindow() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowedContentTypes = [.image]
+        guard panel.runModal() == .OK, let url = panel.url,
+              let host = coordinator?.keyHost() else { return }
+        let context = EditorSelectionContext.current(for: host.noteId)
+        let target = NoteWindowDerivations.resolveInsertionTarget(blocks: host.blocks, context: context)
+        Task { await host.insertImageBlock(url: url, target: target) }
     }
 
     // MARK: - Bootstrap (T154)
