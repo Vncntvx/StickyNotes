@@ -255,6 +255,24 @@ public final class NoteWindowCoordinator {
         window.backgroundColor = ReadableTheme.windowBackground(for: note)
     }
 
+    /// Re-applies the Always-on-Top state when the note's pin is toggled
+    /// while open (FR-036). Level + collection behavior (`.fullScreenAuxiliary`)
+    /// are otherwise only set at window creation. Ordering is one-way:
+    /// pinning lifts the window to the front of the floating level;
+    /// unpinning only drops the LEVEL — the window keeps its z-position
+    /// and naturally falls behind other windows as they come forward
+    /// (verified 2026-08-09: orderBack on unpin sank an active window
+    /// behind every normal window — bad UX).
+    public func updateAlwaysOnTop(noteId: UUID) {
+        guard let note = hosts[noteId]?.note,
+              let window = NoteWindowBridge.registeredWindow(for: noteId) else { return }
+        WindowLevelBridge.apply(window, alwaysOnTop: note.alwaysOnTop)
+        NoteWindowBridge.applyCollectionBehavior(window, alwaysOnTop: note.alwaysOnTop)
+        if note.alwaysOnTop {
+            window.orderFrontRegardless()
+        }
+    }
+
     /// Frees the retained window delegate (called from windowWillClose and
     /// the FR-009a delete path).
     public func releaseWindowDelegate(noteId: UUID) {
@@ -405,6 +423,7 @@ public struct NoteWindowContent: View {
                         onChanged: { updated in
                             host.updateAppearance(updated)
                             coordinator.updateNotePaper(noteId: noteId)
+                            coordinator.updateAlwaysOnTop(noteId: noteId)
                         },
                         onAddScreenshot: {
                             captureScreenshot()
@@ -540,9 +559,19 @@ public struct NoteWindowContent: View {
     }
 
     private func load() async {
-        let model = NoteWindowHostModel(noteId: noteId, environment: environment)
-        await model.load()
-        host = model
+        // CRITICAL (verified 2026-08-09): load into the EXISTING host.
+        // Creating a new model here replaced the view's @State host with a
+        // second instance — the coordinator's `hosts[noteId]` kept the
+        // original, and every edit (e.g. the Always-on-Top toggle) updated
+        // the view's host while the coordinator read the stale one (the
+        // pin never took effect / never released).
+        if let host {
+            await host.load()
+        } else {
+            let model = NoteWindowHostModel(noteId: noteId, environment: environment)
+            await model.load()
+            host = model
+        }
     }
 
     // MARK: - FR-031 upper-area capture + file entries (T293/T290)
