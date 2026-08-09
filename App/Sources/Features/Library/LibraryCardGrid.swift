@@ -5,11 +5,11 @@ import Persistence
 
 // MARK: - LibraryCardGrid (003 T020/T082, FR-003)
 //
-// Per tasks.md T020: the custom search field is REPLACED by native search
-// (the NSSearchField toolbar item, attached in `LibraryToolbar` — T018
-// spike). This file retains the card grid (`LibraryCardGrid`), which now
-// reads the FR-021 formula from `NoteCardMetrics` (T021) and hosts the
-// keyboard navigation model (T027, FR-024).
+// Per tasks.md T020: search lives in the `MenuBarLibraryScene` control row
+// (方案 B — the T018 NSToolbar spike concluded; `LibraryToolbar` removed).
+// This file retains the card grid (`LibraryCardGrid`), which reads the
+// FR-021 formula from `NoteCardMetrics` (T021) and hosts the keyboard
+// navigation model (T027, FR-024).
 
 /// The card grid with the FR-014c unified empty-state for no results and
 /// the FR-021 adaptive column formula (003 T021).
@@ -55,6 +55,22 @@ public struct LibraryCardGrid: View {
     }
 
     public var body: some View {
+        // FR-026 / FR-014b: confirmations are IN-WINDOW inline bars, NOT
+        // SwiftUI `confirmationDialog`. Verified 2026-08-09 on macOS 27:
+        // a confirmationDialog inside a MenuBarExtra(.window) presents
+        // INVERTED — the library window becomes a sheet of a detached
+        // `_NSAlertPanel` (`attachedSheet` = library window). Clicking the
+        // destructive button dismisses the alert, which force-ends its
+        // sheet → the library window closes before the action closure
+        // runs (state never resets; the dialog re-presents on reopen).
+        // In-window bars keep every click inside the library window.
+        gridContent
+    }
+
+    /// The scope-dependent content (grid or empty-state). The
+    /// confirmation dialogs must NOT live here — see `body`.
+    @ViewBuilder
+    private var gridContent: some View {
         if model.cards.isEmpty {
             if model.isSearching {
                 // FR-014c unified empty-state — never an error (FR-011a).
@@ -73,20 +89,48 @@ public struct LibraryCardGrid: View {
         } else {
             GeometryReader { geometry in
                 ScrollView {
+                    // FR-026 (003 T023): the pending single permanent-delete
+                    // confirmation shows as an in-window bar above the grid
+                    // (see `body` for why dialogs are avoided).
+                    if let noteId = pendingPermanentDelete {
+                        InlineConfirmationBar(
+                            message: DeletionConfirmationPolicy.confirmation(for: .permanentDeleteSingle)?.message ?? "",
+                            confirmTitle: "Delete Forever"
+                        ) {
+                            pendingPermanentDelete = nil
+                            onPermanentlyDelete(noteId)
+                        } onCancel: {
+                            pendingPermanentDelete = nil
+                        }
+                    }
+
                     // Trash destination: Empty Trash control above the grid
                     // (FR-014b, 003 T023) — visually subordinate to Notes
-                    // (SC-006).
+                    // (SC-006). The confirm step replaces the button in
+                    // place (in-window, FR-026).
                     if model.scope == .trash {
-                        HStack {
-                            Spacer()
-                            Button("Empty Trash…") {
-                                confirmingEmptyTrash = true
+                        if confirmingEmptyTrash {
+                            InlineConfirmationBar(
+                                message: DeletionConfirmationPolicy.confirmation(for: .emptyTrash)?.message ?? "",
+                                confirmTitle: "Empty Trash"
+                            ) {
+                                confirmingEmptyTrash = false
+                                Task { _ = await model.emptyTrash() }
+                            } onCancel: {
+                                confirmingEmptyTrash = false
                             }
-                            .controlSize(.small)
-                            .accessibilityLabel("Empty Trash")
+                        } else {
+                            HStack {
+                                Spacer()
+                                Button("Empty Trash…") {
+                                    confirmingEmptyTrash = true
+                                }
+                                .controlSize(.small)
+                                .accessibilityLabel("Empty Trash")
+                            }
+                            .padding(.horizontal, NoteCardMetrics.spacing)
+                            .padding(.top, NoteCardMetrics.spacing)
                         }
-                        .padding(.horizontal, NoteCardMetrics.spacing)
-                        .padding(.top, NoteCardMetrics.spacing)
                     }
 
                     LazyVGrid(
@@ -117,41 +161,15 @@ public struct LibraryCardGrid: View {
                     }
                     .padding(NoteCardMetrics.spacing)
                 }
-                // FR-026: explicit single permanent-delete confirmation with
-                // the 30-day guarantee loss clause (CHK013).
-                .confirmationDialog(
-                    DeletionConfirmationPolicy.confirmation(for: .permanentDeleteSingle)?.message ?? "",
-                    isPresented: Binding(
-                        get: { pendingPermanentDelete != nil },
-                        set: { if !$0 { pendingPermanentDelete = nil } }
-                    ),
-                    titleVisibility: .visible
-                ) {
-                    Button("Delete Forever", role: .destructive) {
-                        if let noteId = pendingPermanentDelete {
-                            onPermanentlyDelete(noteId)
-                        }
-                        pendingPermanentDelete = nil
-                    }
-                    Button("Cancel", role: .cancel) {
-                        pendingPermanentDelete = nil
-                    }
-                }
-                // FR-014b: Empty Trash confirmation (Trash destination).
-                .confirmationDialog(
-                    DeletionConfirmationPolicy.confirmation(for: .emptyTrash)?.message ?? "",
-                    isPresented: $confirmingEmptyTrash,
-                    titleVisibility: .visible
-                ) {
-                    Button("Empty Trash", role: .destructive) {
-                        Task { _ = await model.emptyTrash() }
-                    }
-                    Button("Cancel", role: .cancel) {}
-                }
                 // FR-024 (003 T027): arrow-key selection + Return open +
                 // ⌘⌫ move-to-Trash. The card grid's keyboard model is
-                // distinct from the toolbar Tab order (CHK004).
+                // distinct from the toolbar Tab order (CHK004). The focus
+                // RING is disabled (verified 2026-08-09: clicking the
+                // panel's content focused this ScrollView and drew a vivid
+                // full-width accent line under the toolbar; it flickered
+                // as focus churned). Keyboard navigation stays.
                 .focusable()
+                .focusEffectDisabled()
                 .onKeyPress(.upArrow) {
                     model.moveKeyboardSelection(by: -1)
                     return .handled
@@ -167,6 +185,17 @@ public struct LibraryCardGrid: View {
                 .onKeyPress(.rightArrow) {
                     model.moveKeyboardSelection(by: 1)
                     return .handled
+                }
+                .onKeyPress(.escape) {
+                    if pendingPermanentDelete != nil {
+                        pendingPermanentDelete = nil
+                    }
+                    if confirmingEmptyTrash {
+                        confirmingEmptyTrash = false
+                    }
+                    return pendingPermanentDelete == nil && !confirmingEmptyTrash
+                        ? .ignored
+                        : .handled
                 }
                 .onKeyPress(.return) {
                     if let selected = model.keyboardSelection {
@@ -190,5 +219,39 @@ public struct LibraryCardGrid: View {
             repeating: GridItem(.flexible(), spacing: NoteCardMetrics.spacing),
             count: NoteCardMetrics.columnCount(forContentWidth: width)
         )
+    }
+}
+
+/// In-window destructive-action confirmation bar (FR-026). Used instead of
+/// SwiftUI `confirmationDialog` — on macOS 27 a dialog in a MenuBarExtra
+/// window inverts the sheet relationship and closes the library window
+/// when its destructive button is clicked (see `LibraryCardGrid.body`).
+private struct InlineConfirmationBar: View {
+    let message: String
+    let confirmTitle: String
+    let onConfirm: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 8) {
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            Button(confirmTitle, role: .destructive, action: onConfirm)
+                .controlSize(.small)
+            Button("Cancel", role: .cancel, action: onCancel)
+                .controlSize(.small)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(.quaternary.opacity(0.5))
+        )
+        .padding(.horizontal, NoteCardMetrics.spacing)
+        .padding(.top, NoteCardMetrics.spacing)
+        .accessibilityElement(children: .contain)
     }
 }

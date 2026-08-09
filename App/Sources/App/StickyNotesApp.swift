@@ -627,15 +627,12 @@ struct StickyNotesApp: App {
     }
 
     /// Opens the library and focuses its search field (⌘F / searchAll /
-    /// `stickynotes://search`, 003 T025).
+    /// `stickynotes://search`, 003 T025). The scene consumes the model's
+    /// focus-request flag (the T018 NSToolbar spike is concluded — the
+    /// focus path is pure model → SwiftUI FocusState).
     private func focusLibrarySearch() {
         if let model = libraryModel {
             model.setSearchFocusRequested(true)
-            // Focus the native toolbar search field directly.
-            if let window = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible }),
-               let delegate = LibraryToolbar.delegate(for: window) {
-                delegate.focusSearch()
-            }
         }
         NSApp.activate(ignoringOtherApps: true)
     }

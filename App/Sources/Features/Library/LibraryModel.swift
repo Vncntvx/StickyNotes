@@ -340,11 +340,13 @@ public final class LibraryModel {
     /// confirmation (the CONFIRMATION lives in the view; the model performs
     /// the batch).
     public func emptyTrash() async -> Int {
+        StickyLogger(category: .app).error("empty-trash", code: "begin")
         guard let repo = environment.persistence.noteRepository else { return 0 }
         do {
             let ids = try await repo.emptyTrash(deviceId: DeviceIdentity.current.id)
             await reload()
             notifyWidgetsOfNoteChange()
+            StickyLogger(category: .app).error("empty-trash", code: "end-count=\(ids.count)")
             return ids.count
         } catch {
             statusMessage = String(localized: "Could not empty Trash.")

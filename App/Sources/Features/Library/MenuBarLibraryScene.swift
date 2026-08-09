@@ -1,19 +1,27 @@
 import SwiftUI
 import AppKit
 import Domain
+import Persistence
 import SystemBridge
 
 // MARK: - MenuBarLibraryScene (003 US1, T019-T027)
 //
 // Per tasks.md T019-T027 and spec FR-001..FR-007/SC-005..SC-008/FR-021/
 // FR-023/FR-024/FR-026:
-// - SINGLE native toolbar (AppKit NSToolbar attached via the window probe,
-//   T018 spike decision — plan.md §14/§15): New Note (⌘N), search
-//   (NSSearchField), sort popup, Notes/Trash destination. The legacy
-//   stacked header (big new-note block + segmented control + sort row) is
-//   removed (T019).
+// - SINGLE compact control row inside the panel (方案 B — T018 spike
+//   concluded 2026-08-09): New Note (⌘N), search (FR-003 prompt updates),
+//   sort popup, Notes/Trash destination. The spike's 方案 A (AppKit
+//   NSToolbar attached via the window probe) was abandoned: on macOS 27
+//   beta the SwiftUI `MenuBarExtraWindow` (borderless, private class)
+//   reserves the toolbar strip but never draws items — verified with
+//   items=5/isVisible=true under three variations (plain attach;
+//   +toolbarStyle/titlebarAppearsTransparent/hidden title; +styleMask
+//   `.titled`/-`.fullSizeContentView`). The SwiftUI row renders in the
+//   panel's own content, the same path as the card grid, so controls are
+//   guaranteed visible; FR-001a positioning / click-outside-close are
+//   untouched (probe reverts to position-only).
 // - No bottom bar / footer (FR-006): Help/About/Settings/Quit move to
-//   menus (T011 CommandGroups), toolbar overflow, and the menu-bar icon
+//   menus (T011 CommandGroups), the toolbar overflow, and the menu-bar icon
 //   dropdown (T024). Quit never appears in app UI (Constitution X).
 // - Content area: adaptive card grid per FR-021 (NoteCardMetrics) with
 //   density bounds 72-128 (SC-022); keyboard navigation (FR-024); Trash
@@ -37,6 +45,10 @@ public struct MenuBarLibraryScene: View {
     /// it is deleted from the library or Trash.
     let onCloseNoteWindows: (UUID) -> Void
 
+    /// Search-field focus (⌘F / searchAll / `stickynotes://search`): the
+    /// model's `searchFocusRequested` flag is consumed here (T025).
+    @FocusState private var searchFocused: Bool
+
     public init(
         model: LibraryModel,
         openNote: @escaping (UUID) -> Void,
@@ -57,8 +69,23 @@ public struct MenuBarLibraryScene: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            // Content area (the toolbar is attached to the NSWindow by the
-            // probe — FR-002 single native toolbar row).
+            // Two compact control rows (方案 B — the NSToolbar spike
+            // cannot render on the MenuBarExtra window, see header): the
+            // four T019 items cannot share one 420 pt row — sort menu +
+            // destination segmented alone need ~300 pt, starving the
+            // search field. The pre-T019 two-row split (header / search
+            // strip) is restored, proven to render in this window.
+            headerRow
+            SeparatorLine()
+
+            searchRow
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+
+            SeparatorLine()
+
+            // Sync attention banner above the grid (T026 shell, complete
+            // in US5).
             SyncAttentionBanner(
                 presentation: model.bannerPresentation,
                 dismiss: { model.dismissBanner() },
@@ -88,62 +115,203 @@ public struct MenuBarLibraryScene: View {
         }
         .frame(width: 420)
         // FR-001a (T286): position the library window deterministically
-        // when it appears AND attach the native toolbar (T018 spike).
-        .background(MenuBarLibraryWindowProbe(
-            model: model,
-            openNote: openNote
-        ))
+        // when it appears.
+        .background(MenuBarLibraryWindowProbe())
         .task {
             await model.reload()
             model.refreshBanner()
         }
     }
+
+    /// A 1 pt hairline separator between the control rows and the content.
+    /// `Divider()` is NOT used here: on macOS 27 beta it renders inside a
+    /// borderless MenuBarExtra window as a thick accent-tinted bar (verified
+    /// 2026-08-09 — a ~3.5 pt solid strip instead of a 1 pt line), a
+    /// framework rendering quirk this window cannot opt out of. A neutral
+    /// hairline keeps FR-080 separator semantics without fighting the
+    /// system glass rim.
+    private struct SeparatorLine: View {
+        var body: some View {
+            Rectangle()
+                .fill(.separator)
+                .frame(height: 1)
+        }
+    }
+
+    // MARK: - Control rows (T019/T020/T021, FR-002/FR-003/FR-022)
+
+    /// Row 1 — New Note (⌘N) + Notes/Trash destination. Mirrors the T018
+    /// spike's NSToolbar item set as plain SwiftUI inside the panel (the
+    /// guaranteed-rendering fallback after the NSToolbar spike failed on
+    /// the MenuBarExtra window, macOS 27 beta).
+    private var headerRow: some View {
+        HStack(spacing: 10) {
+            Button {
+                Task {
+                    if let id = await model.createBlankNote() {
+                        openNote(id)
+                    }
+                }
+            } label: {
+                Image(systemName: "square.and.pencil")
+            }
+            .keyboardShortcut("n", modifiers: .command)
+            .help("Create a new note")
+            .accessibilityLabel("New Note")
+
+            Spacer(minLength: 0)
+
+            Picker("", selection: Binding(
+                get: { model.scope },
+                set: { model.setScope($0) }
+            )) {
+                Text("Notes").tag(LibraryModel.Scope.library)
+                Text("Trash").tag(LibraryModel.Scope.trash)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .accessibilityLabel("Notes / Trash destination")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
+    /// Row 2 — search field (FR-003 prompt updates; ⌘F focus via
+    /// `model.searchFocusRequested`, T025) + sort popup (001 FR-022
+    /// modes).
+    private var searchRow: some View {
+        HStack(spacing: 10) {
+            searchField
+
+            Picker("", selection: Binding(
+                get: { model.sort },
+                set: { model.setSort($0) }
+            )) {
+                Text("Recently Modified").tag(NoteSortKey.modified)
+                Text("Created").tag(NoteSortKey.created)
+                Text("Title").tag(NoteSortKey.title)
+                Text("Manual").tag(NoteSortKey.manual)
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .fixedSize()
+            .help("Sort")
+        }
+    }
+
+    /// The search field (FR-003 prompt updates; ⌘F focus via
+    /// `model.searchFocusRequested`, T025).
+    private var searchField: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField("Search notes", text: $model.searchQuery)
+                .textFieldStyle(.plain)
+                .focused($searchFocused)
+                .onChange(of: model.searchQuery) { _, newValue in
+                    // FR-024a prompt updates: debounce-free immediate
+                    // reload (in-memory filter, well under 100 ms).
+                    model.setSearchQuery(newValue)
+                }
+                .onChange(of: model.searchFocusRequested) { _, requested in
+                    if requested {
+                        searchFocused = true
+                        model.setSearchFocusRequested(false)
+                    }
+                }
+            if !model.searchQuery.isEmpty {
+                Button {
+                    model.searchQuery = ""
+                    model.setSearchQuery("")
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(6)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+        .frame(maxWidth: .infinity)
+    }
 }
 
-// MARK: - FR-001a window placement probe + toolbar attachment (T286/T018)
+// MARK: - FR-001a window placement probe (T286)
 
 /// Applies the FR-001a library-window frame as soon as the view gains its
 /// hosting window (MenuBarExtra presentation): left edge aligned with the
 /// status-item icon, clamped to the visible screen frame, 4 pt below the
-/// menu bar, NO animation. ALSO attaches the native library toolbar (003
-/// T018 spike decision — plan.md §14/§15): the toolbar lives on the
-/// window, so the content area below it is the pure grid + banner.
+/// menu bar, NO animation.
 public struct MenuBarLibraryWindowProbe: NSViewRepresentable {
-    let model: LibraryModel
-    let openNote: (UUID) -> Void
-
-    public init(model: LibraryModel, openNote: @escaping (UUID) -> Void) {
-        self.model = model
-        self.openNote = openNote
-    }
+    public init() {}
 
     public func makeNSView(context: Context) -> NSView {
-        let view = ProbeView(model: model, openNote: openNote)
+        let view = ProbeView()
         return view
     }
 
     public func updateNSView(_ nsView: NSView, context: Context) {}
 
     private final class ProbeView: NSView {
-        private let model: LibraryModel
-        private let openNote: (UUID) -> Void
-
-        init(model: LibraryModel, openNote: @escaping (UUID) -> Void) {
-            self.model = model
-            self.openNote = openNote
-            super.init(frame: .zero)
-        }
-
-        required init?(coder: NSCoder) {
-            fatalError("init(coder:) has not been implemented")
-        }
+        /// T018 diagnostics (2026-08-09): track the library window's
+        /// lifecycle to attribute unexpected closes (Empty Trash sheet
+        /// force-detach investigation). Removed when the spike concludes.
+        private var lifecycleObserver: NSObjectProtocol?
+        private var clickMonitor: Any?
+        private var sheetObserver: NSKeyValueObservation?
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
-            guard let window else { return }
-            MenuBarLibraryWindow.positionLibraryWindow(window)
-            // T018 spike: attach the native toolbar once per window.
-            _ = LibraryToolbar.attach(to: window, model: model, openNote: openNote)
+            if let window {
+                MenuBarLibraryWindow.positionLibraryWindow(window)
+            }
+            guard let window, lifecycleObserver == nil else { return }
+            let center = NotificationCenter.default
+            lifecycleObserver = center.addObserver(
+                forName: NSWindow.willCloseNotification,
+                object: window,
+                queue: .main
+            ) { _ in
+                StickyLogger(category: .app).error("lib-window", code: "willClose")
+            }
+            center.addObserver(
+                forName: NSWindow.didResignKeyNotification,
+                object: window,
+                queue: .main
+            ) { _ in
+                StickyLogger(category: .app).error("lib-window", code: "didResignKey")
+            }
+            center.addObserver(
+                forName: NSWindow.didBecomeKeyNotification,
+                object: window,
+                queue: .main
+            ) { _ in
+                StickyLogger(category: .app).error("lib-window", code: "didBecomeKey")
+            }
+            if sheetObserver == nil {
+                sheetObserver = window.observe(\.attachedSheet) { _, _ in
+                    let sheet = window.attachedSheet?.className ?? "nil"
+                    StickyLogger(category: .app).error("lib-window", code: "sheet=\(sheet)")
+                }
+            }
+            if clickMonitor == nil {
+                clickMonitor = NSEvent.addLocalMonitorForEvents(
+                    matching: [.leftMouseDown, .rightMouseDown]
+                ) { [weak window] event in
+                    let target = event.window?.className ?? "nil"
+                    let libraryIsKey = window?.isKeyWindow == true
+                    let sheets = NSApp.windows
+                        .filter { $0.attachedSheet != nil }
+                        .map { "\($0.className)" }
+                    StickyLogger(category: .app).error(
+                        "click",
+                        code: "target=\(target)-libKey=\(libraryIsKey)-sheets=\(sheets.joined(separator: ","))"
+                    )
+                    return event
+                }
+            }
         }
     }
 }
