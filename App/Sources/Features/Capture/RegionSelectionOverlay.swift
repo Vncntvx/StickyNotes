@@ -18,17 +18,23 @@ public enum RegionSelectionOverlay {
     /// capture rect; `.zero` on cancel.
     public static func presentSelection() async -> CGRect {
         await withCheckedContinuation { continuation in
-            let overlay = OverlayWindow { rect in
+            // Retain the overlay for the lifetime of the selection: the
+            // closure captures `overlay` and nils it when the selection
+            // completes, so the window is never released while the drag is
+            // in progress (double-release guard — see OverlayWindow init).
+            var overlay: OverlayWindow?
+            overlay = OverlayWindow { rect in
                 continuation.resume(returning: rect)
+                overlay = nil
             }
-            overlay.show()
+            overlay?.show()
         }
     }
 }
 
 /// The borderless overlay window: dimmed screen + drag rectangle.
 @MainActor
-private final class OverlayWindow: NSWindow {
+final class OverlayWindow: NSWindow {
     private let onSelection: (CGRect) -> Void
     private var dragStart: NSPoint?
     private var dragCurrent: NSPoint?
@@ -44,6 +50,15 @@ private final class OverlayWindow: NSWindow {
                 backing: .buffered,
                 defer: false
             )
+            // Ownership guard (2026-08-09 double-release crash): programmatic
+            // windows default to `isReleasedWhenClosed = true` — AppKit
+            // releases the window on `close()` while the selection
+            // continuation still references it, and the stale autorelease
+            // entry releases the freed object at the next main-runloop pool
+            // drain (same signature as the 2026-08-07 note-window crash,
+            // NoteWindowLifecycleTests). All programmatic windows keep
+            // ownership; the presenter releases when the selection ends.
+            isReleasedWhenClosed = false
             hasNoDisplay = true
             return
         }
@@ -53,6 +68,8 @@ private final class OverlayWindow: NSWindow {
             backing: .buffered,
             defer: false
         )
+        // Ownership guard (2026-08-09 double-release crash — see above).
+        isReleasedWhenClosed = false
         level = .screenSaver
         isOpaque = false
         backgroundColor = .clear

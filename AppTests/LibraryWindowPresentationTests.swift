@@ -127,10 +127,8 @@ struct EmptyRepresentableContext {}
         // The scene installs the probe as a background so the frame is
         // applied on every presentation. The probe type must exist and be
         // public (the scene references it; the frame application itself is
-        // covered by positionLibraryWindowAppliesDeterministicFrame). The
-        // probe also attaches the native toolbar (003 T018 spike).
-        let model = LibraryModel(environment: .placeholder)
-        let probe = MenuBarLibraryWindowProbe(model: model, openNote: { _ in })
+        // covered by positionLibraryWindowAppliesDeterministicFrame).
+        let probe = MenuBarLibraryWindowProbe()
         _ = probe
         #expect(true)
     }

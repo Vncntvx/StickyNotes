@@ -32,6 +32,29 @@ public enum ReadableTheme {
         )
     }
 
+    /// The OPAQUE note color as a dynamic NSColor, for the window
+    /// background. The transparent titlebar shows this color, so the whole
+    /// window — titlebar included — is note-colored paper (Apple Sticky
+    /// Notes style, FR-030a; verified 2026-08-09). Built-in keys resolve
+    /// through the palette per appearance; custom colors use the Domain
+    /// projection (FR-040a) at full opacity.
+    public static func windowBackground(for note: Note) -> NSColor {
+        if let paletteKey = NotePalette.paletteKey(for: note.colorKey) {
+            let entry = NotePalette.entry(for: paletteKey)
+            return NSColor(name: nil) { appearance in
+                let color = appearance.name == .darkAqua ? entry.darkColor : entry.lightColor
+                return NSColor(color).usingColorSpace(.sRGB) ?? .clear
+            }
+        }
+        let appearance = NoteAppearance.projecting(from: note)
+        return NSColor(
+            srgbRed: CGFloat(appearance.background.red),
+            green: CGFloat(appearance.background.green),
+            blue: CGFloat(appearance.background.blue),
+            alpha: 1.0
+        )
+    }
+
     /// The readable foreground (black/white per FR-042 contrast). Built-in
     /// keys use the palette's auto-adjusted foreground; custom colors use
     /// the Domain contrast projection — never rejected (FR-033).

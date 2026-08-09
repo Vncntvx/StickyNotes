@@ -172,23 +172,22 @@ public final class NoteWindowCoordinator {
 
         let window = NSWindow(
             contentRect: NSRect(x: 200, y: 200, width: 420, height: 480),
-            styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
+            styleMask: [.titled, .closable, .resizable],
             backing: .buffered,
             defer: false
         )
-        // FR-030a (T298): note-paper chrome — borderless/thin transparent
-        // title bar with the upper control area integrated (no distinct
-        // toolbar chrome), 1-pt subtle border, 8-pt corner radius, soft
-        // shadow. The window stays a normal macOS window (FR-030); the
-        // system window shadow supplies the drop shadow (approximating the
-        // "radius 8, opacity 0.15" intent — layer shadows are clipped by
-        // the rounded-corner mask).
+        // FR-030a (T298): note-paper chrome. The titlebar appears
+        // TRANSPARENT and the window background is the OPAQUE note color,
+        // so the titlebar area renders as note-colored paper (never a
+        // white bar, never see-through) with the title text + traffic
+        // lights on it — Apple Sticky Notes style. User decision
+        // 2026-08-09: a standard white titlebar was rejected as ugly; a
+        // clear background made the top show the desktop.
         window.title = note.title ?? ""
         window.titlebarAppearsTransparent = true
-        window.titleVisibility = .hidden
+        window.titleVisibility = .visible
+        window.backgroundColor = ReadableTheme.windowBackground(for: note)
         window.isReleasedWhenClosed = false
-        window.isOpaque = false
-        window.backgroundColor = .clear
         window.hasShadow = true
         // 003 T034 (FR-071): keep the note usable at compact sizes — a
         // minimum content size preserves typing + traffic lights without
@@ -202,17 +201,17 @@ public final class NoteWindowCoordinator {
         // 003 T032: retain the host for Edit/Insert menu dispatch.
         hosts[noteId] = host
         let content = NoteWindowContent(noteId: noteId, host: host, environment: environment, coordinator: self)
+        // FR-030a: the 8-pt corner radius, 1-pt subtle border and rounded
+        // clipping are drawn IN SwiftUI (NoteWindowContent.background) —
+        // NOT on the NSHostingView's layer. Verified 2026-08-09: layer
+        // corner/border mutations on a hosting view are reset by SwiftUI
+        // on macOS 26, leaving a stale square 2-px border that rendered
+        // PURE BLACK around new note windows. Layer-BACKING itself is kept
+        // (fullSizeContentView compositing needs it for the transparent
+        // titlebar — without it the Liquid Glass titlebar material draws
+        // a white band over the note paper).
         window.contentView = NSHostingView(rootView: content)
-
-        // FR-030a: 1-pt subtle border + 8-pt corner radius on the content
-        // (clips the SwiftUI background to the rounded sheet shape).
-        if let contentView = window.contentView {
-            contentView.wantsLayer = true
-            contentView.layer?.cornerRadius = 8
-            contentView.layer?.masksToBounds = true
-            contentView.layer?.borderWidth = 1
-            contentView.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.5).cgColor
-        }
+        window.contentView?.wantsLayer = true
 
         // FR-032/FR-033 (T289): restore the remembered frame (corrected for
         // the current display arrangement; the disconnected-display preferred
@@ -245,6 +244,15 @@ public final class NoteWindowCoordinator {
     /// Whether a note window is currently open.
     public func isOpen(noteId: UUID) -> Bool {
         NoteWindowBridge.isOpen(noteId: noteId)
+    }
+
+    /// Re-applies the note color to the window background when the note's
+    /// appearance changes while open (the titlebar shows this color, so
+    /// the paper stays continuous — FR-030a).
+    public func updateNotePaper(noteId: UUID) {
+        guard let note = hosts[noteId]?.note,
+              let window = NoteWindowBridge.registeredWindow(for: noteId) else { return }
+        window.backgroundColor = ReadableTheme.windowBackground(for: note)
     }
 
     /// Frees the retained window delegate (called from windowWillClose and
@@ -396,6 +404,7 @@ public struct NoteWindowContent: View {
                         note: note,
                         onChanged: { updated in
                             host.updateAppearance(updated)
+                            coordinator.updateNotePaper(noteId: noteId)
                         },
                         onAddScreenshot: {
                             captureScreenshot()
@@ -514,7 +523,12 @@ public struct NoteWindowContent: View {
                     }
                     Button("Cancel", role: .cancel) {}
                 }
-                .background(ReadableTheme.background(for: note))
+                // FR-030a (T298): note-paper chrome in SwiftUI — 8-pt
+                // rounded background + 1-pt subtle border + rounded
+                // clipping (replaces the former NSHostingView layer
+                // mutation, which macOS 26 resets and rendered as a black
+                // square ring — verified 2026-08-09).
+                .notePaperBackground(for: note)
             } else {
                 Color.clear
                     .task { await load() }
@@ -582,5 +596,22 @@ public struct NoteWindowContent: View {
             coordinator.closeAll(noteId: noteId)
             coordinator.deletionToast(String(localized: "Moved to Trash"))
         }
+    }
+}
+
+/// FR-030a: note-paper chrome — 8-pt rounded background and rounded
+/// clipping, drawn in SwiftUI so colors resolve per appearance. NO stroke
+/// is drawn here: the window's native frame already supplies the hairline
+/// edge (Liquid Glass), and the former NSHostingView layer border was
+/// reset by SwiftUI on macOS 26 and rendered as a stale square black ring
+/// (verified 2026-08-09). A SwiftUI stroke on top produced a doubled
+/// 2-line edge (screenshot 2026-08-09), so the border stays native.
+private extension View {
+    func notePaperBackground(for note: Note) -> some View {
+        background {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(ReadableTheme.background(for: note))
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
