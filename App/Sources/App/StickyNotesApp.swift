@@ -467,9 +467,19 @@ struct StickyNotesApp: App {
         }
         // Synthesize a left-click at the icon's center to toggle the library
         // (FR-001 left-click semantics). This goes through the SwiftUI
-        // MenuBarExtra's own click handling.
-        let center = NSPoint(x: statusItemWindow.frame.midX,
-                             y: statusItemWindow.frame.midY)
+        // MenuBarExtra's own click handling. CGEvent coordinates are
+        // Quartz global (origin TOP-LEFT of the main display) while
+        // NSWindow.frame is AppKit (origin BOTTOM-LEFT) — the y MUST be
+        // flipped or the click lands at the bottom of the screen (verified
+        // 2026-08-09: "Open Library" teleported the cursor to the bottom
+        // edge and opened nothing).
+        let frame = statusItemWindow.frame
+        let screenMaxY = statusItemWindow.screen?.frame.maxY
+            ?? NSScreen.main?.frame.maxY ?? 0
+        let center = CGPoint(
+            x: frame.midX,
+            y: screenMaxY - frame.midY
+        )
         let click = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown,
                             mouseCursorPosition: center, mouseButton: .left)
         click?.post(tap: .cghidEventTap)

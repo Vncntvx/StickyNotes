@@ -216,10 +216,14 @@ public final class NoteWindowCoordinator {
         window.contentView = NSHostingView(rootView: content)
         window.contentView?.wantsLayer = true
 
-        // FR-032/FR-033 (T289): restore the remembered frame (corrected for
-        // the current display arrangement; the disconnected-display preferred
-        // frame is preserved untouched).
-        restoreFrame(for: window, noteId: noteId)
+        // FR-032/FR-033 (T289): restore the remembered frame BEFORE the
+        // window is shown. The repository fetch is async — the previous
+        // fire-and-forget Task applied the frame AFTER `makeKeyAndOrderFront`,
+        // so the window flashed at the default (200,200) slot and then
+        // jumped to the remembered position (verified 2026-08-09).
+        if let restored = await restoredFrame(for: noteId) {
+            window.setFrame(restored, display: false)
+        }
 
         let delegate = NoteWindowDelegate(
             noteId: noteId,
@@ -287,22 +291,23 @@ public final class NoteWindowCoordinator {
 
     /// Restores the note's remembered frame, corrected for the current
     /// display arrangement (FR-032/FR-033).
-    private func restoreFrame(for window: NSWindow, noteId: UUID) {
-        guard let repo = environment.persistence.windowStateRepository else { return }
-        Task {
-            guard let state = try? await repo.fetch(noteId: noteId),
-                  state.frame.width > 0, state.frame.height > 0 else { return }
-            let displays = DisplayObservation.currentDisplayFrames()
-            let preferred = NSRect(x: state.frame.x, y: state.frame.y, width: state.frame.width, height: state.frame.height)
-            let fallback = state.fallbackFrame.map { NSRect(x: $0.x, y: $0.y, width: $0.width, height: $0.height) }
-            let corrected = DisplayChangeBridge.correctedFrame(
-                frame: preferred,
-                preferredDisplayUUID: state.preferredDisplayUUID,
-                fallbackFrame: fallback,
-                displays: displays
-            )
-            window.setFrame(corrected, display: false)
-        }
+    /// The remembered window frame, corrected for the current display
+    /// arrangement (FR-032/FR-033). Returns nil when no usable state
+    /// exists (the caller keeps the default frame). The disconnected-
+    /// display preferred frame is preserved untouched.
+    private func restoredFrame(for noteId: UUID) async -> NSRect? {
+        guard let repo = environment.persistence.windowStateRepository else { return nil }
+        guard let state = try? await repo.fetch(noteId: noteId),
+              state.frame.width > 0, state.frame.height > 0 else { return nil }
+        let displays = DisplayObservation.currentDisplayFrames()
+        let preferred = NSRect(x: state.frame.x, y: state.frame.y, width: state.frame.width, height: state.frame.height)
+        let fallback = state.fallbackFrame.map { NSRect(x: $0.x, y: $0.y, width: $0.width, height: $0.height) }
+        return DisplayChangeBridge.correctedFrame(
+            frame: preferred,
+            preferredDisplayUUID: state.preferredDisplayUUID,
+            fallbackFrame: fallback,
+            displays: displays
+        )
     }
 
     /// Re-applies corrected frames for every open note window after a display
