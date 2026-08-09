@@ -6,7 +6,7 @@ import Domain
 // Per tasks.md T270 and spec FR-014c (clarified 2026-08-07): the UNIFIED
 // empty-state component — a localized message + icon, NO call-to-action, no
 // other content; ONE component, spacing, and visual style. Wired into search
-// no-results (LibrarySearchView) and empty Trash (TrashView). The
+// no-results (LibraryCardGrid) and empty Trash (TrashView). The
 // first-launch empty-library variant (EmptyLibraryView, FR-014a) is a
 // distinct component (CTA + onboarding hint) and is NEVER substituted.
 

@@ -205,20 +205,4 @@ struct EmptyRepresentableContext {}
         _ = helpOpened
         #expect(true, "scene wires all four entry points (settings/about/help/quit)")
     }
-
-    @Test
-    func snapshotSyncStatusViewContractIsStable() {
-        // The sync footer reads the coordinator contract; the banner
-        // redesign (003 FR-010) replaces the view but must keep consuming
-        // the same state inputs.
-        let view = SyncStatusView(
-            isConfigured: false,
-            lastSuccessfulSyncAt: nil,
-            lastErrorCode: nil,
-            isInProgress: false,
-            manualSync: {}
-        )
-        _ = view
-        #expect(true, "SyncStatusView accepts the current coordinator contract")
-    }
 }

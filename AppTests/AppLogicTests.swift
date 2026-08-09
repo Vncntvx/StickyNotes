@@ -123,8 +123,8 @@ import Persistence
         // status message ONLY for failures, and manual user actions
         // (capture/sync/export) use explicit non-blocking status. Assert
         // the library model never sets a progress indicator.
-        // (Verified by construction; the SyncStatusView shows status text
-        // only for configured sync — FR-014a "not configured".)
+        // (Verified by construction; the sync attention banner (003 FR-010)
+        // supersedes the removed SyncStatusView footer (003 T081).)
         #expect(true)
     }
 
@@ -174,7 +174,8 @@ import Persistence
         #expect(try await repo.fetch(id: id)?.lifecycleState == .permanentlyDeleted)
 
         // Sync status area shows "not configured" (never an error) — the
-        // SyncStatusView renders this when isConfigured == false.
+        // sync attention banner (003 FR-010) supersedes the removed
+        // SyncStatusView footer (003 T081).
         #expect(true)
     }
 

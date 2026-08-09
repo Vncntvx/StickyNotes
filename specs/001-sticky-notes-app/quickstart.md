@@ -246,32 +246,20 @@ Pass `CODE_SIGNING_ALLOWED=NO` for local debug builds (see above). The Widget
 Extension requires the App Group entitlement to be resolvable locally; for
 widget testing on your own machine, a self-signed development identity suffices.
 
-## Running the XCUITest critical flows (T305)
+## Running the AppUITests launch smoke test
 
-The AppUITests journeys need a **signed** app: an unsigned app cannot write
-the App Group container on macOS (bootstrap fails and the menu-bar library
-shows the database-error state). Build unsigned, ad-hoc sign app + widget,
-then run without rebuilding:
+**2026-08-09**: all automated click journeys in `AppUITests` were **cancelled**
+per product decision — synthetic XCUITest clicks/typing are unreliable on
+macOS 27 beta and require an interactive display session. The bundle retains
+only the launch smoke test (`testMenuBarOpenAndDismiss`), which needs no
+signing and no display interaction; interactive flows are covered by manual
+QA instead. Run it like any other suite:
 
 ```bash
 DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild \
-  build-for-testing -project StickyNotes.xcodeproj -scheme StickyNotes \
-  -configuration Debug CODE_SIGNING_ALLOWED=NO
-
-APP=$(find ~/Library/Developer/Xcode/DerivedData/StickyNotes-*/Build/Products/Debug/StickyNotes.app -maxdepth 0 | head -1)
-codesign --force --sign - --entitlements WidgetExtension/WidgetExtension.entitlements \
-  "$APP/Contents/PlugIns/StickyNotesWidget.appex"
-codesign --force --sign - --entitlements App/Resources/StickyNotes.entitlements "$APP"
-
-DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild \
-  test-without-building -project StickyNotes.xcodeproj -scheme StickyNotes \
+  test -project StickyNotes.xcodeproj -scheme StickyNotes \
   -destination 'platform=macOS' -only-testing:AppUITests/CriticalFlowsUITests
 ```
-
-The screenshot-viewer journey is skipped when screen-recording permission is
-not granted (headless CI stays green); the other journeys seed their note via
-the test-only `-UITestSeedNote <marker>` launch argument — no synthetic
-keyboard input, which is unreliable through XCUITest on macOS 27 beta.
 
 ## Manual testing on your Mac (stable Keychain access)
 

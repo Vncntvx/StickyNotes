@@ -13,13 +13,18 @@ set -euo pipefail
 DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode-beta.app/Contents/Developer}"
 IDENTITY="${IDENTITY:-Apple Development: wenjie.xu.sino@foxmail.com (SJFRS6Q8GH)}"
 PROJECT="${PROJECT:-StickyNotes.xcodeproj}"
+# Fixed DerivedData path: multiple StickyNotes-* directories from earlier
+# builds made `find | head -1` launch a STALE bundle (observed 2026-08-09:
+# a 02:24 debug.dylib with pre-003 UI was signed+launched at 15:35).
+DERIVED_DATA="${DERIVED_DATA:-$HOME/Library/Developer/Xcode/DerivedData/StickyNotes-local}"
 
 "$DEVELOPER_DIR/usr/bin/xcodebuild" build \
   -project "$PROJECT" -scheme StickyNotes -configuration Debug \
+  -derivedDataPath "$DERIVED_DATA" \
   CODE_SIGNING_ALLOWED=NO
 
-APP=$(find "$HOME/Library/Developer/Xcode/DerivedData"/StickyNotes-*/Build/Products/Debug/StickyNotes.app -maxdepth 0 | head -1)
-if [ -z "$APP" ]; then echo "app bundle not found" >&2; exit 1; fi
+APP="$DERIVED_DATA/Build/Products/Debug/StickyNotes.app"
+if [ ! -d "$APP" ]; then echo "app bundle not found: $APP" >&2; exit 1; fi
 
 codesign --force --sign "$IDENTITY" \
   --entitlements WidgetExtension/WidgetExtension.entitlements \

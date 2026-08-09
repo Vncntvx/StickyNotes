@@ -8,7 +8,8 @@ import Domain
 // Background operations (autosave/search/thumbnail) are silent; user-
 // initiated operations (capture/manual sync/export-import) surface explicit
 // non-blocking status. Covered in AppLogicTests.backgroundOpsAreSilentUserInitiatedOpsShowStatus
-// + the SyncStatusView renders status only when sync is configured (FR-014a).
+// + the sync attention banner (003 SyncAttentionBanner, FR-010) supersedes
+// the removed SyncStatusView footer (003 T081).
 // File exists for task→file traceability.
 
 @Suite struct AsyncFeedbackPolicyTests {

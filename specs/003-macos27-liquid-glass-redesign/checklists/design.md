@@ -83,7 +83,7 @@
 ## Ambiguities & Conflicts
 
 - [x] CHK053 Does "就近横幅或内联"（FR-010）leave the banner placement genuinely open in spec while plan.md fixes it — is the plan's choice (grid-top banner) marked as a decision, not silently assumed? [Ambiguity, Spec §FR-010/plan §6]
-- [ ] CHK054 Is SC-018 ("Apple HIG 走查清单") itemized anywhere (which checklist items), or is it a black-box criterion? [Ambiguity, Spec §SC-018]
+- [x] CHK054 Is SC-018 ("Apple HIG 走查清单") itemized anywhere (which checklist items), or is it a black-box criterion? [Ambiguity, Spec §SC-018] — closed 2026-08-09: SC-018 itemized as SC-018a–i (窗口外壳/工具栏/菜单/导航/表单/搜索/内容分层/反模式排除/系统行为), each mapped to existing FRs; execution remains T074/T079 manual walkthrough recording PASS/FAIL per surface in quickstart.md
 - [x] CHK055 Does FR-020's "首个有意义行" duplicate or diverge from 001 FR-021 summary rules — is the boundary (title vs first-line vs summary) resolved? [Conflict, Spec §FR-020/FR-025]
 - [x] CHK056 Are "内容区"（SC-001）and "卡片空白占比"（SC-022）measured against the same coordinate space (with/without banner, scrollbars), or could the two assertions conflict on the same layout? [Conflict, Spec §SC-001/SC-022]
 - [x] CHK057 Is the D12 window-title-match hack (settings/help window fallback) documented as known-technical-debt with a no-block status, in both research.md and plan.md? [Ambiguity, research.md §2.1/plan §2]
@@ -94,7 +94,7 @@
 - [x] CHK059 Is the cross-feature reference convention ("001 FR-0xx") uniform across spec/plan/tasks/data-model (no bare FR numbers that collide with 001 numbering)? [Traceability, Spec §Assumptions]
 - [x] CHK060 Are plan.md TDRs (Technical Decision Records) traceable to the spec requirements they serve (each decision cites FR/SC)? [Traceability, plan §16]
 - [x] CHK061 Is the spec's required platform-API validation recorded as an explicit task (T002) with a documentation output (toolchain.md), per Required Tests? [Traceability, Spec §Required Tests/tasks.md T002]
-- [ ] CHK062 Are the 001 requirements superseded by this feature (001 FR-002a/004/030a/031/040a per checklist requirements.md Notes) marked in 001 spec, so cross-feature traceability stays truthful? [Traceability, Gap]
+- [x] CHK062 Are the 001 requirements superseded by this feature (001 FR-002a/004/030a/031/040a per checklist requirements.md Notes) marked in 001 spec, so cross-feature traceability stays truthful? [Traceability, Gap] — closed 2026-08-09: 001 spec.md lines 569/578/780/786/825 carry `[SUPERSEDED by 003 ...]` markers for FR-002a/FR-004/FR-030a/FR-031/FR-040a respectively (T076)
 
 ## Notes
 

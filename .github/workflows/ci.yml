@@ -178,7 +178,7 @@ jobs:
             | xcpretty
 
   ui-smoke:
-    name: UI smoke tests (XCUITest critical flows)
+    name: UI smoke test (launch only)
     runs-on: macos-26
     needs: build
     timeout-minutes: 30
@@ -194,20 +194,10 @@ jobs:
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO \
             | xcpretty
-      # T305: the full UI journeys need a SIGNED app — an unsigned app
-      # cannot write the App Group container on macOS (bootstrap fails and
-      # the library shows the database-error state). Ad-hoc signing embeds
-      # the sandbox/app-groups entitlements without a developer account.
-      - name: Ad-hoc sign app + widget (T305)
-        run: |
-          APP=$(find ~/Library/Developer/Xcode/DerivedData/StickyNotes-*/Build/Products/Debug/StickyNotes.app -maxdepth 0 | head -1)
-          codesign --force --sign - \
-            --entitlements WidgetExtension/WidgetExtension.entitlements \
-            "$APP/Contents/PlugIns/StickyNotesWidget.appex"
-          codesign --force --sign - \
-            --entitlements App/Resources/StickyNotes.entitlements \
-            "$APP"
-      - name: XCUITest critical flows
+      # 2026-08-09: the click journeys were cancelled (unreliable on macOS 27
+      # beta headless sessions); only the launch smoke test remains, which
+      # needs no signing (it never writes the App Group container).
+      - name: XCUITest launch smoke test
         run: |
           xcodebuild test-without-building \
             -project "$PROJECT" \

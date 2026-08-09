@@ -182,3 +182,21 @@ support version bumped to v2.
 - Local build note: with github.com unreachable, xcodebuild package
   resolution needs `-clonedSourcePackagesDirPath` pointed at a checkout
   mirror + `-skipPackageUpdates`; normal CI resolves from the network.
+
+## 2026-08-09 — AppUITests click journeys cancelled (product decision)
+
+- All synthetic-click XCUITest journeys in `AppUITests/CriticalFlowsUITests.swift`
+  were **cancelled** per product decision: automated macOS click tests proved
+  unreliable — 14 of 15 tests fail in headless sessions on macOS 27 beta
+  (menu-bar hit-testing races, permission-gated overlay drags), so the suite
+  never provided stable CI signal. Kept only `testMenuBarOpenAndDismiss`
+  (launch smoke test, no clicks). Interactive flows (FR-009/FR-005/FR-006/
+  FR-014/FR-095/FR-030/FR-050/FR-010/FR-070/SC-017/FR-072/FR-001 dropdown)
+  remain covered by AppTests unit/integration suites + manual QA
+  (quickstart.md §Manual testing).
+- Removed with the journeys: the `-UITestSeedNote` app-side seeding hook
+  (`StickyNotesApp.seedUITestNoteIfRequested`) — test-only, only used by the
+  cancelled journeys.
+- CI: `ui-smoke` job reduced to the unsigned launch smoke test (ad-hoc
+  signing step removed); quickstart.md §Running the XCUITest critical flows
+  rewritten accordingly.

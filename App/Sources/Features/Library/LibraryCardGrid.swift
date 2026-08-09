@@ -3,7 +3,7 @@ import AppKit
 import Domain
 import Persistence
 
-// MARK: - LibrarySearchView (003 T020, FR-003)
+// MARK: - LibraryCardGrid (003 T020/T082, FR-003)
 //
 // Per tasks.md T020: the custom search field is REPLACED by native search
 // (the NSSearchField toolbar item, attached in `LibraryToolbar` — T018

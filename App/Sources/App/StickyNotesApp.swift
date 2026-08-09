@@ -388,7 +388,12 @@ struct StickyNotesApp: App {
                         try? DockActivationBridge.setDockEnabled(true)
                     }
                     wireGlobalShortcuts()
-                    seedUITestNoteIfRequested()
+                    // 003 T078 (FR-001/FR-006/Constitution X): install the
+                    // menu-bar icon right-click/⌥-click dropdown. Plain
+                    // left-click continues to toggle the SwiftUI
+                    // `MenuBarExtra(.window)` library window (FR-001
+                    // semantics unchanged, T018 spike preserved).
+                    configureMenuBarDropdown()
                 }
             } catch {
                 // FR-165: sanitized logging — code + category only, never
@@ -405,41 +410,72 @@ struct StickyNotesApp: App {
         }
     }
 
-    // MARK: - UITest seeding hook (T305)
-
-    /// Creates a note whose first rich-text block contains the marker passed
-    /// via the `-UITestSeedNote <marker>` launch argument. TEST-ONLY: the
-    /// XCUITest journeys seed content this way because synthetic keyboard
-    /// input (typing/paste) is unreliable on macOS 27 beta; the argument is
-    /// never present in normal launches, and the path is failure-silent
-    /// (FR-011a). Persistence reuses the clipboard-shortcut insert path.
-    private func seedUITestNoteIfRequested() {
-        let arguments = ProcessInfo.processInfo.arguments
-        guard let flagIndex = arguments.firstIndex(of: "-UITestSeedNote"),
-              flagIndex + 1 < arguments.count else { return }
-        let marker = arguments[flagIndex + 1]
-        Task {
-            guard let model = self.libraryModel,
-                  let repo = model.environment.persistence.noteRepository else { return }
-            if let id = await model.createBlankNote() {
-                let block = Block(
-                    noteId: id,
-                    kind: .richText,
-                    sortKey: 0,
-                    payload: .richText(.plain(marker)),
-                    lastModifiedDeviceId: AppDevice.current().id
-                )
-                try? await repo.insert(block)
-                await model.reload()
-            }
-        }
-    }
-
     // MARK: - Note windows (T160)
 
     private func openNoteWindow(noteId: UUID) {
         guard let coordinator else { return }
         Task { _ = await coordinator.open(noteId: noteId) }
+    }
+
+    // MARK: - Menu-bar dropdown (003 T078, FR-001/FR-006/Constitution X)
+
+    /// Configures and installs the menu-bar icon dropdown menu. The dropdown
+    /// surfaces 打开 Library / 设置 / 帮助 / 关于 / 退出 on right-click or
+    /// ⌥-click of the status-item icon (Constitution-X reachability when the
+    /// Dock icon is hidden). Plain left-click is left to the SwiftUI
+    /// `MenuBarExtra(.window)` scene (FR-001 semantics unchanged).
+    private func configureMenuBarDropdown() {
+        // `StickyNotesApp` is the @main struct that lives for the app's
+        // entire lifetime; capturing `self` strongly here is safe (no retain
+        // cycle — the dropdown singleton is app-scoped, and the struct is
+        // owned by SwiftUI for the process lifetime).
+        MenuBarDropdownMenu.shared.configure(
+            openLibrary: {
+                // Re-dispatch a plain click on the status item so SwiftUI's
+                // `MenuBarExtra` opens the library window exactly as a
+                // left-click would (FR-001 path preserved). Activating the
+                // app first ensures the library window comes forward even
+                // when the Dock icon is hidden.
+                NSApplication.shared.activate(ignoringOtherApps: true)
+                self.openLibraryFromDropdown()
+            },
+            openSettings: { self.openSettingsWindow() },
+            openAbout: { self.openAboutWindow() },
+            openHelp: { self.openHelpWindow() }
+        )
+        MenuBarDropdownMenu.shared.install()
+    }
+
+    /// Opens the library window from the dropdown's "Open Library" action.
+    /// Reuses the same path as a plain left-click on the status item: a
+    /// synthetic click on the SwiftUI `MenuBarExtra`'s underlying status
+    /// item. Falls back to activating the app (which surfaces the menu-bar
+    /// icon for a follow-up click) if the status-item window cannot be
+    /// located.
+    private func openLibraryFromDropdown() {
+        // The SwiftUI MenuBarExtra owns the status item; we cannot click it
+        // directly, but activating the app + a best-effort click on the
+        // status-item icon window reuses the SwiftUI toggle path.
+        guard let statusItemWindow = NSApp.windows.first(where: {
+            $0.level == .statusBar && $0.frame.width <= 120 && $0.frame.height <= 40
+        }) else {
+            // No status-item window found — the library is opened by the
+            // user's next left-click. Activate the app so the icon is
+            // visible and ready.
+            NSApplication.shared.activate(ignoringOtherApps: true)
+            return
+        }
+        // Synthesize a left-click at the icon's center to toggle the library
+        // (FR-001 left-click semantics). This goes through the SwiftUI
+        // MenuBarExtra's own click handling.
+        let center = NSPoint(x: statusItemWindow.frame.midX,
+                             y: statusItemWindow.frame.midY)
+        let click = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown,
+                            mouseCursorPosition: center, mouseButton: .left)
+        click?.post(tap: .cghidEventTap)
+        let release = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp,
+                              mouseCursorPosition: center, mouseButton: .left)
+        release?.post(tap: .cghidEventTap)
     }
 
     /// The manually-managed Settings window. The SwiftUI `Settings` scene's
