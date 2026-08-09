@@ -340,7 +340,7 @@ WidgetExtension/             # 零改动（行为不回退）
 | 命令体系 | FR-072/SC-017 无 CommandGroup | 各视图各自按钮（现状） | 新增 commands 复用既有 model 方法 | 单一命令源；键盘/菜单/工具栏同构 | 需防重复命令入口 | 键盘兼容既有 |
 | 部署/回退 | macOS 26.0 目标 + 27 行为 | 27-only | 26.0 + `#available` 守卫（26.1/27.0 项） | 规格决议；Liquid Glass 核心 26.0 起可用 | 27 专属微效缺失（可接受） | CI Xcode 26.x 编译安全 |
 | 窗口恢复 | FR-007/032 既有 | 自动恢复窗口 | 保持（不自动恢复 + 帧持久化） | 既有行为基线 | — | 无 |
-| 搜索聚焦补全 | D8 searchAll 为 no-op | 保持 no-op | 打开 Library + 聚焦搜索框 | "搜索全部笔记"语义的自然完成；001 FR-120 动作不变 | 轻微行为改进（B 类） | 无 |
+| 搜索聚焦补全 | D8 searchAll 为 no-op | 保持 no-op | 打开 Library + 聚焦搜索框 | "搜索全部笔记"语义的自然完成 | 轻微行为改进（B 类） | 无 — **2026-08-10**：全局快捷键已移除，仅 `stickynotes://search` 深链承担 |
 
 # 17. Risk Register
 
@@ -353,7 +353,7 @@ WidgetExtension/             # 零改动（行为不回退）
 | 持久化迁移风险 | 低 | 高 | 无迁移；schema 零改动 | 迁移测试 + 夹具验证（Phase 7） |
 | 同步回归 | 低 | 高 | SyncCore 零改动；映射只读输入 | SyncCore 全量 + SyncCompositionTests |
 | 加密/配置丢失 | 低 | 高 | Keychain/配置路径零改动；确认语义保留 | SecurityCore 套件 + FR-090 夹具 |
-| 全局快捷键回归 | 低 | 中 | 引擎 REUSE；仅 UI 呈现 | ShortcutConfigurationTests + GlobalShortcutTests |
+| ~~全局快捷键回归~~ | 低 | 中 | ~~引擎 REUSE；仅 UI 呈现~~ — **REMOVED 2026-08-10**（001 FR-120/FR-121 移除，`GlobalShortcutTests`/`ShortcutConfigurationTests` 已删除） | — |
 | 权限行为变化 | 低 | 中 | 请求时机零改动 | PermissionFallbackIntegrationTests |
 | 大量笔记性能 | 低 | 中 | 数据路径不变；新增呈现实测 | PerformanceBaselineTests + SC-024 |
 | 彩色笔记对比度 | 中 | 中 | FR-031 断言 + FR-033 自动调整 | 对比度测试（浅/深 × 七色 × 组合） |

@@ -39,11 +39,9 @@
   - 高度：内容驱动，72–128 pt 界（SC-022）；宽度 180–228 pt 公式（FR-021）。
 - **新增呈现规则**：密度常量入 DesignSystem（`NoteCardMetrics`：minWidth 180、spacing 12、columnFormula、heightBounds）。
 
-### ShortcutBinding（快捷键条目）
+### ~~ShortcutBinding（快捷键条目）~~ — REMOVED 2026-08-10
 
-- **来源**：`LocalPreferences.globalShortcuts.<action>`（JSON，不变）。
-- **字段**：action（7 项，001 FR-120 不变）、keyCode/modifiers（Carbon）、当前值/录制状态/冲突状态（录制器 UI 状态，运行时可变，不入库）。
-- **呈现**：原生快捷键偏好形态（FR-052）：当前值可见、录制状态明确、可重置/清除、冲突报错不静默替换（001 FR-121 语义）。
+全局快捷键随 001 FR-120/FR-121 移除：`LocalPreferences.globalShortcuts.<action>` 键、录制器 UI 状态与"原生快捷键偏好形态"呈现不再存在（已删除，不再迁移）。
 
 ### WindowPresentation（窗口呈现配置）
 

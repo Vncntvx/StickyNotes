@@ -166,7 +166,7 @@ ProjectRoot/
 │       │   ├── AssetStore/      # Atomic asset writes, thumbnails, hashing
 │       │   ├── SecurityCore/    # Vault, KDF, key wrap, AES-GCM envelopes
 │       │   ├── SyncCore/        # Provider protocol, WebDAV, S3-SigV4, engine
-│       │   └── SystemBridge/    # NSWindow/Dock/shortcuts/bookmarks/permissions
+│       │   └── SystemBridge/    # NSWindow/Dock/capture/bookmarks/permissions
 │       └── Tests/
 │           ├── DomainTests/
 │           ├── PersistenceTests/
@@ -585,16 +585,15 @@ decoder actor. All cross-actor handoffs pass `Sendable` value types or
 - URL routing: `stickynotes://note/<uuid>`, `stickynotes://new`,
   `stickynotes://search` (placeholder scheme until final bundle id chosen).
 
-### Global shortcuts
+### Global shortcuts — REMOVED 2026-08-10
 
-- Thin native adapter. Prefer a system-level registration API that needs no
-  Accessibility permission, detects registration failure, can
-  unregister/re-register, supports user config, detects conflicts when possible.
-  Direction: Carbon `RegisterEventHotKey` family (the long-standing macOS API
-  for global hotkeys without Accessibility permission) — exact API + Swift 6
-  strict-concurrency interop to be confirmed in Milestone 0 (see research.md).
-  No global event tap for ordinary shortcuts. Shortcuts stored outside sync'd
-  note data (local settings).
+- ~~Thin native adapter over Carbon `RegisterEventHotKey` (no Accessibility
+  permission, conflict detection, unregister/re-register), shortcuts stored
+  outside sync'd note data.~~
+- **Removed** with FR-120/FR-121 (user decision — system-wide conflicts with
+  other applications). The app registers no global hotkeys; the Settings
+  General panel holds only the Dock toggle; in-app menu shortcuts (⌘N/⌘F/⌘W/⌘,)
+  are unaffected. `SystemBridge` no longer links Carbon for hotkeys.
 
 ### Permissions
 
@@ -872,8 +871,9 @@ Validate highest-risk assumptions BEFORE broad feature work depends on them:
 - Per-window floating level.
 - App Group GRDB access from Widget Extension.
 - ScreenCaptureKit single-frame capture + region overlay.
-- Native global-shortcut registration (no Accessibility permission).
 - Confirm Xcode 26.x / Swift 6.3 baseline + select + integrate Argon2id package.
+  (Global-shortcut prototype removed from the milestone 2026-08-10 — the
+  feature is withdrawn, FR-120/FR-121.)
 
 ### Milestone 1 — Local core
 
@@ -891,9 +891,10 @@ SecurityCore present but inert.)
 ### Milestone 2 — System integration
 
 Screenshot capture; embedded clipboard images; screenshot viewer; widgets
-(including FR-110a change-driven timeline refresh); App Intents; global
-shortcuts; permission UI; display restoration; accessibility polish; zh-Hans
-+ en localization completion per FR-180a.
+(including FR-110a change-driven timeline refresh); App Intents;
+permission UI; display restoration; accessibility polish; zh-Hans
++ en localization completion per FR-180a. (Global shortcuts removed from this
+milestone 2026-08-10 — feature withdrawn.)
 
 ### Milestone 3 — Encrypted synchronization
 

@@ -12,7 +12,7 @@
 
 | 产品区域 | 现有实现 | 关键文件/类型 | 计划影响 |
 |---|---|---|---|
-| 入口 | 4 个场景：`MenuBarExtra`(.window)、`Settings`、`Window("About…")`、`Window("Help…")` | `App/StickyNotesApp.swift`（AppDelegate + bootstrap + `wireGlobalShortcuts` + 窗口 fallback `openSettingsWindow` 等） | REFACTOR：加菜单/命令体系；移除对 footer 的依赖；`searchAll`/`toggleLibrary` 补全行为 |
+| 入口 | 4 个场景：`MenuBarExtra`(.window)、`Settings`、`Window("About…")`、`Window("Help…")` | `App/StickyNotesApp.swift`（AppDelegate + bootstrap + 窗口 fallback `openSettingsWindow` 等；`wireGlobalShortcuts` 已于 2026-08-10 移除） | REFACTOR：加菜单/命令体系；移除对 footer 的依赖；`searchAll`/`toggleLibrary` 补全行为 |
 | Library 窗口 | 系统 MenuBarExtra 窗口 + 定位探针 | `Features/Library/MenuBarLibraryScene.swift`、`MenuBarLibraryWindowProbe`、`MenuBarWindowFrame`（SystemBridge） | REFACTOR：窗口不变，内部改原生工具栏 |
 | Library 结构 | header（新建 + Notes/Trash 分段）+ 自定义搜索行 + 卡片网格 + footer | `MenuBarLibraryScene`、`LibrarySearchView`、`LibraryCardGrid`、`SyncStatusView`、`LibraryModel` | REPLACE 结构：单一原生工具栏；移除 footer |
 | 卡片网格 | `LazyVGrid`，固定 220×160/12pt/3-2-1 列 | `LibraryCardGrid.swift`、`NoteCardView.swift`、`CardProjection`（Persistence） | REFACTOR：FR-021 公式化自适应 + 密度 72–128 |
@@ -22,7 +22,7 @@
 | 笔记窗口 | 手动 `NSWindow` + `NSHostingView`，透明标题栏保留红绿灯 | `Features/NoteWindow/NoteWindowCoordinator.swift`、`NoteWindowHostModel.swift`、`NoteControlsView.swift`、`NoteWindowBridge`/`WindowLevelBridge`/`DisplayChangeBridge`（SystemBridge） | REFACTOR：内容定位/失活外观/浮动控件玻璃呈现；无窗口重写 |
 | 编辑器 | `NSTextView`（NSViewRepresentable；TextEditor 绑定在 27 beta 失效，文档化），"Add Block" Menu 常驻编辑器上方 | `Features/Editor/RichTextView.swift`、`RichTextBlockView.swift`、`TodoBlockView.swift`、`CodeBlockView.swift`、`ScreenshotBlockView.swift`、`BlockContainer.swift`、`EditorAppBridge.swift` | REFACTOR：Add Block 降权 → 插入点上下文控件 + 菜单/键盘 |
 | 设置 | `Settings` 场景 + NSWindow fallback（标题匹配 hack）；分段控件导航（刻意不用 TabView）；四个面板 | `Features/Settings/SettingsView.swift`、`SyncSettingsView.swift`、`FontPreferenceView.swift`、权限面板 | REFACTOR：原生工具栏式标签导航；同步面板重组（FR-053/054 + clarify）；字体单概念呈现 |
-| 快捷键 | Carbon `RegisterEventHotKey`；冲突 `kEventHotKeyExists`；录制器（本地 keyDown monitor）；持久化 UserDefaults JSON | `GlobalShortcuts`（SystemBridge）、`ShortcutRecorderRow`（SettingsView.swift）、`LocalPreferences.globalShortcuts.<action>` | REUSE 引擎；UI 保持原生形态（FR-052） |
+| 快捷键 | ~~Carbon `RegisterEventHotKey`；冲突 `kEventHotKeyExists`；录制器（本地 keyDown monitor）；持久化 UserDefaults JSON~~ — **REMOVED 2026-08-10**（001 FR-120/FR-121 移除；`GlobalShortcuts`（SystemBridge）、`ShortcutRecorderRow`（SettingsView.swift）、`LocalPreferences.globalShortcuts.<action>` 均已删除） | — | — |
 | 权限 | `CGPreflightScreenCaptureAccess`/`CGRequestScreenCaptureAccess`/`AXIsProcessTrusted`；懒请求；Settings URL | `PermissionService`（SystemBridge）、权限面板 | REUSE |
 | 菜单/命令 | **无任何 `CommandGroup`**；动作都是视图内按钮（New Note ⌘N、Quit ⌘Q 在 footer 等） | `StickyNotesApp.swift`、各视图 | 新增：完整命令体系（FR-072/SC-017） |
 | 深链 | `stickynotes://note/<uuid>`/`new`/`search`；`search` 为 no-op | `DeepLinkRouter.swift` | REFACTOR：search 深链补全搜索聚焦 |
@@ -40,7 +40,7 @@
 | AssetStore | 资产字节/缩略图 256px/去重 | `AssetStore`、`ThumbnailGenerator` | REUSE（不改） |
 | SecurityCore | Argon2id/AES-GCM/Keychain | `VaultBootstrapService`、`ObjectCrypto`、`KeychainService`（service `local.stickynotes.security`）、`RememberedUnlock`（untilLockOrRestart + boot 时间戳） | REUSE（不改；语义已符合 FR-162a） |
 | SyncCore | 单仓库引擎/冲突副本/墓碑/提供者 | `SyncEngine`（actor）、`SyncSummary`（`historyAgedOutDetected`、`conflictCopiesCreated`）、`OfflineReconciler`、`ManifestStore`、`WebDAVProvider`/`S3Provider`、`ProviderError`（`isTransient`） | REUSE（不改） |
-| SystemBridge | Carbon 热键/捕获/窗口桥/权限/书签 | `GlobalShortcuts`、`WindowCapture`、`RegionCapture`、`MenuBarWindowFrame`、`NoteWindowBridge`、`WindowLevelBridge`、`DockActivationBridge`、`DisplayChangeBridge`、`PermissionService`、`SecurityScopedBookmarks` | REUSE（不改） |
+| SystemBridge | 窗口桥/捕获/权限/书签（Carbon 热键已于 2026-08-10 随全局快捷键移除） | `WindowCapture`、`RegionCapture`、`MenuBarWindowFrame`、`NoteWindowBridge`、`WindowLevelBridge`、`DockActivationBridge`、`DisplayChangeBridge`、`PermissionService`、`SecurityScopedBookmarks` | REUSE（不改） |
 
 ### 1.3 其他
 
@@ -79,7 +79,7 @@
 | D5 | "Add Block" 常驻编辑器上方首屏控件 | C（FR-043 + clarify：插入点控件+菜单/键盘，无 `/` 命令） | Phase 3 上下文插入 |
 | D6 | 设置用分段控件导航（非原生 Settings 导航） | C（FR-050 + clarify：工具栏式标签导航） | Phase 4 原生导航 |
 | D7 | 无菜单栏命令（`CommandGroup` 缺失）；Quit 依赖 footer | C（FR-072/SC-017） | Phase 1 命令体系 + 菜单 |
-| D8 | "Search All Notes" 全局快捷键与 `stickynotes://search` 为 no-op（仅激活） | B（呈现/行为补全：动作身份不变，聚焦搜索框是动作的自然完成；001 FR-120 动作保留并可改进） | Phase 2 聚焦 Library 搜索框 |
+| D8 | "Search All Notes" 全局快捷键与 `stickynotes://search` 为 no-op（仅激活） | B（呈现/行为补全：动作身份不变，聚焦搜索框是动作的自然完成；001 FR-120 动作保留并可改进） | Phase 2 聚焦 Library 搜索框 — **2026-08-10 更新**：全局快捷键已移除；仅 `stickynotes://search` 深链承担该动作 |
 | D9 | 永久删除（卡片 "Delete Forever"）无确认；Empty Trash 确认不可达（死代码 `TrashView`） | C（FR-026 + 001 FR-014b 保留） | Phase 2 补确认对话框 |
 | D10 | 内置颜色仅 6 色单值（canonical hex）；无浅/深设计对 | C（FR-030–033） | Phase 1 语义调色板（呈现层，不入库） |
 | D11 | 字体面板呈现两个字段（英文/中文），需按 FR-055 呈现单"笔记字体"概念 | B（呈现层；存储不变） | Phase 4 |

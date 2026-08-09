@@ -305,20 +305,25 @@ opening the screenshot viewer to zoom, copy, and navigate between screenshots.
 
 ---
 
-### User Story 8 - Widgets, Global Shortcuts, Dock, and Permissions (Priority: P2)
+### User Story 8 - Widgets, Dock, and Permissions (Priority: P2)
 
 A user adds a desktop widget showing a note or todos, toggles todos from the
-widget, configures global shortcuts, hides the Dock icon while keeping all
-functions reachable, and grants permissions only when actually needed.
+widget, hides the Dock icon while keeping all functions reachable, and grants
+permissions only when actually needed.
 
-**Why this priority**: Widgets, shortcuts, and Dock behavior extend the
-always-available surface. Permission management is grouped here because widgets
-and shortcuts may surface the same features that need permissions.
+> **REMOVED 2026-08-10 — global shortcuts (FR-120/FR-121)**: the product no
+> longer offers global hotkeys. No Carbon hotkey is registered at launch and
+> the Settings General panel holds only the Dock toggle. Rationale (user
+> decision): the shortcuts collided with shortcuts of other applications and
+> were unwanted. In-app menu shortcuts (⌘N, ⌘F, ⌘W, ⌘, …) are unaffected.
+
+**Why this priority**: Widgets and Dock behavior extend the always-available
+surface. Permission management is grouped here because widgets may surface the
+same features that need permissions.
 
 **Independent Test**: Can be tested by adding each widget form, marking a todo
-from a widget, configuring a global shortcut, disabling the Dock icon, and
-verifying Settings/Help/About/sync status/Quit remain reachable from the
-menu-bar interface.
+from a widget, disabling the Dock icon, and verifying Settings/Help/About/sync
+status/Quit remain reachable from the menu-bar interface.
 
 **Acceptance Scenarios**:
 
@@ -334,12 +339,14 @@ menu-bar interface.
 3. **Given** a note, **When** the user excludes it from widgets, **Then** its
    title, body, todo text, images, screenshots, and summaries do not appear in
    widget timelines, previews, placeholders, or snapshots.
-4. **Given** settings, **When** the user configures a global shortcut, **Then**
+4. ~~**Given** settings, **When** the user configures a global shortcut, **Then**
    available actions include opening/closing the menu-bar library, creating a
    blank note, capturing a region into a new note, selecting a window into a new
    note, creating a note from clipboard contents, searching all notes, and
    showing or hiding open note windows; the application detects conflicts and
-   does not silently replace an existing system or application shortcut.
+   does not silently replace an existing system or application shortcut.~~
+   **REMOVED 2026-08-10 with FR-120/FR-121** (no global hotkeys in the
+   product; scenario renumbered: 5→4, 6→5 below).
 5. **Given** the Dock icon is enabled by default, **When** the user disables it
    in Settings, **Then** Settings, Help, About, synchronization status, and Quit
    remain reachable from the menu-bar interface.
@@ -517,7 +524,7 @@ cited FR.
 - Note appearance (colors, transparency, text size, Always on Top, position
   memory) and Trash with 30-day recovery.
 - Markdown-style input shortcuts with single-Undo restoration.
-- Native desktop widgets (multiple forms), global shortcuts, Dock toggling, and
+- Native desktop widgets (multiple forms), Dock toggling, and
   graceful permission management.
 - Optional end-to-end encrypted synchronization to exactly one WebDAV or
   S3-compatible repository, with non-destructive conflict handling and safe
@@ -586,20 +593,21 @@ cited FR.
   closing MUST NEVER delete the note.
 - **FR-007**: Note windows MUST NOT be automatically restored when the
   application is relaunched.
-- **FR-007a**: When a new note window is created (from the menu-bar library,
-  a global shortcut, a deep link, or a widget action), the new note window
-  MUST immediately receive keyboard focus so the user can begin typing
-  without an extra click (US1 capture intent). The menu-bar library window,
-  if open, MUST remain open but MUST yield focus to the new note window — it
-  MUST NOT auto-dismiss on note creation, so the user can create several
-  notes in succession without re-invoking the menu-bar icon. When a global
-  shortcut creates a new note while another application is focused, the
-  StickyNotes application MUST be activated and the new note window MUST
-  become the key window. Opening an already-existing note (FR-005) follows
-  the same focus rule: focus the existing window rather than creating a
-  duplicate. This makes note-creation focus behavior objectively testable
-  and supports SC-003 (new note window presented within 200 ms) without a
-  post-creation focus step that would add latency.
+- **FR-007a**: When a new note window is created (from the menu-bar library, a
+  deep link, or a widget action), the new note window MUST immediately receive
+  keyboard focus so the user can begin typing without an extra click (US1
+  capture intent). The menu-bar library window, if open, MUST remain open but
+  MUST yield focus to the new note window — it MUST NOT auto-dismiss on note
+  creation, so the user can create several notes in succession without
+  re-invoking the menu-bar icon. Creating a note from a menu command (File >
+  New Note) while another application is focused MUST activate the StickyNotes
+  application and make the new note window the key window. (Global-shortcut
+  clause removed 2026-08-10 — no global hotkeys remain.) Opening an
+  already-existing note (FR-005) follows the same focus rule: focus the
+  existing window rather than creating a duplicate. This makes note-creation
+  focus behavior objectively testable and supports SC-003 (new note window
+  presented within 200 ms) without a post-creation focus step that would add
+  latency.
 - **FR-008**: The Dock icon MUST be enabled by default and MAY be disabled by
   the user in Settings; when disabled, Settings, Help, About, synchronization
   status, and Quit MUST remain reachable from the menu-bar interface.
@@ -625,8 +633,8 @@ cited FR.
 
 **Note lifecycle**
 
-- **FR-010**: The user MUST be able to create a blank note from the library and
-  create a blank note with a global keyboard shortcut.
+- **FR-010**: The user MUST be able to create a blank note from the library
+  and from the File menu (⌘N).
 - **FR-011**: The user MUST be able to open a note, edit without a Save button,
   close without deleting, reopen a hidden note, explicitly delete, restore from
   Trash, permanently delete, search active notes, change sorting, and manually
@@ -1140,14 +1148,21 @@ cited FR.
   sanitized "temporarily unavailable" placeholder per FR-140a — localized, no
   content, no note title — and MUST NOT imply that an excluded note exists.
 
-**Global shortcuts**
+**Global shortcuts — REMOVED 2026-08-10**
 
-- **FR-120**: The user SHOULD be able to configure global shortcuts for
+- ~~**FR-120**: The user SHOULD be able to configure global shortcuts for
   opening/closing the library, creating a blank note, capturing a region into a
   new note, selecting a window into a new note, creating a note from clipboard
-  contents, searching all notes, and showing or hiding open note windows.
-- **FR-121**: The application MUST detect shortcut conflicts and MUST NOT
-  silently replace an existing system or application shortcut.
+  contents, searching all notes, and showing or hiding open note windows.~~
+- ~~**FR-121**: The application MUST detect shortcut conflicts and MUST NOT
+  silently replace an existing system or application shortcut.~~
+
+Both requirements are withdrawn: the product registers no global hotkeys
+(user decision 2026-08-10 — system-wide conflicts with other applications;
+in-app menu shortcuts are unaffected). The Carbon adapter
+(`GlobalShortcuts`), the Settings recorder UI, and the
+`LocalPreferences.globalShortcuts.*` keys were removed. The corresponding
+tasks (T096/T102/T145/T150/T169 shortcuts part/T296) are closed as removed.
 
 **Permissions and graceful degradation**
 
@@ -1550,7 +1565,7 @@ cited FR.
 - The system widget platform supports the widget forms described; where a form
   is unavailable on a given OS configuration, the product provides the closest
   available form and degrades gracefully.
-- Global shortcuts and Dock behavior follow standard macOS capabilities and
+- Dock behavior follows standard macOS capabilities and
   permissions; where the system restricts an action, the product explains the
   restriction rather than working around it insecurely.
 - OCR is not part of the initial release (see Non-goals); until then,
