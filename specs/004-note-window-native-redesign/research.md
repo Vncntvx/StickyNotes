@@ -81,8 +81,16 @@
 - **同心圆角 API**：唯一自定义浮动面（格式化行）不靠近窗口角 → 显式判定"本特性不需要"。
 - **`NSToolbarItem.Style`/`badge`**：无产品需求 → 不用。
 
-## 4. 关键技术决策
+## 3.2 Spike 结论（T011，2026-08-10 macOS 27 实测）
 
+标准 `NSWindow` + `.fullSizeContentView` + `titlebarAppearsTransparent` + `NSToolbar` 组合验证（R1 缓解）：
+
+1. **组合可用**：`styleMask` 含 `.fullSizeContentView` 时内容层延伸至标题栏之下；红绿灯保持标准（生命周期套件 `snapshotNoteWindowKeepsStandardTrafficLightChrome` 断言 through `.titled/.closable/.resizable`）；`window.title` 经 `titleVisibility = .visible` 正常渲染；工具栏项/溢出/优先级全部系统行为。
+2. **发现 min-size 传播陷阱**：NSHostingView 会把 SwiftUI 内在最小尺寸（ScrollView → 约 0×52）在首次布局后传播覆盖 `contentMinSize`（探针实测：orderFront 后 contentMinSize 变为 (0.0, 52.0)）。缓解：`open()` 中 orderFront 后同步 `layoutSubtreeIfNeeded()` 再重设 `contentMinSize = (220,140)`，并在 `windowDidResize` 复检（T012 已落地；T004 断言锁死）。
+3. **工具栏挂载顺序**：min size 必须在 `window.toolbar = …` 挂载之后设置（AppKit 挂载瞬间会用工具栏默认值覆盖一次）。
+4. 本场景为标准 NSWindow，与 Library spike 失败（MenuBarExtra 私有窗口类）无关——组合可行性确认。
+
+## 4. 关键技术决策
 - **D1 工具栏宿主**：新建 `NoteToolbarController`（@MainActor，App 层，每窗口一个），由 `NoteWindowCoordinator` 创建/持有/释放（镜像 `windowDelegates` 字典模式）。理由：协调器已 657 行且职责杂；NSToolbar 生命周期与窗口强绑定；controller 与 delegate 同生共死。**不引入**自定义 NSWindow 子类、不新建窗口框架。
 - **D2 标题**：`window.title` = 派生标题（手动标题 → 内容首行 → 本地化兜底"无标题笔记"），`titleVisibility = .visible`；标题编辑移动到内容顶部新标题输入框（替换 NoteControlsView.titleField）；同步方向 host→window（协调器方法，NoteWindowContent `.onChange` 触发）。
 - **D3 透明度统一**：`ReadableTheme.windowBackground` 增加 `note.transparency` 应用，与纸面一致；不碰 `alphaValue`。

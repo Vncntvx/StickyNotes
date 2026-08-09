@@ -398,6 +398,12 @@ close（红绿灯/⌘W/菜单）
 
 - 无产品级阻塞。规划级微决策（已定默认，实施可微调）：标题空兜底文案"无标题笔记"（本地化，zh-Hans/en）；新笔记打开焦点落点（默认：内容顶部标题框，Phase 1 审计确认现状后锁定）；工具栏按钮图标集（pin/pin.fill、paintpalette、plus、ellipsis.circle——全部 SF Symbols，spec FR-029 语义内）。
 
+**T003 审计结论（2026-08-10 记录）**：
+
+- **首行/摘要提取辅助**：`NoteSummary.generatedSummary(for:)`（`Packages/StickyCore/Sources/Domain/NoteSummary.swift:32`，maxLength 80 裁剪）与 `displayTitle`（:75）。标题派生按 spec FR-003 语义需要**完整首行**（不裁剪，标题栏系统省略号负责截断）——故 App 层新增 `NoteWindowDerivations.firstMeaningfulLine(blocks:)` 与 `firstLine(of:)`（`App/Sources/Features/NoteWindow/NoteWindowDerivations.swift`），提取语义镜像 NoteSummary（首非空 richText/todo/code 行 → 文件显示名/说明/占位），StickyCore 零改动。
+- **新笔记窗口焦点落点**：现状为 `open(noteId:)` 末尾 `window.makeKeyAndOrderFront` + `NSApplication.activate`（`NoteWindowCoordinator.swift` open() 尾部），无显式 first-responder 设置——焦点实际落到 SwiftUI 首个可聚焦元素（新设计下为内容顶部标题框，符合 FR-003 默认）。锁定：不在 open() 中强制设置 first responder（避免与 IME/焦点纪律冲突），标题框为自然落点。
+- **T012 追加事实**：macOS 27 实测——NSHostingView 会把自己的 SwiftUI 内在最小尺寸（ScrollView → 约 0×52）传播覆盖 `contentMinSize`；`open()` 必须在前台布局后同步重设（`layoutSubtreeIfNeeded` + 重设，`windowDidResize` 中复检）。已实现并锁死（T004 断言 220×140）。
+
 ## 13. /speckit.tasks 就绪评估
 
 **已解决（无需实现者自行发明）**：工具栏架构（§3.1-3.3）、项优先级映射（§3.2 表）、状态所有权（§2.3）、标题行为（§3.4）、AppKit/SwiftUI 边界（§2.1-2.2）、Liquid Glass 范围（§5，唯一自定义面 + 明确拒绝清单）、可用性策略（§6 矩阵 + research §3 证据）、响应式策略（§9.1 + 系统溢出）、迁移顺序（§8）、回归标准（§9.3）。

@@ -48,6 +48,10 @@ public final class NoteWindowCoordinator {
     /// 003 T032: per-window hosts, keyed by noteId — used to dispatch the
     /// Edit/Insert menu commands to the key note window.
     @ObservationIgnored private var hosts: [UUID: NoteWindowHostModel] = [:]
+    /// 004 T016 (FR-006): per-window toolbar controllers (AppKit NSToolbar
+    /// lifecycle objects — created with the window, released with the
+    /// delegate, mirroring `windowDelegates`).
+    @ObservationIgnored private var toolbars: [UUID: NoteToolbarController] = [:]
 
     public init(environment: AppEnvironment) {
         self.environment = environment
@@ -145,15 +149,6 @@ public final class NoteWindowCoordinator {
         Task { await host.captureRegion() }
     }
 
-    private func keyHost() -> NoteWindowHostModel? {
-        if let keyNoteId = hosts.keys.first(where: {
-            NoteWindowBridge.registeredWindow(for: $0)?.isKeyWindow == true
-        }) {
-            return hosts[keyNoteId]
-        }
-        return hosts.keys.first.flatMap { hosts[$0] }
-    }
-
     /// Opens (or focuses) the note's window. Returns the window.
     @discardableResult
     public func open(noteId: UUID) async -> NSWindow? {
@@ -172,33 +167,30 @@ public final class NoteWindowCoordinator {
 
         let window = NSWindow(
             contentRect: NSRect(x: 200, y: 200, width: 420, height: 480),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
-        // FR-030a (T298): note-paper chrome. The titlebar appears
-        // TRANSPARENT and the window background is the OPAQUE note color,
-        // so the titlebar area renders as note-colored paper (never a
-        // white bar, never see-through) with the traffic lights on it —
-        // Apple Sticky Notes style. User decisions 2026-08-09: a standard
-        // white titlebar was rejected as ugly; a clear background made the
-        // top show the desktop. The TITLE TEXT stays hidden in the
-        // titlebar — the editable title field lives in the controls row,
-        // and showing it in BOTH places duplicated it (screenshot
-        // 2026-08-09).
-        window.title = note.title ?? ""
+        // 004 (T012, FR-001/FR-002): standard macOS titlebar + system
+        // window toolbar as the ONLY top-level chrome. `.fullSizeContentView`
+        // extends the note paper under the titlebar (single content layer —
+        // FR-018); the titlebar stays transparent so the note color + its
+        // transparency (T014) render continuously behind the system glass.
+        // The former FR-030a black-bar regression is gone: the window
+        // background and the SwiftUI paper layer compose the same color.
+        window.title = NoteWindowDerivations.deriveWindowTitle(
+            noteTitle: note.title,
+            firstLine: NoteWindowDerivations.firstMeaningfulLine(blocks: [])
+        )
         window.titlebarAppearsTransparent = true
-        window.titleVisibility = .hidden
+        window.titleVisibility = .visible
         window.backgroundColor = ReadableTheme.windowBackground(for: note)
         window.isReleasedWhenClosed = false
         window.hasShadow = true
-        // 003 T034 (FR-071): keep the note usable at compact sizes — a
-        // minimum content size preserves typing + traffic lights without
-        // exposing a full toolbar. 300pt wide guarantees the essential
-        // control row (title + color + pin + close) always fits — at
-        // 260pt the palette icon clipped and the close button vanished
-        // (verified 2026-08-09).
-        window.contentMinSize = NSSize(width: 300, height: 200)
+        // 004 T012 (FR-017a/Q1): 220pt is the AppKit-enforced real minimum
+        // width — a first-class narrow state, not a stress-test width.
+        // Set AFTER the toolbar is attached (a toolbar momentarily
+        // overrides min-size with its own defaults; FR-017a wins).
         NoteWindowBridge.applyCollectionBehavior(window, alwaysOnTop: note.alwaysOnTop)
         _ = NoteWindowBridge.register(window, noteId: noteId)
         WindowLevelBridge.apply(window, alwaysOnTop: note.alwaysOnTop)
@@ -206,6 +198,15 @@ public final class NoteWindowCoordinator {
         let host = NoteWindowHostModel(noteId: noteId, environment: environment)
         // 003 T032: retain the host for Edit/Insert menu dispatch.
         hosts[noteId] = host
+        // 004 T016: toolbar controller + system toolbar (before the content
+        // is hosted so the first layout pass sees the toolbar).
+        let toolbarController = NoteToolbarController(noteId: noteId, host: host, coordinator: self)
+        toolbars[noteId] = toolbarController
+        window.toolbar = toolbarController.toolbar
+        toolbarController.syncState()
+        // FR-017a/Q1: enforced AFTER the toolbar attach (AppKit resets the
+        // min size to its toolbar-derived default during attachment).
+        window.contentMinSize = NSSize(width: 220, height: 140)
         let content = NoteWindowContent(noteId: noteId, host: host, environment: environment, coordinator: self)
         // FR-030a: the 8-pt corner radius, 1-pt subtle border and rounded
         // clipping are drawn IN SwiftUI (NoteWindowContent.background) —
@@ -240,6 +241,13 @@ public final class NoteWindowCoordinator {
         // FR-007a: the new note window receives keyboard focus immediately.
         window.makeKeyAndOrderFront(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
+        // FR-017a/Q1 (verified 2026-08-10): the SwiftUI hosting view
+        // propagates its intrinsic minimum (ScrollView → ~0) during the
+        // first layout pass, overriding the min set earlier. Force that
+        // pass, then enforce the real 220×140 minimum synchronously; the
+        // delegate re-asserts it after user resizes.
+        window.contentView?.layoutSubtreeIfNeeded()
+        window.contentMinSize = NSSize(width: 220, height: 140)
         return window
     }
 
@@ -249,6 +257,8 @@ public final class NoteWindowCoordinator {
         NoteWindowBridge.unregister(noteId: noteId)
         windowDelegates[noteId] = nil
         hosts[noteId] = nil
+        toolbars[noteId]?.teardown()
+        toolbars[noteId] = nil
     }
 
     /// Whether a note window is currently open.
@@ -288,6 +298,116 @@ public final class NoteWindowCoordinator {
     public func releaseWindowDelegate(noteId: UUID) {
         windowDelegates[noteId] = nil
         hosts[noteId] = nil
+        // 004 T015 (contracts §1): the toolbar controller lives and dies
+        // with the delegate — released on the same path (its popover is
+        // closed, its observation loop cancelled).
+        toolbars[noteId]?.teardown()
+        toolbars[noteId] = nil
+    }
+
+    // MARK: - 004 (T013, FR-003): window title
+
+    /// Pushes the derived window title (manual title → first content line →
+    /// localized fallback) from the host to `window.title`. host→window
+    /// only (FR-003; the titlebar never writes back).
+    public func updateWindowTitle(noteId: UUID) {
+        guard let host = hosts[noteId],
+              let window = NoteWindowBridge.registeredWindow(for: noteId) else { return }
+        window.title = NoteWindowDerivations.deriveWindowTitle(
+            noteTitle: host.note?.title,
+            firstLine: NoteWindowDerivations.firstMeaningfulLine(blocks: host.blocks)
+        )
+    }
+
+    // MARK: - 004 (FR-011): note-level actions shared by the toolbar More
+    // menu and the content context menu (single implementation, multiple
+    // presentations).
+
+    /// Duplicates the note (FR-022a) — same behavior as the former
+    /// NoteControlsView action.
+    public func duplicateNote(noteId: UUID) {
+        guard let host = hosts[noteId],
+              let note = host.note,
+              let repo = environment.persistence.noteRepository else { return }
+        let duplicated = NoteDuplicator.duplicate(note, blocks: host.blocks, deviceId: DeviceIdentity.current.id)
+        Task {
+            do {
+                try await repo.create(duplicated.note)
+                for block in duplicated.blocks {
+                    try await repo.insert(block)
+                }
+                await environment.syncCoordinator?.localContentChanged()
+            } catch {
+                // FR-011a: non-blocking; the library surface owns status text.
+            }
+        }
+    }
+
+    /// Copies the note as Markdown to the pasteboard (FR-031 semantics).
+    public func copyNoteAsMarkdown(noteId: UUID) {
+        guard let host = hosts[noteId], let note = host.note else { return }
+        NoteExportImport.copyNoteAsMarkdown(note: note, blocks: host.blocks)
+    }
+
+    /// Exports the note as JSON (FR-031 semantics).
+    public func exportNoteAsJSON(noteId: UUID) {
+        guard let host = hosts[noteId], let note = host.note else { return }
+        _ = NoteExportImport.exportNoteAsJSON(note: note, blocks: host.blocks)
+    }
+
+    /// Moves the note to Trash (FR-014): closes the open window immediately
+    /// and presents the localized FR-009a deletion toast.
+    public func moveToTrash(noteId: UUID) {
+        guard let repo = environment.persistence.noteRepository else { return }
+        Task {
+            try? await repo.trash(id: noteId, deviceId: DeviceIdentity.current.id)
+            await environment.syncCoordinator?.localContentChanged()
+            closeAll(noteId: noteId)
+            deletionToast(String(localized: "Moved to Trash"))
+        }
+    }
+
+    /// The key note window's host (menu command dispatch — 003 T032).
+    public func keyHost() -> NoteWindowHostModel? {
+        if let keyNoteId = hosts.keys.first(where: {
+            NoteWindowBridge.registeredWindow(for: $0)?.isKeyWindow == true
+        }) {
+            return hosts[keyNoteId]
+        }
+        return hosts.keys.first.flatMap { hosts[$0] }
+    }
+
+    /// 004 T021 (FR-007/FR-026): View menu "Always on Top" — toggles the
+    /// KEY note window's pin through the single entry point.
+    public func toggleAlwaysOnTopInKeyWindow() {
+        guard let noteId = hosts.keys.first(where: {
+            NoteWindowBridge.registeredWindow(for: $0)?.isKeyWindow == true
+        }) else { return }
+        toggleAlwaysOnTop(noteId: noteId)
+    }
+
+    /// Toggles the pin of a note (host persists, coordinator applies the
+    /// window behavior).
+    public func toggleAlwaysOnTop(noteId: UUID) {
+        guard let host = hosts[noteId], var note = host.note else { return }
+        note.alwaysOnTop.toggle()
+        host.updateAppearance(note)
+        updateAlwaysOnTop(noteId: noteId)
+    }
+
+    /// 004 T040 (FR-012): Format menu commands — applies marks to the key
+    /// window's ACTIVE editor (NSTextView is the authority).
+    public func applyMarksInKeyWindow(_ marks: Set<RichTextMark>) {
+        let noteIds = Array(hosts.keys)
+        guard let bridge = EditorSelectionContext.bridge(forKeyWindow: noteIds) else { return }
+        bridge.applyMarks(marks)
+    }
+
+    /// 004 T040 (FR-043a): Format menu text-size — whole-note size.
+    public func setTextSizeInKeyWindow(_ size: Int) {
+        guard let host = keyHost(), var note = host.note else { return }
+        note.textSize = NoteAppearance.TextSizeBounds.clamped(size)
+        host.updateAppearance(note)
     }
 
     // MARK: - FR-032/FR-033 window frames (T289)
@@ -366,12 +486,23 @@ private final class NoteWindowDelegate: NSObject, NSWindowDelegate {
 
     func windowDidResize(_ notification: Notification) {
         saveFrame(from: notification)
+        // FR-017a (004 T012): re-assert the enforced minimum after any
+        // layout-driven change (SwiftUI may re-propagate its intrinsic min).
+        if let window = notification.object as? NSWindow {
+            window.contentMinSize = NSSize(width: 220, height: 140)
+        }
     }
 
     func windowWillClose(_ notification: Notification) {
         saveFrame(from: notification)
-        // Release the retained delegate (see windowDelegates — NSWindow's
-        // delegate reference is weak; the coordinator holds it).
+        // 004 T015 (contracts §7): EVERY close path (traffic light, ⌘W,
+        // closeAll, menu) must unregister — otherwise `focusExisting`
+        // revives the dead host window and pin/appearance/menu dispatch
+        // silently stop working. Aligned with the ⌘W path.
+        NoteWindowBridge.unregister(noteId: noteId)
+        // Release the retained delegate + toolbar controller (see
+        // windowDelegates — NSWindow's delegate reference is weak; the
+        // coordinator holds it).
         coordinator?.releaseWindowDelegate(noteId: noteId)
         // FR-141a flush + FR-012a auto-discard decision.
         guard let host else { return }
@@ -429,36 +560,12 @@ public struct NoteWindowContent: View {
         Group {
             if let host, let note = host.note {
                 VStack(spacing: 0) {
-                    NoteControlsView(
-                        note: note,
-                        onChanged: { updated in
-                            host.updateAppearance(updated)
-                            coordinator.updateNotePaper(noteId: noteId)
-                            coordinator.updateAlwaysOnTop(noteId: noteId)
-                        },
-                        onAddScreenshot: {
-                            captureScreenshot()
-                        },
-                        onAddFileReference: {
-                            pickAndInsertFileReference()
-                        },
-                        onDuplicate: {
-                            duplicateNote(host: host)
-                        },
-                        onCopyAsMarkdown: {
-                            NoteExportImport.copyNoteAsMarkdown(note: host.note ?? note, blocks: host.blocks)
-                        },
-                        onExport: {
-                            _ = NoteExportImport.exportNoteAsJSON(note: host.note ?? note, blocks: host.blocks)
-                        },
-                        onMoveToTrash: {
-                            moveToTrash(host: host)
-                        }
-                    )
-                    Divider()
                     RichTextBlockView(
                         note: note,
                         blocks: host.blocks,
+                        onAppearanceChange: { updated in
+                            host.updateAppearance(updated)
+                        },
                         onBlocksChanged: { newBlocks in
                             host.updateBlocks(newBlocks)
                         },
@@ -466,10 +573,10 @@ public struct NoteWindowContent: View {
                             host.updateBlocks(newBlocks, isStructural: true)
                         },
                         onInsertTodo: {
-                            Task { await host.insertTodoBlock() }
+                            Task { await host.insertTodoBlock(target: toolbarInsertionTarget()) }
                         },
                         onInsertCode: {
-                            Task { await host.insertCodeBlock() }
+                            Task { await host.insertCodeBlock(target: toolbarInsertionTarget()) }
                         },
                         onInsertFileReference: {
                             pickAndInsertFileReference()
@@ -530,6 +637,15 @@ public struct NoteWindowContent: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
+                // 004 T013 (FR-003): the window title follows the host —
+                // host→window only, on title edits and on block changes
+                // (first-line derivation).
+                .onChange(of: host.note?.title) {
+                    coordinator.updateWindowTitle(noteId: noteId)
+                }
+                .onChange(of: host.blocks) {
+                    coordinator.updateWindowTitle(noteId: noteId)
+                }
                 // FR-100 (T290): Finder drag-drop inserts a file-reference
                 // block (references, never copies — FR-102).
                 .onDrop(of: [UTType.fileURL.identifier], isTargeted: nil) { providers in
@@ -546,12 +662,25 @@ public struct NoteWindowContent: View {
                 // FR-091 capture choices (FR-131: permission on invocation).
                 .confirmationDialog("Add Screenshot", isPresented: $showCaptureMenu, titleVisibility: .visible) {
                     Button("Capture Region…") {
-                        Task { await host.captureRegion() }
+                        Task { await host.captureRegion(target: toolbarInsertionTarget()) }
                     }
                     Button("Capture Window…") {
-                        Task { await host.captureWindow() }
+                        Task { await host.captureWindow(target: toolbarInsertionTarget()) }
                     }
                     Button("Cancel", role: .cancel) {}
+                }
+                // 004 T018 (FR-029): ⌥C/⌥O/⌥T stepping shortcuts migrated
+                // from the removed NoteControlsView (keys + behavior
+                // unchanged).
+                .overlay(alignment: .topLeading) {
+                    shortcutOverlay
+                }
+                // 004 T019 (FR-031): note-level actions live on the content
+                // area's context menu (duplicate/copy/export/trash +
+                // appearance + widget) — the toolbar More menu presents the
+                // SAME actions.
+                .contextMenu {
+                    noteContextMenu
                 }
                 // FR-030a (T298): note-paper chrome in SwiftUI — 8-pt
                 // rounded background + 1-pt subtle border + rounded
@@ -567,6 +696,159 @@ public struct NoteWindowContent: View {
         .task {
             if let host { await host.load() }
         }
+    }
+
+    // MARK: - 004 T018 (FR-029): ⌥C/⌥O/⌥T keyboard stepping (migrated)
+
+    @ViewBuilder
+    private var shortcutOverlay: some View {
+        HStack(spacing: 0) {
+            Button("") { cycleNextColor() }
+                .keyboardShortcut("c", modifiers: .option)
+            Button("") { cycleNextOpacity() }
+                .keyboardShortcut("o", modifiers: .option)
+            Button("") { cycleNextTextSize() }
+                .keyboardShortcut("t", modifiers: .option)
+        }
+        .hidden()
+        .accessibilityHidden(true)
+    }
+
+    /// ⌥C: steps to the next palette color (wraps).
+    private func cycleNextColor() {
+        guard let host, var note = host.note else { return }
+        let colors = NotePaletteKey.allCases
+        let currentKey = NoteWindowDerivations.paletteKey(for: note) ?? .yellow
+        guard let current = colors.firstIndex(of: currentKey) else {
+            note = NoteWindowDerivations.note(applyingPaletteKey: colors[0], to: note)
+            host.updateAppearance(note)
+            return
+        }
+        note = NoteWindowDerivations.note(applyingPaletteKey: colors[(current + 1) % colors.count], to: note)
+        host.updateAppearance(note)
+        coordinator.updateNotePaper(noteId: noteId)
+    }
+
+    /// ⌥O: steps to the next opacity step (wraps).
+    private func cycleNextOpacity() {
+        guard let host, var note = host.note else { return }
+        let steps = NoteAppearance.OpacityBounds.allSteps
+        guard let current = steps.firstIndex(of: note.transparency) else {
+            note.transparency = steps[0]
+            host.updateAppearance(note)
+            return
+        }
+        note.transparency = steps[(current + 1) % steps.count]
+        host.updateAppearance(note)
+        coordinator.updateNotePaper(noteId: noteId)
+    }
+
+    /// ⌥T: steps to the next text size (wraps).
+    private func cycleNextTextSize() {
+        guard let host, var note = host.note else { return }
+        let sizes = NoteAppearance.TextSizeBounds.allSizes
+        guard let current = sizes.firstIndex(of: note.textSize) else {
+            note.textSize = sizes[0]
+            host.updateAppearance(note)
+            return
+        }
+        note.textSize = sizes[(current + 1) % sizes.count]
+        host.updateAppearance(note)
+    }
+
+    // MARK: - 004 T019 (FR-031): content-area context menu
+
+    @ViewBuilder
+    private var noteContextMenu: some View {
+        Button("Duplicate Note") { coordinator.duplicateNote(noteId: noteId) }
+        Button("Copy as Markdown") { coordinator.copyNoteAsMarkdown(noteId: noteId) }
+        Divider()
+        Button("Export as JSON…") { coordinator.exportNoteAsJSON(noteId: noteId) }
+        Button("Move to Trash") { coordinator.moveToTrash(noteId: noteId) }
+        Divider()
+        // T301 (FR-181): full-value appearance submenus — every color /
+        // opacity step / text size reachable without pointer hover (moved
+        // from the removed NoteControlsView).
+        Menu("Appearance") {
+            Menu("Note Color") {
+                ForEach(NotePaletteKey.allCases, id: \.self) { key in
+                    Button {
+                        applyPalette(key)
+                    } label: {
+                        HStack {
+                            Circle()
+                                .fill(NotePalette.dynamicColor(for: key))
+                                .frame(width: 10, height: 10)
+                            Text(NotePalette.displayName(for: key))
+                        }
+                    }
+                }
+            }
+            Menu("Background Opacity") {
+                ForEach(NoteAppearance.OpacityBounds.allSteps, id: \.self) { step in
+                    Button(NoteWindowDerivations.formatOpacityPercent(step)) {
+                        applyOpacity(step)
+                    }
+                }
+            }
+            Menu("Text Size") {
+                ForEach(NoteAppearance.TextSizeBounds.allSizes, id: \.self) { size in
+                    Button("\(size) pt") {
+                        applyTextSize(size)
+                    }
+                }
+            }
+        }
+        Divider()
+        // FR-112 (T280): widget eligibility lives here (note level).
+        Toggle(isOn: Binding(
+            get: { host?.note?.widgetEligible ?? true },
+            set: { newValue in
+                guard let host, var note = host.note else { return }
+                note.widgetEligible = newValue
+                host.updateAppearance(note)
+            }
+        )) {
+            Text("Allow in Widgets")
+        }
+        Divider()
+        // FR-110 (T306): the selected-note widget forms.
+        if WidgetNoteSelection.selectedNote() == noteId {
+            Button("Remove from Widget") {
+                WidgetNoteSelection.setSelectedNote(nil)
+            }
+        } else {
+            Button("Set as Widget Note") {
+                WidgetNoteSelection.setSelectedNote(noteId)
+            }
+        }
+    }
+
+    private func applyPalette(_ key: NotePaletteKey) {
+        guard let host, let note = host.note else { return }
+        host.updateAppearance(NoteWindowDerivations.note(applyingPaletteKey: key, to: note))
+        coordinator.updateNotePaper(noteId: noteId)
+    }
+
+    private func applyOpacity(_ step: Double) {
+        guard let host, var note = host.note else { return }
+        note.transparency = step
+        host.updateAppearance(note)
+        coordinator.updateNotePaper(noteId: noteId)
+    }
+
+    private func applyTextSize(_ size: Int) {
+        guard let host, var note = host.note else { return }
+        note.textSize = size
+        host.updateAppearance(note)
+    }
+
+    /// 004 US4: the current insertion target (editor caret/focus context
+    /// via the selection bridge; degraded to `.append`).
+    private func toolbarInsertionTarget() -> InsertionTarget? {
+        guard let host else { return nil }
+        let context = EditorSelectionContext.current(for: noteId)
+        return NoteWindowDerivations.resolveInsertionTarget(blocks: host.blocks, context: context)
     }
 
     private func load() async {
@@ -603,39 +885,8 @@ public struct NoteWindowContent: View {
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        Task { await host.insertFileReferenceBlock(url: url) }
-    }
-
-    // MARK: - FR-031 note-level actions (T282)
-
-    /// Duplicate note: new UUID, byte-identical blocks + appearance, fresh
-    /// manual sort key (FR-022a), lifecycle active (T248).
-    private func duplicateNote(host: NoteWindowHostModel) {
-        guard let note = host.note, let repo = environment.persistence.noteRepository else { return }
-        let duplicated = NoteDuplicator.duplicate(host.note ?? note, blocks: host.blocks, deviceId: DeviceIdentity.current.id)
-        Task {
-            do {
-                try await repo.create(duplicated.note)
-                for block in duplicated.blocks {
-                    try await repo.insert(block)
-                }
-                await environment.syncCoordinator?.localContentChanged()
-            } catch {
-                // FR-011a: non-blocking; the library surface owns status text.
-            }
-        }
-    }
-
-    /// Move to Trash (FR-014): closes the open window immediately and
-    /// presents the localized FR-009a deletion toast.
-    private func moveToTrash(host: NoteWindowHostModel) {
-        guard let repo = environment.persistence.noteRepository else { return }
-        Task {
-            try? await repo.trash(id: noteId, deviceId: DeviceIdentity.current.id)
-            await environment.syncCoordinator?.localContentChanged()
-            coordinator.closeAll(noteId: noteId)
-            coordinator.deletionToast(String(localized: "Moved to Trash"))
-        }
+        let target = toolbarInsertionTarget()
+        Task { await host.insertFileReferenceBlock(url: url, target: target) }
     }
 }
 

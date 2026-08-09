@@ -32,18 +32,23 @@ public enum ReadableTheme {
         )
     }
 
-    /// The OPAQUE note color as a dynamic NSColor, for the window
-    /// background. The transparent titlebar shows this color, so the whole
-    /// window — titlebar included — is note-colored paper (Apple Sticky
-    /// Notes style, FR-030a; verified 2026-08-09). Built-in keys resolve
-    /// through the palette per appearance; custom colors use the Domain
-    /// projection (FR-040a) at full opacity.
+    /// The note color as a dynamic NSColor for the window background, with
+    /// the note's transparency applied (004 T014, FR-018/FR-025). The
+    /// transparent titlebar shows this color, so the whole window —
+    /// titlebar included — is note-colored paper at the SAME alpha as the
+    /// SwiftUI paper layer: transparency<100% renders one continuous
+    /// content layer with no seam under the toolbar glass (the former
+    /// opaque titlebar strip is gone). Built-in keys resolve through the
+    /// palette per appearance; custom colors use the Domain projection
+    /// (FR-040a) at the note's opacity. `window.alphaValue` is NEVER
+    /// touched — the chrome must not fade with the paper (FR-021).
     public static func windowBackground(for note: Note) -> NSColor {
         if let paletteKey = NotePalette.paletteKey(for: note.colorKey) {
             let entry = NotePalette.entry(for: paletteKey)
             return NSColor(name: nil) { appearance in
                 let color = appearance.name == .darkAqua ? entry.darkColor : entry.lightColor
-                return NSColor(color).usingColorSpace(.sRGB) ?? .clear
+                return (NSColor(color).usingColorSpace(.sRGB) ?? .clear)
+                    .withAlphaComponent(CGFloat(note.transparency))
             }
         }
         let appearance = NoteAppearance.projecting(from: note)
@@ -51,7 +56,7 @@ public enum ReadableTheme {
             srgbRed: CGFloat(appearance.background.red),
             green: CGFloat(appearance.background.green),
             blue: CGFloat(appearance.background.blue),
-            alpha: 1.0
+            alpha: CGFloat(appearance.opacity)
         )
     }
 

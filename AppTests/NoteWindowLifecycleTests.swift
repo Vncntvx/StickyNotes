@@ -110,12 +110,18 @@ import SystemBridge
         #expect(window.styleMask.contains(.titled), "standard title bar with traffic lights (FR-006/FR-007)")
         #expect(window.styleMask.contains(.closable), "close button present (red light)")
         #expect(window.styleMask.contains(.resizable), "resize semantics present (green light)")
-        // 1f82fbd (FR-030a): the note-paper chrome renders the titlebar
-        // area with `titlebarAppearsTransparent` + the OPAQUE note color as
-        // `window.backgroundColor` — deliberately NOT `.fullSizeContentView`
-        // (which reintroduced the black-bar regression). Pin the absence so
-        // a redesign cannot silently swap the compositing approach.
-        #expect(!window.styleMask.contains(.fullSizeContentView), "titlebar composited via transparent titlebar + note-color background (FR-030a)")
+        // 004 T012 (FR-001/FR-017a): the 004 redesign adopts the standard
+        // full-size-content titlebar + system toolbar chrome — content
+        // extends under the titlebar and the note-paper color (with its
+        // transparency applied, T014) stays continuous. The former FR-030a
+        // black-bar regression is gone (the window background + SwiftUI
+        // paper layer compose it; verified via the lifecycle suite).
+        #expect(window.styleMask.contains(.fullSizeContentView), "content extends under the titlebar (004 FR-001/T012)")
+
+        // 004 T004 (FR-017a/Q1): 220pt is the enforced real minimum width;
+        // 140pt the minimum height.
+        #expect(window.contentMinSize == NSSize(width: 220, height: 140),
+                "min size 220×140 (004 FR-017a/T004) — actual \(window.contentMinSize)")
 
         // Ownership/lifetime guard from the 2026-08-07 crash fix.
         #expect(window.isReleasedWhenClosed == false, "coordinator retains ownership")
@@ -123,6 +129,38 @@ import SystemBridge
         window.close()
         NoteWindowBridge.unregister(noteId: note.id)
         coordinator.releaseWindowDelegate(noteId: note.id)
+    }
+
+    // MARK: - 004 T005 (FR-006/contracts §7): close must unregister
+
+    @Test
+    func trafficLightCloseUnregistersAndReopenCreatesFreshWindow() async throws {
+        let env = try makeEnvironment()
+        let coordinator = NoteWindowCoordinator(environment: env)
+        let repo = env.persistence.noteRepository!
+        let note = Note(lastModifiedDeviceId: Self.deviceId)
+        try await repo.create(note)
+
+        let first = try #require(await coordinator.open(noteId: note.id))
+        #expect(NoteWindowBridge.isOpen(noteId: note.id), "window registered after open")
+
+        // Close via the red traffic light path (window.close → delegate
+        // windowWillClose). The 004 fix (T015) unregisters there.
+        first.close()
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(NoteWindowBridge.isOpen(noteId: note.id) == false,
+                "traffic-light close must unregister (004 T005 — dead-host resurrection fix)")
+        coordinator.releaseWindowDelegate(noteId: note.id)
+
+        // Reopen: must create a BRAND-NEW window (no dead-host revival).
+        let second = try #require(await coordinator.open(noteId: note.id))
+        #expect(second !== first, "reopen after close creates a fresh window (004 T005)")
+        #expect(NoteWindowBridge.isOpen(noteId: note.id))
+
+        second.close()
+        try await Task.sleep(for: .milliseconds(100))
+        coordinator.releaseWindowDelegate(noteId: note.id)
+        NoteWindowBridge.unregister(noteId: note.id)
     }
 
     // MARK: - 003 T028 (FR-042/SC-003, regression verification)

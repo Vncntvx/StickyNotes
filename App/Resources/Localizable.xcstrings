@@ -1565,6 +1565,23 @@
         }
       }
     },
+    "note.window.untitledTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Untitled Note"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无标题笔记"
+          }
+        }
+      }
+    },
     "library.untitled": {
       "extractionState": "manual",
       "localizations": {

@@ -1,0 +1,443 @@
+import AppKit
+import Domain
+
+// MARK: - NoteToolbarSpec (004 FR-015c/Q3, contracts §2)
+
+/// The fixed toolbar-item identifier set (product-fixed: no user
+/// customization palette; the system overflow chevron handles narrow
+/// widths). Identifiers are plain strings here so the constants are
+/// Sendable and testable; `NoteToolbarController` wraps them in
+/// `NSToolbarItem.Identifier` at runtime.
+public enum NoteToolbarSpec {
+
+    public static let pinIdentifier = "note.toolbar.pin"
+    public static let appearanceIdentifier = "note.toolbar.appearance"
+    public static let insertIdentifier = "note.toolbar.insert"
+    public static let moreIdentifier = "note.toolbar.more"
+
+    /// The full fixed set, in layout order.
+    public static let itemIdentifierStrings: [String] = [
+        pinIdentifier,
+        appearanceIdentifier,
+        insertIdentifier,
+        moreIdentifier,
+    ]
+
+    public static let toolbarIdentifier = "note.window.toolbar"
+}
+
+// MARK: - NoteWindowDerivations (004, data-model.md §4 pure functions)
+//
+// Pure, IO-free helpers for the 004 redesign — every function here is
+// directly unit-testable (data-model.md §4, tasks T006/T007/T009/T010):
+// window-title derivation, insertion-target resolution, rich-text block
+// split, opacity percent formatting, toolbar visibility priority, and the
+// palette-storage mapping shared by the appearance panel and menus.
+
+// MARK: - Insertion target (004 FR-010/Q4, data-model.md §4.2)
+
+/// Where a window-level insertion lands.
+public enum InsertionTarget: Equatable, Sendable {
+    /// Split the rich-text block at the caret offset and insert there
+    /// (runs preserved — FR-010).
+    case caretSplit(blockId: UUID, offset: Int)
+    /// Insert directly after a focused special block.
+    case afterBlock(blockId: UUID)
+    /// Append at the end (default `max+1024` behavior).
+    case append
+}
+
+/// The editor's insertion context, snapshotted when an async insertion is
+/// initiated (contracts §5: async flows capture the target up front and
+/// degrade to `.append` when it goes stale).
+public struct InsertionContext: Equatable, Sendable {
+    /// The rich-text block containing the caret, and its scalar offset.
+    public var caretBlockId: UUID?
+    public var caretOffset: Int?
+    /// A focused special block (todo/code/file/image/screenshot).
+    public var focusedSpecialBlockId: UUID?
+
+    public init(
+        caretBlockId: UUID? = nil,
+        caretOffset: Int? = nil,
+        focusedSpecialBlockId: UUID? = nil
+    ) {
+        self.caretBlockId = caretBlockId
+        self.caretOffset = caretOffset
+        self.focusedSpecialBlockId = focusedSpecialBlockId
+    }
+}
+
+// MARK: - Pure functions
+
+public enum NoteWindowDerivations {
+
+    // MARK: Title derivation (004 FR-003, data-model.md §4.1)
+
+    /// The window title: the manual title when non-empty, else the first
+    /// content line (trimmed), else the localized "Untitled Note" fallback.
+    /// Never truncates — the titlebar applies its own system ellipsis.
+    public static func deriveWindowTitle(noteTitle: String?, firstLine: String) -> String {
+        if let noteTitle {
+            let trimmed = noteTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return trimmed }
+        }
+        let line = firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !line.isEmpty { return line }
+        return String(localized: "note.window.untitledTitle", defaultValue: "Untitled Note")
+    }
+
+    /// The first line of a canonical rich-text document (FR-003 title
+    /// source). Empty when the document has no content.
+    public static func firstLine(of document: RichTextDocument) -> String {
+        guard let newline = document.text.firstIndex(of: "\n") else {
+            return document.text
+        }
+        return String(document.text[..<newline])
+    }
+
+    /// The first meaningful content line across the note's blocks (004
+    /// FR-003 — mirrors `NoteSummary` extraction semantics: first
+    /// non-empty rich-text/todo/code line, else file display name /
+    /// caption / "Screenshot" / "Image").
+    public static func firstMeaningfulLine(blocks: [Block]) -> String {
+        let ordered = blocks.sorted { $0.sortKey < $1.sortKey }
+        for block in ordered {
+            switch block.payload {
+            case .richText(let doc):
+                let line = firstLine(of: doc).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !line.isEmpty { return line }
+            case .todo(let payload):
+                let line = firstLine(of: payload.richText).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !line.isEmpty { return line }
+            case .code(let payload):
+                let line = payload.text
+                    .split(whereSeparator: \.isNewline)
+                    .first
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+                if !line.isEmpty { return line }
+            case .fileReference(let payload):
+                if !payload.displayName.isEmpty { return payload.displayName }
+            case .screenshot(let payload):
+                if let caption = payload.caption, !caption.isEmpty { return caption }
+                return String(localized: "Screenshot")
+            case .image(let payload):
+                if let caption = payload.caption, !caption.isEmpty { return caption }
+                return String(localized: "Image")
+            }
+        }
+        return ""
+    }
+
+    // MARK: Insertion target resolution (004 FR-010/Q4, contracts §5)
+
+    /// Resolves where a window-level insertion lands:
+    /// 1. caret in a rich-text block → `.caretSplit` at the caret offset;
+    /// 2. a focused special block → `.afterBlock`;
+    /// 3. otherwise → `.append`.
+    public static func resolveInsertionTarget(
+        blocks: [Block],
+        context: InsertionContext
+    ) -> InsertionTarget {
+        if let caretBlockId = context.caretBlockId,
+           let offset = context.caretOffset,
+           blocks.contains(where: { $0.id == caretBlockId && $0.kind == .richText }) {
+            return .caretSplit(blockId: caretBlockId, offset: offset)
+        }
+        if let blockId = context.focusedSpecialBlockId,
+           blocks.contains(where: { $0.id == blockId && $0.kind != .richText }) {
+            return .afterBlock(blockId: blockId)
+        }
+        return .append
+    }
+
+    // MARK: Rich-text block split (004 FR-010/R3, data-model.md §4.3)
+
+    /// Splits a canonical rich-text document at a scalar offset. Run marks
+    /// and links are preserved on both sides; a run crossing the offset is
+    /// split into two runs with identical attributes. Paragraph boundaries
+    /// are re-derived per side (each side becomes its own block).
+    public static func splitRichTextBlock(
+        payload: RichTextDocument,
+        offset: Int
+    ) -> (leading: RichTextDocument, trailing: RichTextDocument) {
+        let scalars = Array(payload.text.unicodeScalars)
+        let split = min(max(offset, 0), scalars.count)
+
+        let leadingText = String(String.UnicodeScalarView(scalars[0..<split]))
+        let trailingText = String(String.UnicodeScalarView(scalars[split..<scalars.count]))
+
+        var leadingRuns: [RichTextRun] = []
+        var trailingRuns: [RichTextRun] = []
+
+        for paragraph in payload.paragraphs {
+            for run in paragraph.runs {
+                if run.endScalar <= split {
+                    leadingRuns.append(run)
+                } else if run.startScalar >= split {
+                    trailingRuns.append(RichTextRun(
+                        startScalar: run.startScalar - split,
+                        endScalar: run.endScalar - split,
+                        marks: run.marks,
+                        link: run.link,
+                        hardBreak: run.hardBreak
+                    ))
+                } else {
+                    // The run crosses the split — divide its attributes.
+                    leadingRuns.append(RichTextRun(
+                        startScalar: run.startScalar,
+                        endScalar: split,
+                        marks: run.marks,
+                        link: run.link,
+                        hardBreak: false
+                    ))
+                    trailingRuns.append(RichTextRun(
+                        startScalar: 0,
+                        endScalar: run.endScalar - split,
+                        marks: run.marks,
+                        link: run.link,
+                        hardBreak: run.hardBreak
+                    ))
+                }
+            }
+        }
+
+        return (
+            leading: rebuild(text: leadingText, runs: leadingRuns),
+            trailing: rebuild(text: trailingText, runs: trailingRuns)
+        )
+    }
+
+    // MARK: Opacity formatting (004 FR-009, data-model.md §4.4)
+
+    /// Formats an opacity value as a complete "NN%" string — never
+    /// truncated, never fraction-padded ("100%", "60%", "40%").
+    public static func formatOpacityPercent(_ value: Double) -> String {
+        "\(Int((value * 100).rounded()))%"
+    }
+
+    /// Step-exact opacity clamp (0.40–1.00, 0.05 steps). Integer-percent
+    /// arithmetic so every step equals the exact Double literal (e.g.
+    /// `clampedOpacity(0.60) == 0.60`) — Domain's `OpacityBounds.clamped`
+    /// multiplies the inexact `0.05` step and returns 0.6000000000000001
+    /// (StickyCore is zero-change for this feature, so the panel clamps
+    /// here).
+    public static func clampedOpacity(_ value: Double) -> Double {
+        let rawPercent = Int((value * 100).rounded())
+        let clamped = min(max(rawPercent, 40), 100)
+        let stepped = Int((Double(clamped) / 5.0).rounded()) * 5
+        return Double(min(max(stepped, 40), 100)) / 100.0
+    }
+
+    // MARK: Toolbar visibility priority (004 FR-015a, data-model.md §4.5)
+
+    /// The fixed semantic priority mapping: pin → `.high` (last into the
+    /// overflow chevron), everything else → `.standard`.
+    public static func toolbarVisibilityPriority(pin: Bool) -> NSToolbarItem.VisibilityPriority {
+        pin ? .high : .standard
+    }
+
+    // MARK: Palette storage mapping (001 FR-032 semantics, shared by the
+    // appearance panel + menus — migrated from NoteControlsView)
+
+    /// Applies a palette key to a note via the FR-032 storage mapping:
+    /// built-in keys map to their Domain equivalent; peach is preserved as
+    /// a custom color with the palette's designed light value. Custom
+    /// colors are never entered.
+    public static func note(applyingPaletteKey key: NotePaletteKey, to note: Note) -> Note {
+        var updated = note
+        switch key {
+        case .yellow:   updated.colorKey = .yellow
+        case .peach:    updated.colorKey = .custom; updated.customColor = "#FFC9A8"
+        case .pink:     updated.colorKey = .pink
+        case .green:    updated.colorKey = .green
+        case .blue:     updated.colorKey = .blue
+        case .lavender: updated.colorKey = .purple
+        case .gray:     updated.colorKey = .gray
+        }
+        if key != .peach { updated.customColor = nil }
+        return updated
+    }
+
+    /// The palette key a note is currently showing, or nil for custom
+    /// colors (which never enter the palette — FR-032).
+    public static func paletteKey(for note: Note) -> NotePaletteKey? {
+        NotePalette.paletteKey(for: note.colorKey)
+    }
+
+    /// FR-008 "restore sensible defaults": the default palette color at
+    /// full opacity.
+    public static func resetAppearance(of note: Note) -> Note {
+        var updated = note
+        updated.colorKey = .yellow
+        updated.customColor = nil
+        updated.transparency = 1.0
+        return updated
+    }
+
+    // MARK: - Internals
+
+    /// Rebuilds a split document side: re-derives paragraph boundaries
+    /// (newline-split, scalar offsets) and assigns runs by containment —
+    /// mirroring `RichTextView.Coordinator.canonicalDocument`.
+    private static func rebuild(text: String, runs: [RichTextRun]) -> RichTextDocument {
+        let scalars = Array(text.unicodeScalars)
+        let sorted = runs.sorted { lhs, rhs in
+            lhs.startScalar != rhs.startScalar
+                ? lhs.startScalar < rhs.startScalar
+                : lhs.endScalar < rhs.endScalar
+        }
+        // Merge adjacent runs with identical attributes (enumerateAttributes
+        // coalesces them anyway; keeping them merged keeps documents small).
+        var merged: [RichTextRun] = []
+        for run in sorted {
+            if let last = merged.last, last.endScalar == run.startScalar,
+               last.marks == run.marks, last.link == run.link, last.hardBreak == run.hardBreak {
+                merged[merged.count - 1] = RichTextRun(
+                    startScalar: last.startScalar,
+                    endScalar: run.endScalar,
+                    marks: run.marks,
+                    link: run.link,
+                    hardBreak: run.hardBreak
+                )
+            } else {
+                merged.append(run)
+            }
+        }
+
+        var paragraphs: [RichTextParagraph] = []
+        var lineStart = 0
+        var index = 0
+        var lineEnds: [(start: Int, end: Int)] = []
+        for scalar in scalars {
+            if scalar == "\n" {
+                lineEnds.append((lineStart, index))
+                lineStart = index + 1
+            }
+            index += 1
+        }
+        lineEnds.append((lineStart, index))
+        for line in lineEnds where line.end > line.start {
+            let contained = merged.filter {
+                $0.startScalar >= line.start && $0.endScalar <= line.end
+            }
+            paragraphs.append(RichTextParagraph(
+                startScalar: line.start,
+                endScalar: line.end,
+                style: .body,
+                runs: contained
+            ))
+        }
+        return RichTextDocument(text: text, paragraphs: paragraphs)
+    }
+}
+
+// MARK: - RichTextMarkApplier (004 FR-012/FR-053; US5)
+
+/// Applies supported marks to an NSTextView — the single formatting entry
+/// point. NSTextView is the formatting authority; SwiftUI holds no mark
+/// state copy. Selection path edits the textStorage; the no-selection path
+/// edits typingAttributes (applies to subsequent input).
+public enum RichTextMarkApplier {
+
+    /// Applies (or toggles off) the given marks. Returns `true` when any
+    /// change was applied.
+    @MainActor
+    @discardableResult
+    public static func applyMarks(_ marks: Set<RichTextMark>, to textView: NSTextView) -> Bool {
+        // IME guard (FR-063): never apply during composition.
+        guard !textView.hasMarkedText() else { return false }
+        let range = textView.selectedRange()
+        if range.length > 0 {
+            return applyToRange(range, marks: marks, textView: textView)
+        }
+        applyToTypingAttributes(marks, textView: textView)
+        return true
+    }
+
+    @MainActor
+    private static func applyToRange(_ range: NSRange, marks: Set<RichTextMark>, textView: NSTextView) -> Bool {
+        guard let storage = textView.textStorage else { return false }
+        var changed = false
+        for mark in marks {
+            switch mark {
+            case .bold, .italic:
+                changed = applyFontTrait(mark, range: range, storage: storage) || changed
+            case .inlineCode:
+                changed = applyInlineCode(range: range, storage: storage) || changed
+            case .underline:
+                changed = toggleAttribute(.underlineStyle, range: range, storage: storage) || changed
+            case .strikethrough:
+                changed = toggleAttribute(.strikethroughStyle, range: range, storage: storage) || changed
+            }
+        }
+        return changed
+    }
+
+    @MainActor
+    private static func applyToTypingAttributes(_ marks: Set<RichTextMark>, textView: NSTextView) {
+        var attributes = textView.typingAttributes
+        let base = (attributes[.font] as? NSFont)
+            ?? textView.font
+            ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        for mark in marks {
+            switch mark {
+            case .bold:
+                let boldDescriptor = base.fontDescriptor.withSymbolicTraits(base.fontDescriptor.symbolicTraits.union(.bold))
+                attributes[.font] = NSFont(descriptor: boldDescriptor, size: base.pointSize)
+            case .italic:
+                let italicDescriptor = base.fontDescriptor.withSymbolicTraits(base.fontDescriptor.symbolicTraits.union(.italic))
+                attributes[.font] = NSFont(descriptor: italicDescriptor, size: base.pointSize)
+            case .inlineCode:
+                attributes[.font] = NSFont.monospacedSystemFont(ofSize: base.pointSize, weight: .regular)
+            case .underline:
+                attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
+            case .strikethrough:
+                attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
+            }
+        }
+        textView.typingAttributes = attributes
+    }
+
+    @MainActor
+    private static func applyFontTrait(_ mark: RichTextMark, range: NSRange, storage: NSTextStorage) -> Bool {
+        var changed = false
+        let trait: NSFontDescriptor.SymbolicTraits = mark == .bold ? .bold : .italic
+        storage.enumerateAttribute(.font, in: range, options: []) { value, subrange, _ in
+            let font = (value as? NSFont) ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
+            var traits = font.fontDescriptor.symbolicTraits
+            if traits.contains(trait) {
+                traits.remove(trait)   // toggle off
+            } else {
+                traits.insert(trait)   // toggle on
+            }
+            let descriptor = font.fontDescriptor.withSymbolicTraits(traits)
+            let traitFont = NSFont(descriptor: descriptor, size: font.pointSize) ?? font
+            storage.addAttribute(.font, value: traitFont, range: subrange)
+            changed = true
+        }
+        return changed
+    }
+
+    @MainActor
+    private static func applyInlineCode(range: NSRange, storage: NSTextStorage) -> Bool {
+        storage.enumerateAttribute(.font, in: range, options: []) { value, subrange, _ in
+            let font = (value as? NSFont) ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
+            storage.addAttribute(.font, value: NSFont.monospacedSystemFont(ofSize: font.pointSize, weight: .regular), range: subrange)
+        }
+        return range.length > 0
+    }
+
+    /// Toggles an integer attribute (underline/strikethrough) on/off.
+    @MainActor
+    private static func toggleAttribute(_ key: NSAttributedString.Key, range: NSRange, storage: NSTextStorage) -> Bool {
+        guard range.length > 0 else { return false }
+        let existing = storage.attribute(key, at: range.location, effectiveRange: nil) != nil
+        if existing {
+            storage.removeAttribute(key, range: range)
+        } else {
+            storage.addAttribute(key, value: NSUnderlineStyle.single.rawValue, range: range)
+        }
+        return true
+    }
+}
