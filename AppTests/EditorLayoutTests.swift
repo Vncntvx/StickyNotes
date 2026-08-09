@@ -79,6 +79,13 @@ import Persistence
             backing: .buffered,
             defer: false
         )
+        // 2026-08-10: programmatic windows default to
+        // `isReleasedWhenClosed = true` — `close()` releases the window while
+        // this Swift reference still holds it, and the scope-end release
+        // over-releases the object (zombie → objc_release EXC_BAD_ACCESS in
+        // the test host teardown). Same double-release pattern the app itself
+        // fixed on 2026-08-07 (StickyNotesApp/NoteWindowCoordinator).
+        window.isReleasedWhenClosed = false
         window.contentView = hosting
         window.layoutIfNeeded()
         hosting.displayIfNeeded()

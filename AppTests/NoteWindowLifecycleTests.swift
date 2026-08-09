@@ -106,12 +106,16 @@ import SystemBridge
 
         let window = try #require(await coordinator.open(noteId: note.id))
         // Standard macOS chrome: titled (traffic lights), closable
-        // (red-light close), resizable (green-light resize), full-size
-        // content integration.
+        // (red-light close), resizable (green-light resize).
         #expect(window.styleMask.contains(.titled), "standard title bar with traffic lights (FR-006/FR-007)")
         #expect(window.styleMask.contains(.closable), "close button present (red light)")
         #expect(window.styleMask.contains(.resizable), "resize semantics present (green light)")
-        #expect(window.styleMask.contains(.fullSizeContentView), "full-size content layout (note-paper chrome)")
+        // 1f82fbd (FR-030a): the note-paper chrome renders the titlebar
+        // area with `titlebarAppearsTransparent` + the OPAQUE note color as
+        // `window.backgroundColor` — deliberately NOT `.fullSizeContentView`
+        // (which reintroduced the black-bar regression). Pin the absence so
+        // a redesign cannot silently swap the compositing approach.
+        #expect(!window.styleMask.contains(.fullSizeContentView), "titlebar composited via transparent titlebar + note-color background (FR-030a)")
 
         // Ownership/lifetime guard from the 2026-08-07 crash fix.
         #expect(window.isReleasedWhenClosed == false, "coordinator retains ownership")

@@ -79,10 +79,15 @@ import AssetStore
         #expect(NotePalette.paletteKey(for: purple.colorKey) == .lavender, "紫→薰衣草 presentation mapping")
         #expect(purple.colorKey == .purple, "STORED value never rewritten")
 
-        // Content preserved.
-        let blocks = try await repo.fetchBlocks(noteId: all[0].id)
+        // Content preserved: fetch the block of the old-purple note (which
+        // has one). `all[0]` under `.modified` sort is NOT deterministic —
+        // creation timestamps can tie and the custom note (created last) has
+        // no block, which crashed the test host via an index-out-of-range
+        // when the custom note sorted first (observed 2026-08-10).
+        let blocks = try await repo.fetchBlocks(noteId: purple.id)
+        try #require(!blocks.isEmpty, "the inserted block must be fetchable")
         if case .richText(let doc) = blocks[0].payload {
-            #expect(doc.text == "content for \(all[0].colorKey.rawValue)")
+            #expect(doc.text == "content for purple")
         } else {
             Issue.record("richText payload expected")
         }
