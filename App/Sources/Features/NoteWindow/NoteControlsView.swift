@@ -55,54 +55,42 @@ public struct NoteControlsView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                // Title field (FR-031).
-                TextField("Title", text: Binding(
-                    get: { note.title ?? "" },
-                    set: { newValue in
-                        var updated = note
-                        updated.title = newValue.isEmpty ? nil : newValue
-                        onChanged(updated)
-                    }
-                ))
-                .textFieldStyle(.plain)
-                .font(.headline)
-                .frame(maxWidth: 200)
-
-                Spacer()
-
-                colorPicker
-                opacityPicker
-                textSizePicker
-                alwaysOnTopToggle
-                // FR-031 (T293): add screenshot / file reference.
-                Button {
-                    onAddScreenshot()
-                } label: {
-                    Image(systemName: "camera")
+            // Adaptive controls row (user decision 2026-08-09): ONE
+            // ViewThatFits whose variants are COMPLETE rows — the title
+            // lives INSIDE each variant, so there is no layout competition
+            // between a flexible title and fixed controls (that earlier
+            // split produced greedy-title thresholds and clipped rows).
+            // Each variant is measured against the real row width and the
+            // first that fits wins: full → core → essential. The hidden
+            // controls stay reachable via the Appearance submenus (T301,
+            // ⌥C/⌥O/⌥T), Edit/Insert menu commands (T032) and the context
+            // menu — no feature loss. The title is content-sized (up to
+            // 160pt): a short title never wastes window width, so the full
+            // row appears at a normal note-window width.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    titleField
+                    colorPicker
+                    opacityPicker
+                    textSizePicker
+                    alwaysOnTopToggle
+                    cameraButton
+                    paperclipButton
+                    closeButton
                 }
-                .buttonStyle(.plain)
-                .help("Add screenshot")
-                .accessibilityLabel("Add screenshot")
-
-                Button {
-                    onAddFileReference()
-                } label: {
-                    Image(systemName: "paperclip")
+                HStack(spacing: 8) {
+                    titleField
+                    colorPicker
+                    opacityPicker
+                    alwaysOnTopToggle
+                    closeButton
                 }
-                .buttonStyle(.plain)
-                .help("Add file reference")
-                .accessibilityLabel("Add file reference")
-
-                Button {
-                    onClose()
-                } label: {
-                    Image(systemName: "xmark")
+                HStack(spacing: 8) {
+                    titleField
+                    colorPicker
+                    alwaysOnTopToggle
+                    closeButton
                 }
-                .buttonStyle(.plain)
-                .keyboardShortcut("w", modifiers: .command)
-                .help("Close note")
-                .accessibilityLabel("Close note")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
@@ -239,7 +227,7 @@ public struct NoteControlsView: View {
         }
         .pickerStyle(.menu)
         .labelsHidden()
-        .frame(maxWidth: 90)
+        .frame(minWidth: 62, maxWidth: 90)
         .help("Background opacity")
         .accessibilityLabel("Background opacity")
     }
@@ -259,9 +247,67 @@ public struct NoteControlsView: View {
         }
         .pickerStyle(.menu)
         .labelsHidden()
-        .frame(maxWidth: 80)
+        .frame(minWidth: 52, maxWidth: 80)
         .help("Text size")
         .accessibilityLabel("Text size")
+    }
+
+    // MARK: - Adaptive row
+
+    /// The title field (FR-031): content-sized up to 160pt so a short
+    /// title never wastes window width (the controls get the room instead
+    /// — verified 2026-08-09). Truncates with an ellipsis when squeezed.
+    private var titleField: some View {
+        TextField("Title", text: Binding(
+            get: { note.title ?? "" },
+            set: { newValue in
+                var updated = note
+                updated.title = newValue.isEmpty ? nil : newValue
+                onChanged(updated)
+            }
+        ))
+        .textFieldStyle(.plain)
+        .font(.headline)
+        .lineLimit(1)
+        .truncationMode(.tail)
+        .frame(maxWidth: 160, alignment: .leading)
+    }
+
+    /// FR-031 (T293): add a screenshot.
+    private var cameraButton: some View {
+        Button {
+            onAddScreenshot()
+        } label: {
+            Image(systemName: "camera")
+        }
+        .buttonStyle(.plain)
+        .help("Add screenshot")
+        .accessibilityLabel("Add screenshot")
+    }
+
+    /// FR-031 (T293): add a file reference.
+    private var paperclipButton: some View {
+        Button {
+            onAddFileReference()
+        } label: {
+            Image(systemName: "paperclip")
+        }
+        .buttonStyle(.plain)
+        .help("Add file reference")
+        .accessibilityLabel("Add file reference")
+    }
+
+    /// Close — mirrors the traffic-light close (always available).
+    private var closeButton: some View {
+        Button {
+            onClose()
+        } label: {
+            Image(systemName: "xmark")
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut("w", modifiers: .command)
+        .help("Close note")
+        .accessibilityLabel("Close note")
     }
 
     private var alwaysOnTopToggle: some View {

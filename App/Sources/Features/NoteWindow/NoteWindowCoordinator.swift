@@ -194,8 +194,11 @@ public final class NoteWindowCoordinator {
         window.hasShadow = true
         // 003 T034 (FR-071): keep the note usable at compact sizes — a
         // minimum content size preserves typing + traffic lights without
-        // exposing a full toolbar.
-        window.contentMinSize = NSSize(width: 260, height: 200)
+        // exposing a full toolbar. 300pt wide guarantees the essential
+        // control row (title + color + pin + close) always fits — at
+        // 260pt the palette icon clipped and the close button vanished
+        // (verified 2026-08-09).
+        window.contentMinSize = NSSize(width: 300, height: 200)
         NoteWindowBridge.applyCollectionBehavior(window, alwaysOnTop: note.alwaysOnTop)
         _ = NoteWindowBridge.register(window, noteId: noteId)
         WindowLevelBridge.apply(window, alwaysOnTop: note.alwaysOnTop)
