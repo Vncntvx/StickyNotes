@@ -80,7 +80,7 @@ description: "Task list for feature 004: 独立笔记窗口原生镀铬与自适
 - [X] T022 [US1] More 工具栏项：ellipsis.circle 按钮 + NSMenu（复制笔记/复制为 Markdown/导出 JSON…/移入废纸篓 ⌘⌫/分隔/允许小组件 toggle/设为小组件笔记·移除），复用 `NoteWindowContent` 既有闭包（duplicate/copy/export/moveToTrash/widget 选择），`menuFormRepresentation` 同源
 - [X] T023 [US1] 窗口管理修复：`StickyNotesApp.swift` `toggleNoteWindows` 改用 `NoteWindowBridge.allRegistrations()` 过滤（不再按 title，R2）
 - [X] T024 [US1] 删除 `App/Sources/Features/NoteWindow/NoteControlsView.swift`（T017–T019 迁移完成后，确认无引用）
-- [ ] T025 [US1] 验证：全量 `xcodebuild test`（生命周期/帧持久化/外观/上下文/捕获/MenuChecklist 套件）+ quickstart §3.1 手动走查（标题/关闭重开/置顶/接缝）+ 置顶切换前后截图对比（几何零位移，FR-007）
+- [X] T025 [US1] 验证：全量 `xcodebuild test`（生命周期/帧持久化/外观/上下文/捕获/MenuChecklist 套件）+ quickstart §3.1 手动走查（标题/关闭重开/置顶/接缝）+ 置顶切换前后截图对比（几何零位移，FR-007）
 
 **Checkpoint**: At this point, User Story 1 should be fully functional and testable independently（MVP：原生镀铬 + 标题 + 置顶 + 更多 + 生命周期修复）
 
@@ -101,7 +101,7 @@ description: "Task list for feature 004: 独立笔记窗口原生镀铬与自适
 - [X] T026 [P] [US3] 新建 `App/Sources/Features/NoteWindow/AppearancePanelView.swift`（SwiftUI）：7 键调色板（`NotePaletteKey` 含 custom，`paletteStorage` 映射逐字保留，选中=勾选+名称+色块）、透明度 Slider 0.40–1.00/0.05、"NN%" 完整数值标签、恢复默认按钮（默认色+1.0）、无障碍 label/value（FR-008/009，001 FR-044）
 - [X] T027 [US3] Appearance 工具栏项：`NoteToolbarController` 中 paintpalette 按钮 → `NSPopover`（`NSHostingController` → `AppearancePanelView`，非激活式锚定）；改动 → `host.updateAppearance` + `coordinator.updateNotePaper`（即时预览，无确认按钮）；`menuFormRepresentation` = 外观子菜单（颜色 7 项 + 透明度 13 步 + 重置，自 NoteControlsView 上下文菜单迁移）
 - [X] T028 [US3] 状态同步：控制器 `observe` host 外观字段（colorKey/customColor/transparency）→ 刷新面板与项状态（Observation，macOS 14+；无 NotificationCenter 新用法）
-- [ ] T029 [US3] 验证：`AppearancePanelStateTests` 转绿 + quickstart §3.3.2 手动走查（含 transparency 60% 下标题栏/工具栏玻璃观感与对比度复检）
+- [X] T029 [US3] 验证：`AppearancePanelStateTests` 转绿 + quickstart §3.3.2 手动走查（含 transparency 60% 下标题栏/工具栏玻璃观感与对比度复检）
 
 **Checkpoint**: US3 独立可用；US1+US3 并存无回归
 
@@ -166,8 +166,8 @@ description: "Task list for feature 004: 独立笔记窗口原生镀铬与自适
 ### Implementation for User Story 2
 
 - [X] T042 [US2] 语义内边距：`NoteWindowContent` 内容水平内边距两态（compact 10pt / regular 14–16pt，以窗口宽度 480 切换；极宽上限 24pt 防居中列）——唯一允许的自定义宽度感知规则（NSToolbar 无法表达内容内边距，plan §5/§8 明示理由；不引入更多断点）
-- [ ] T043 [US2] 溢出行为确认：宽度清单（220/320/480/640/800/1200/2000+）逐点核对 FR-015a/015b（220–240：截断标题+Pin+chevron 直接可见；外观/插入/更多进溢出；全部可发现可执行）；若系统溢出与期望不符，仅允许调整单一可见性优先级常量（R7 回退，记录于 plan.md §10）
-- [ ] T044 [US2] 滚动条审计：`RichTextView`/`NoteWindowContent` 无自定义滚动条样式、无覆盖层；行为跟随系统偏好（spec FR-020）；窄宽度滚动条占比与缩放中无水平裁剪/文本容器宽度突变/布局跳动
+- [X] T043 [US2] 溢出行为确认：宽度清单（220/320/480/640/800/1200/2000+）逐点核对 FR-015a/015b（220–240：截断标题+Pin+chevron 直接可见；外观/插入/更多进溢出；全部可发现可执行）；若系统溢出与期望不符，仅允许调整单一可见性优先级常量（R7 回退，记录于 plan.md §10）
+- [X] T044 [US2] 滚动条审计：`RichTextView`/`NoteWindowContent` 无自定义滚动条样式、无覆盖层；行为跟随系统偏好（spec FR-020）；窄宽度滚动条占比与缩放中无水平裁剪/文本容器宽度突变/布局跳动
 - [ ] T045 [US2] 弹层与缩放：popover/菜单打开时缩放窗口无崩溃/布局错乱；连续拖拽不重置工具栏状态（Pin 状态保持）；无中心漂移簇、无标题栏/编辑器坐标系分叉观感（FR-017 全局不变量清单逐项过检）
 - [ ] T046 [US2] 验证：`NoteToolbarStateTests` 转绿 + quickstart §3.2 全矩阵截图（存入 `checklists/width-matrix/`）与连续拖拽验收
 
@@ -191,7 +191,7 @@ description: "Task list for feature 004: 独立笔记窗口原生镀铬与自适
 - [ ] T048 [US6] 无障碍走查：全部图标控件 `accessibilityLabel`/`accessibilityValue`（置顶开/关、透明度数值、颜色选中）/tooltip（`toolTip`/`.help`）；VoiceOver 读出工具栏、溢出菜单、外观面板、格式行；焦点顺序随溢出进出可预测（FR-029/001 FR-180b）
 - [ ] T049 [US6] 键盘走查：Tab 进工具栏与 chevron、⌥C/⌥O/⌥T、⌘B/⌘I/⌘U、⇧⌘T/⇧⌘C、⌘W、⌘⌫ 全路径验证；格式行不打断编辑焦点（FR-029）
 - [ ] T050 [US6] 系统模式：Reduce Transparency / Increase Contrast / Reduce Motion / 深色模式 / 激活-失活窗口逐项走查（玻璃降级由系统处理，不手工复刻；失活内容可读——FR-027/035/FR-063 语义）
-- [ ] T051 [US6] 版本兼容：以 macOS 26 SDK 语义复查全部 `#available` 守卫（CI 编译即验证）；macOS 26 与 27 各运行一次关键路径（可用性矩阵 plan §6）
+- [X] T051 [US6] 版本兼容：以 macOS 26 SDK 语义复查全部 `#available` 守卫（CI 编译即验证）；macOS 26 与 27 各运行一次关键路径（可用性矩阵 plan §6）
 
 **Checkpoint**: US6 独立可用；全部故事完成，进入收尾
 
@@ -201,12 +201,12 @@ description: "Task list for feature 004: 独立笔记窗口原生镀铬与自适
 
 **Purpose**: 回归、多窗口、视觉对比、性能与完成度审计（plan Phase 7）
 
-- [ ] T052 [P] 全量回归：`AppTests` + `Packages/StickyCore` 全部套件绿（含既有 12+ 套件与新增 5 文件；spec 成功标准 15）
+- [X] T052 [P] 全量回归：`AppTests` + `Packages/StickyCore` 全部套件绿（含既有 12+ 套件与新增 5 文件；spec 成功标准 15）
 - [ ] T053 [P] 多窗口验证：3+ 笔记不同宽度并存，各自独立缩放/置顶/外观/格式化状态；关闭一个不影响其余；激活/失活正确（spec 成功标准 14）
 - [ ] T054 [P] 视觉对比：T002 基线截图 vs 实现后同条件截图（宽度清单 × 100%/60% 透明度），逐项评估 plan §9.4（标题对齐/红绿灯原生/镀铬高度显著下降/编辑器起点与 inset/滚动条/背景连续性/玻璃层级/激活失活/宽窗）
-- [ ] T055 [P] 性能核查：连续缩放无卡顿、缩放/打字/选区变化不重建 NSTextView/块/工具栏对象图、Pin/外观切换不重建 NSWindow、空闲无轮询（001 SC-003/004a/006）
+- [X] T055 [P] 性能核查：连续缩放无卡顿、缩放/打字/选区变化不重建 NSTextView/块/工具栏对象图、Pin/外观切换不重建 NSWindow、空闲无轮询（001 SC-003/004a/006）
 - [ ] T056 完成度审计：`specs/004-note-window-native-redesign/quickstart.md` 全场景走查 + spec 成功标准 SC-001~016 逐条核对 + 文档（spec/plan/research/contracts/data-model）与实现同步
-- [ ] T057 提交序列：按 AGENTS.md 约定（conventional commits，中 body，FR 引用）分阶段提交：镀铬+生命周期 → 外观 → 插入 → 格式化 → 响应式/无障碍 → 回归收尾；每提交前 `git status`/`git diff` 检查，禁止提交 secrets/真实笔记内容
+- [X] T057 提交序列：按 AGENTS.md 约定（conventional commits，中 body，FR 引用）分阶段提交：镀铬+生命周期 → 外观 → 插入 → 格式化 → 响应式/无障碍 → 回归收尾；每提交前 `git status`/`git diff` 检查，禁止提交 secrets/真实笔记内容
 
 ---
 
