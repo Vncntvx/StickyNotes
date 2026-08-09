@@ -216,87 +216,15 @@ struct StickyNotesApp: App {
         }
     }
 
-    // MARK: - Global shortcuts (T145/T296, FR-120/FR-121)
+    // MARK: - Global-shortcut-derived note creation (menus only)
+    //
+    // Menu commands (⌘N, "New Note from Clipboard", capture entries) reuse
+    // these handlers. Global hotkeys were removed 2026-08-10 — nothing
+    // registers Carbon hotkeys at launch anymore; no app shortcut can
+    // conflict with other applications.
 
-    /// Registers the default "new note from clipboard" shortcut (FR-120)
-    /// plus every user-configured shortcut from Settings (T296). Fires
-    /// while another app is focused; registration failures are surfaced
-    /// non-blockingly (FR-121), never silent.
-    private func wireGlobalShortcuts() {
-        let preferences = LocalPreferences()
-
-        // FR-120: the clipboard-note default binding.
-        do {
-            _ = try GlobalShortcuts.register(GlobalShortcutKey.defaultClipboardNote) { _ in
-                handleClipboardNoteShortcut()
-            }
-        } catch {
-            // FR-121: registration failure is non-blocking.
-        }
-
-        // T296: user-configured shortcuts.
-        for action in LocalPreferences.ShortcutAction.allCases {
-            guard let key = preferences.shortcutKey(for: action) else { continue }
-            do {
-                _ = try GlobalShortcuts.register(key) { _ in
-                    Task { @MainActor in
-                        ShortcutDispatcher.dispatch(action)
-                    }
-                }
-            } catch {
-                // FR-121: conflict is surfaced in Settings; never silently
-                // replaced here.
-            }
-        }
-
-        // Dispatch the notification-based actions (window coordination).
-        NotificationCenter.default.addObserver(
-            forName: .stickyRequestNewBlankNote, object: nil, queue: .main
-        ) { _ in
-            MainActor.assumeIsolated {
-                createNoteFromShortcut()
-            }
-        }
-        NotificationCenter.default.addObserver(
-            forName: .stickyRequestClipboardNote, object: nil, queue: .main
-        ) { _ in
-            MainActor.assumeIsolated {
-                handleClipboardNoteShortcut()
-            }
-        }
-        NotificationCenter.default.addObserver(
-            forName: .stickyRequestCaptureRegion, object: nil, queue: .main
-        ) { _ in
-            MainActor.assumeIsolated {
-                createNoteAndCapture()
-            }
-        }
-        NotificationCenter.default.addObserver(
-            forName: .stickyRequestCaptureWindow, object: nil, queue: .main
-        ) { _ in
-            MainActor.assumeIsolated {
-                createNoteAndCapture()
-            }
-        }
-        NotificationCenter.default.addObserver(
-            forName: .stickyToggleNoteWindows, object: nil, queue: .main
-        ) { _ in
-            MainActor.assumeIsolated {
-                toggleNoteWindows()
-            }
-        }
-        // 003 T025 (D8): "Search All Notes" opens the library and focuses
-        // the search field.
-        NotificationCenter.default.addObserver(
-            forName: .stickySearchAll, object: nil, queue: .main
-        ) { _ in
-            MainActor.assumeIsolated {
-                focusLibrarySearch()
-            }
-        }
-    }
-
-    /// Creates a blank note via a global shortcut (FR-010/FR-120).
+    /// Creates a blank note (menu ⌘N path; FR-010/FR-120 legacy semantics
+    /// — activation + focus preserved).
     private func createNoteFromShortcut() {
         Task { @MainActor in
             guard let libraryModel else { return }
@@ -306,9 +234,9 @@ struct StickyNotesApp: App {
         }
     }
 
-    /// FR-120 "new note from clipboard": fires while another app is focused
-    /// and creates a note whose first rich-text block contains the
-    /// clipboard contents; activates the app (FR-007a).
+    /// "New note from clipboard" (menu command): creates a note whose first
+    /// rich-text block contains the clipboard contents; activates the app
+    /// (FR-007a).
     private func handleClipboardNoteShortcut() {
         Task { @MainActor in
             guard let libraryModel else { return }
@@ -324,13 +252,14 @@ struct StickyNotesApp: App {
                 )
                 try? await repo.insert(block)
             }
-            // FR-007a: global-shortcut creation activates the app.
+            // FR-007a: shortcut/menu creation activates the app.
             NSApplication.shared.activate(ignoringOtherApps: true)
             openNoteWindow(noteId: id)
         }
     }
 
-    /// FR-120 region/window capture: creates a new note and captures into it.
+    /// Region/window capture menu action: creates a new note and captures
+    /// into it.
     private func createNoteAndCapture() {
         Task { @MainActor in
             guard let libraryModel else { return }
@@ -340,7 +269,7 @@ struct StickyNotesApp: App {
         }
     }
 
-    /// FR-120 show/hide all open note windows.
+    /// Show/hide all open note windows (menu "Show/Hide Note Windows").
     private func toggleNoteWindows() {
         let windows = NSApp.windows.filter { $0.title != "Sticky Notes Help" && $0.title != "About Sticky Notes" }
         let anyVisible = windows.contains { $0.isVisible }
@@ -387,7 +316,6 @@ struct StickyNotesApp: App {
                     if showDockIcon {
                         try? DockActivationBridge.setDockEnabled(true)
                     }
-                    wireGlobalShortcuts()
                     // 003 T078 (FR-001/FR-006/Constitution X): install the
                     // menu-bar icon right-click/⌥-click dropdown. Plain
                     // left-click continues to toggle the SwiftUI
@@ -593,8 +521,7 @@ struct StickyNotesApp: App {
             }
         case .search:
             // 003 T025 (D8): `stickynotes://search` opens the library with
-            // focus on the search field (action identity unchanged — 001
-            // FR-120).
+            // focus on the search field.
             focusLibrarySearch()
         }
     }

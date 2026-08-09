@@ -1,6 +1,5 @@
 import Foundation
 import Domain
-import SystemBridge
 
 // MARK: - LocalPreferences (T207, FR-014a clarified 2026-08-07)
 //
@@ -14,6 +13,9 @@ import SystemBridge
 // - `onboardingHintDismissed`: user dismissed the hint.
 // - `hasCreatedFirstNote`: set when the first note is created; once true
 //   the hint is never shown again.
+//
+// Global-shortcut bindings (`local.stickynotes.globalShortcuts.*`) were
+// removed 2026-08-10 with the feature (no Carbon hotkeys in the app).
 
 /// Device-local persistence of first-launch preferences (FR-014a). Stored
 /// in App Group UserDefaults so the app and any future App-Group-aware
@@ -36,7 +38,6 @@ public final class LocalPreferences: @unchecked Sendable {    private let defaul
         static let hasCreatedFirstNote = "local.stickynotes.hasCreatedFirstNote"
         static let autoSyncEnabled = "local.stickynotes.autoSyncEnabled"
         static let autoSyncPolicy = "local.stickynotes.autoSyncPolicy"
-        static let globalShortcuts = "local.stickynotes.globalShortcuts"
     }
 
     public init(defaults: UserDefaults) {
@@ -108,57 +109,6 @@ public final class LocalPreferences: @unchecked Sendable {    private let defaul
             return policy
         }
         set { defaults.set(newValue.rawValue, forKey: Key.autoSyncPolicy) }
-    }
-
-    // MARK: - Global shortcuts (FR-120/FR-121, T296)
-
-    /// The FR-120 actions a user can bind a global shortcut to.
-    public enum ShortcutAction: String, CaseIterable, Sendable {
-        case toggleLibrary
-        case newBlankNote
-        case captureRegion
-        case captureWindow
-        case clipboardNote
-        case searchAll
-        case toggleNoteWindows
-
-        public var displayName: String {
-            switch self {
-            case .toggleLibrary: return String(localized: "Open/Close Library")
-            case .newBlankNote: return String(localized: "New Blank Note")
-            case .captureRegion: return String(localized: "Capture Region into New Note")
-            case .captureWindow: return String(localized: "Capture Window into New Note")
-            case .clipboardNote: return String(localized: "New Note from Clipboard")
-            case .searchAll: return String(localized: "Search All Notes")
-            case .toggleNoteWindows: return String(localized: "Show/Hide Note Windows")
-            }
-        }
-    }
-
-    /// The configured global shortcut for an action, or nil when unset.
-    /// Stored as JSON `{"keyCode": N, "modifiers": N}` in UserDefaults
-    /// (language-neutral key codes — plan §Localization).
-    public func shortcutKey(for action: ShortcutAction) -> GlobalShortcutKey? {
-        guard let raw = defaults.string(forKey: "\(Key.globalShortcuts).\(action.rawValue)"),
-              let data = raw.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Int],
-              let keyCode = json["keyCode"], let modifiers = json["modifiers"] else {
-            return nil
-        }
-        return GlobalShortcutKey(keyCode: UInt32(keyCode), modifiers: UInt32(modifiers))
-    }
-
-    /// Persists (or clears) the global shortcut for an action.
-    public func setShortcutKey(_ key: GlobalShortcutKey?, for action: ShortcutAction) {
-        let defaultsKey = "\(Key.globalShortcuts).\(action.rawValue)"
-        guard let key else {
-            defaults.removeObject(forKey: defaultsKey)
-            return
-        }
-        let payload: [String: Int] = ["keyCode": Int(key.keyCode), "modifiers": Int(key.modifiers)]
-        if let data = try? JSONSerialization.data(withJSONObject: payload) {
-            defaults.set(String(data: data, encoding: .utf8), forKey: defaultsKey)
-        }
     }
 }
 

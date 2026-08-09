@@ -1,10 +1,8 @@
 import Testing
 import Foundation
-import Carbon
 import Domain
 import Persistence
 import AssetStore
-import SystemBridge
 @testable import StickyNotes
 
 // MARK: - Migration compatibility tests (003 T068, FR-090/SC-020/SC-025)
@@ -157,21 +155,7 @@ import SystemBridge
         #expect(true)
     }
 
-    // MARK: - 003 T070: shortcuts + font preference survive (FR-090)
-
-    @Test
-    func globalShortcutsPreserved() {
-        let defaults = UserDefaults(suiteName: "test.migr.\(UUID().uuidString)")!
-        defer { defaults.removePersistentDomain(forName: "test.migr.\(UUID().uuidString)") }
-        let preferences = LocalPreferences(defaults: defaults)
-
-        // 001-era binding.
-        let key = GlobalShortcutKey(keyCode: 45, modifiers: UInt32(cmdKey | optionKey))
-        preferences.setShortcutKey(key, for: .searchAll)
-
-        // The app reads the same keys (no key renames in 003).
-        #expect(preferences.shortcutKey(for: .searchAll) == key)
-    }
+    // MARK: - 003 T070: font preference survives (FR-090)
 
     @Test
     func fontPreferencePreserved() {

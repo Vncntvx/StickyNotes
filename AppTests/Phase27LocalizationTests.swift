@@ -4,9 +4,9 @@ import Foundation
 // MARK: - Phase 27 localization tests (T295, FR-180a)
 //
 // Per tasks.md T295: the Phase 26/27 UI strings (Help view, sync settings,
-// deletion toasts, editor block actions, shortcuts) must resolve from the
-// localization catalogs in BOTH zh-Hans and en — no English-only fallback
-// for zh-Hans users.
+// deletion toasts, editor block actions) must resolve from the localization
+// catalogs in BOTH zh-Hans and en — no English-only fallback for zh-Hans
+// users. (Global-shortcut strings were removed with the feature 2026-08-10.)
 
 @Suite struct Phase27LocalizationTests {
 
@@ -24,12 +24,9 @@ import Foundation
         "Save As…", "Remove", "Available", "Missing — relink to open",
         "File may have moved", "Relinked", "On another device",
         "Open file", "Reveal in Finder", "Copy Path", "Relink…",
-        "Move File…", "Remove Reference", "Copy code", "Not set",
-        "Record…", "Clear", "Press keys…", "That shortcut is already in use.",
-        "Open/Close Library", "New Blank Note",
-        "Capture Region into New Note", "Capture Window into New Note",
-        "New Note from Clipboard", "Search All Notes",
-        "Show/Hide Note Windows", "Add screenshot", "Add file reference",
+        "Move File…", "Remove Reference", "Copy code",
+        "New Note from Clipboard", "Show/Hide Note Windows",
+        "Add screenshot", "Add file reference",
         "Configure Synchronization", "Provider", "WebDAV", "S3-compatible",
         "Vault password", "Test Connection", "Configure", "Replace",
         "Configure Sync…", "Replace Repository…", "Remove Configuration…",
