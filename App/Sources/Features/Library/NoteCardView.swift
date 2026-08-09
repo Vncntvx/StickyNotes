@@ -134,12 +134,17 @@ public struct NoteCardView: View {
     private var cardColor: Color {
         // FR-022/FR-030 (003 T022): built-in colors resolve through the
         // palette (per-appearance design); custom colors keep the Domain
-        // projection (001 FR-040a).
+        // projection (001 FR-040a) — the raw hex travels on the row
+        // (verified 2026-08-09: peach — a custom-stored palette color —
+        // rendered white without it).
         if let paletteKey = NotePalette.paletteKey(for: card.colorKey) {
             return NotePalette.dynamicColor(for: paletteKey)
         }
-        if let hex = card.colorKey.builtinRGB {
-            return Color(red: hex.red, green: hex.green, blue: hex.blue, opacity: 1.0)
+        if let customHex = card.customColorHex, let parsed = RGBColor(hex: customHex) {
+            return Color(red: parsed.red, green: parsed.green, blue: parsed.blue, opacity: 1.0)
+        }
+        if let builtin = card.colorKey.builtinRGB {
+            return Color(red: builtin.red, green: builtin.green, blue: builtin.blue, opacity: 1.0)
         }
         return Color(nsColor: .textBackgroundColor)
     }

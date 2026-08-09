@@ -27,6 +27,10 @@ public final class LibraryModel {
         public let summary: String?
         public let previewSource: String?
         public let colorKey: NoteColorKey
+        /// The raw custom-color hex (nil for built-in keys) — the card
+        /// view renders `.custom` colors from this (FR-032 peach etc.;
+        /// verified 2026-08-09 the card grid otherwise showed them white).
+        public let customColorHex: String?
         public let modifiedAt: Date
         public let todoProgress: String?
         public let hasScreenshot: Bool
@@ -193,6 +197,7 @@ public final class LibraryModel {
                     summary: row.generatedSummary,
                     previewSource: row.previewSource,
                     colorKey: row.colorKey,
+                    customColorHex: row.customColorHex,
                     modifiedAt: row.modifiedAt,
                     todoProgress: row.todoProgressString,
                     hasScreenshot: row.hasScreenshot,

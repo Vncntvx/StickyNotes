@@ -67,6 +67,7 @@ public enum WidgetDataReader {
                     generatedSummary: nil,
                     previewSource: nil,
                     colorKey: NoteColorKey(rawValue: row["colorKey"] ?? "") ?? .yellow,
+                    customColorHex: row["customColor"],
                     modifiedAt: row["modifiedAt"] ?? Date(),
                     todoCompleted: 0,
                     todoTotal: 0,

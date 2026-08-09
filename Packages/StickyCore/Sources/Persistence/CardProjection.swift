@@ -32,6 +32,12 @@ public struct NoteCardProjection: Sendable, Identifiable, Equatable {
     public let generatedSummary: String?     // FR-045 display-only summary
     public let previewSource: String?        // first rich-text block text (FR-020a)
     public let colorKey: NoteColorKey
+    /// The raw custom-color hex (`.custom` keys only; nil for built-ins).
+    /// Card surfaces render custom colors from this value — the Domain
+    /// `builtinRGB` path is nil for `.custom` (verified 2026-08-09: a
+    /// peach note — stored as `.custom + #FFC9A8` per FR-032 — rendered
+    /// WHITE in the library grid).
+    public let customColorHex: String?
     public let modifiedAt: Date
     public let todoCompleted: Int
     public let todoTotal: Int
@@ -50,6 +56,7 @@ public struct NoteCardProjection: Sendable, Identifiable, Equatable {
         generatedSummary: String?,
         previewSource: String?,
         colorKey: NoteColorKey,
+        customColorHex: String?,
         modifiedAt: Date,
         todoCompleted: Int,
         todoTotal: Int,
@@ -65,6 +72,7 @@ public struct NoteCardProjection: Sendable, Identifiable, Equatable {
         self.generatedSummary = generatedSummary
         self.previewSource = previewSource
         self.colorKey = colorKey
+        self.customColorHex = customColorHex
         self.modifiedAt = modifiedAt
         self.todoCompleted = todoCompleted
         self.todoTotal = todoTotal
@@ -240,6 +248,7 @@ public enum CardProjection {
                     generatedSummary: summary,
                     previewSource: previews[noteId],
                     colorKey: NoteColorKey(rawValue: row["colorKey"] ?? "") ?? .yellow,
+                    customColorHex: row["customColor"],
                     modifiedAt: row["modifiedAt"] ?? Date(),
                     todoCompleted: todo.0,
                     todoTotal: todo.1,
