@@ -255,62 +255,10 @@ public struct MenuBarLibraryWindowProbe: NSViewRepresentable {
     public func updateNSView(_ nsView: NSView, context: Context) {}
 
     private final class ProbeView: NSView {
-        /// T018 diagnostics (2026-08-09): track the library window's
-        /// lifecycle to attribute unexpected closes (Empty Trash sheet
-        /// force-detach investigation). Removed when the spike concludes.
-        private var lifecycleObserver: NSObjectProtocol?
-        private var clickMonitor: Any?
-        private var sheetObserver: NSKeyValueObservation?
-
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             if let window {
                 MenuBarLibraryWindow.positionLibraryWindow(window)
-            }
-            guard let window, lifecycleObserver == nil else { return }
-            let center = NotificationCenter.default
-            lifecycleObserver = center.addObserver(
-                forName: NSWindow.willCloseNotification,
-                object: window,
-                queue: .main
-            ) { _ in
-                StickyLogger(category: .app).error("lib-window", code: "willClose")
-            }
-            center.addObserver(
-                forName: NSWindow.didResignKeyNotification,
-                object: window,
-                queue: .main
-            ) { _ in
-                StickyLogger(category: .app).error("lib-window", code: "didResignKey")
-            }
-            center.addObserver(
-                forName: NSWindow.didBecomeKeyNotification,
-                object: window,
-                queue: .main
-            ) { _ in
-                StickyLogger(category: .app).error("lib-window", code: "didBecomeKey")
-            }
-            if sheetObserver == nil {
-                sheetObserver = window.observe(\.attachedSheet) { _, _ in
-                    let sheet = window.attachedSheet?.className ?? "nil"
-                    StickyLogger(category: .app).error("lib-window", code: "sheet=\(sheet)")
-                }
-            }
-            if clickMonitor == nil {
-                clickMonitor = NSEvent.addLocalMonitorForEvents(
-                    matching: [.leftMouseDown, .rightMouseDown]
-                ) { [weak window] event in
-                    let target = event.window?.className ?? "nil"
-                    let libraryIsKey = window?.isKeyWindow == true
-                    let sheets = NSApp.windows
-                        .filter { $0.attachedSheet != nil }
-                        .map { "\($0.className)" }
-                    StickyLogger(category: .app).error(
-                        "click",
-                        code: "target=\(target)-libKey=\(libraryIsKey)-sheets=\(sheets.joined(separator: ","))"
-                    )
-                    return event
-                }
             }
         }
     }

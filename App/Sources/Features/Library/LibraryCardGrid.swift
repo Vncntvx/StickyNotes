@@ -145,6 +145,18 @@ public struct LibraryCardGrid: View {
                                     openNote(card.noteId)
                                 }
                             )
+                            // Verified 2026-08-09: without explicit identity
+                            // the grid can draw a removed card once at its
+                            // stale slot while relaying out. The transition
+                            // makes deletions (FR-014/FR-026) fade+shrink
+                            // out instead of snapping away.
+                            .id(card.noteId)
+                            .transition(
+                                .asymmetric(
+                                    insertion: .opacity,
+                                    removal: .scale(scale: 0.9).combined(with: .opacity)
+                                )
+                            )
                             .contextMenu {
                                 if model.scope == .library {
                                     Button("Move to Trash") { onTrash(card.noteId) }

@@ -137,7 +137,11 @@ public final class LibraryModel {
 
     // MARK: - Loading
 
-    public func reload() async {
+    /// Refreshes the card grid. `animated` wraps the grid replacement in a
+    /// SwiftUI transaction so deletions/restores (FR-014/FR-026) glide
+    /// instead of snapping away; search/scope/refresh stay instant (the
+    /// keystroke path must not animate every intermediate result set).
+    public func reload(animated: Bool = false) async {
         isLoading = true
         defer { isLoading = false }
         do {
@@ -182,7 +186,7 @@ public final class LibraryModel {
                         || (card.previewSource ?? "").localizedCaseInsensitiveContains(query)
                 }
             }
-            cards = fetched.map { row in
+            let rows = fetched.map { row in
                 NoteCardRow(
                     noteId: row.noteId,
                     title: row.title,
@@ -197,6 +201,11 @@ public final class LibraryModel {
                     isConflictCopy: row.isConflictCopy,
                     syncWarning: row.syncWarning
                 )
+            }
+            if animated {
+                withAnimation(.snappy(duration: 0.25)) { cards = rows }
+            } else {
+                cards = rows
             }
         } catch {
             // FR-011a: never crash; non-blocking sanitized status.
@@ -297,7 +306,7 @@ public final class LibraryModel {
         do {
             let title = try await repo.fetch(id: noteId)?.title
             try await repo.trash(id: noteId, deviceId: DeviceIdentity.current.id)
-            await reload()
+            await reload(animated: true)
             notifyWidgetsOfNoteChange()
             return title
         } catch {
@@ -312,7 +321,7 @@ public final class LibraryModel {
         guard let repo = environment.persistence.noteRepository else { return }
         do {
             try await repo.restore(id: noteId, deviceId: DeviceIdentity.current.id)
-            await reload()
+            await reload(animated: true)
             notifyWidgetsOfNoteChange()
         } catch {
             statusMessage = String(localized: "Could not restore the note.")
@@ -326,7 +335,7 @@ public final class LibraryModel {
         do {
             let title = try await repo.fetch(id: noteId)?.title
             try await repo.permanentlyDelete(id: noteId, deviceId: DeviceIdentity.current.id)
-            await reload()
+            await reload(animated: true)
             notifyWidgetsOfNoteChange()
             return title
         } catch {
@@ -340,13 +349,11 @@ public final class LibraryModel {
     /// confirmation (the CONFIRMATION lives in the view; the model performs
     /// the batch).
     public func emptyTrash() async -> Int {
-        StickyLogger(category: .app).error("empty-trash", code: "begin")
         guard let repo = environment.persistence.noteRepository else { return 0 }
         do {
             let ids = try await repo.emptyTrash(deviceId: DeviceIdentity.current.id)
-            await reload()
+            await reload(animated: true)
             notifyWidgetsOfNoteChange()
-            StickyLogger(category: .app).error("empty-trash", code: "end-count=\(ids.count)")
             return ids.count
         } catch {
             statusMessage = String(localized: "Could not empty Trash.")
