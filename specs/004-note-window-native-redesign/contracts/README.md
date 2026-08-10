@@ -36,7 +36,8 @@
   - 选区/焦点变化回调：`onSelectionChange(isTextSelected:hasFocus:selectionRectInWindow:...)`；
   - 选区矩形：NSTextView 坐标系 → 窗口坐标（供上下文行定位，plan §4.4）；
   - 格式写操作：`applyMarks(_:)`（bold/italic/underline/strikethrough/inlineCode）作用于选区或 typingAttributes；无选区路径（作用于后续输入）；
-  - IME 守卫：`hasMarkedText()` 期间不发布选区/不应用格式（复用既有模式）。
+  - IME 守卫：`hasMarkedText()` 期间不发布选区/不应用格式（复用既有模式）；
+  - 窗口 key-state 变化（`NSWindow.didResignKey`/`didBecomeKey`）时重发布选区快照：`hasFocus` 随 `isKeyWindow` 更新（004 FR-012 失活隐藏语义——上下文格式化行在窗口失活时隐藏、重新激活且选区仍在时恢复；RichTextView.Coordinator 观察者随窗口变更/释放清理）。
 - 桥只读投影：SwiftUI 侧不持有文本/标记副本；不反向写回 document。
 
 ## 5. 插入目标解析契约

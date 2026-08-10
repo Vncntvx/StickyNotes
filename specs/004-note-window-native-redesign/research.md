@@ -44,7 +44,7 @@
 
 | 澄清决策 | 工程含义 |
 |---|---|
-| Q1 最小尺寸：220 pt 强制最小宽 + 约 120–160 pt 最小高，一等状态 | `window.contentMinSize = (220, 140)`（替换 300×200）；设计无需在 220 以下降级 |
+| Q1 最小尺寸：220 pt 强制最小宽 + 140 pt 最小高，一等状态 | `window.contentMinSize = (220, 140)`（替换 300×200）；设计无需在 220 以下降级 |
 | Q2 极窄直接可见：截断标题 + 置顶 + 系统溢出；外观/插入仅存溢出 | 语义优先级 → `visibilityPriority`；标题走原生 titlebar 截断；系统 chevron 兜底 |
 | Q3 工具栏产品固定，不可自定义；不持久化排列状态 | NSToolbar 用固定 `defaultItemIdentifiers`（不提供 customization palette 扩展行为；`allowsUserCustomization` 保持默认关闭） |
 | Q4 插入 = 工具栏下拉菜单（截图/图片/附件/块类型），插入于当前编辑上下文，无则末尾；编辑器内块插入控件保留 | 插入目标解析：富文本光标处（块拆分）→ 特殊块焦点处之后 → 末尾追加；BlockInsertionControl 修复触发 |

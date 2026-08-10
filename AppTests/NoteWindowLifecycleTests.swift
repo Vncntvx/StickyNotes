@@ -256,3 +256,83 @@ extension NoteWindowLifecycleTests {
         #expect(try await repo.fetch(id: noteId) != nil, "the note must remain in the library")
     }
 }
+
+// MARK: - 004 FR-012 (clarify 2026-08-10): window deactivation hides the
+// contextual format row
+//
+// The bridge's focus flag must track NSWindow key state (not just editing
+// events): when the note window resigns key, `hasFocus` flips to false so
+// the contextual format row hides; reactivation with the selection intact
+// restores it. Wiring: RichTextView.Coordinator observes
+// didResignKey/didBecomeKey for the editor's window and republishes the
+// snapshot. Driven directly through the coordinator (SwiftUI hosting does
+// not render inside hosted tests, so the bridge registry is not exercised
+// here).
+
+@MainActor
+extension NoteWindowLifecycleTests {
+    @Test
+    func windowDeactivationClearsEditorFocusFlag() async throws {
+        let editor = RichTextView(document: .plain(""), textSize: 13, onCommit: { _ in })
+        let bridge = EditorSelectionBridge(noteId: UUID())
+        let coordinator = RichTextView.Coordinator(editor)
+
+        let windowA = makeProbeWindow(title: "A")
+        let windowB = makeProbeWindow(title: "B")
+        let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 380, height: 280))
+        windowA.contentView?.addSubview(textView)
+
+        coordinator.attach(textView, bridge: bridge, blockId: nil)
+
+        // Deactivate window A → didResignKey → republish → focus false
+        // (the contextual format row must hide; FR-012).
+        windowA.makeKeyAndOrderFront(nil)
+        #expect(windowA.makeFirstResponder(textView), "editor must accept first responder")
+        windowB.makeKeyAndOrderFront(nil)
+        try await waitUntil("bridge focus must clear on deactivation") {
+            bridge.hasFocus == false
+        }
+        #expect(!bridge.hasFocus)
+
+        // Reactivate → didBecomeKey → republish → focus restored (row
+        // reappears, selection still present).
+        windowA.makeKeyAndOrderFront(nil)
+        try await waitUntil("bridge focus must restore on reactivation") {
+            bridge.hasFocus
+        }
+
+        windowA.close()
+        windowB.close()
+    }
+
+    private func makeProbeWindow(title: String) -> NSWindow {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.isReleasedWhenClosed = false
+        window.title = title
+        return window
+    }
+
+    private func waitUntil(
+        _ message: String,
+        timeout: Duration = .seconds(4),
+        condition: @MainActor () -> Bool
+    ) async throws {
+        let deadline = ContinuousClock.now + timeout
+        while !condition() {
+            if ContinuousClock.now >= deadline {
+                throw TestTimeoutError(message)
+            }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+    }
+}
+
+struct TestTimeoutError: Error, CustomStringConvertible {
+    let description: String
+    init(_ description: String) { self.description = description }
+}

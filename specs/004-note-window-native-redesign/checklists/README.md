@@ -40,4 +40,6 @@ assert (spec Required Tests):
   (FR-015a/015c); the system overflow chevron is a native mechanism.
 - `NoteWindowDerivations` tests — "NN%" opacity formatting never
   truncates (FR-009); title derivation (FR-003).
-- Full regression — 286 App tests + 196 StickyCore tests green.
+- Full regression — 287 App tests + 196 StickyCore tests green (287 includes
+  `windowDeactivationClearsEditorFocusFlag`, 004 FR-012 inactive-window
+  format-row regression).

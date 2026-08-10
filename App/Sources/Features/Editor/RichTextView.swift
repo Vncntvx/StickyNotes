@@ -127,6 +127,19 @@ public struct RichTextView: NSViewRepresentable {
         private weak var liveBridge: EditorSelectionBridge?
         private var liveBlockId: UUID?
 
+        /// 004 FR-012 (clarify 2026-08-10): the window whose key-state
+        /// notifications republish the selection snapshot, plus the
+        /// observers (removed when the window changes or the coordinator
+        /// deallocates).
+        private weak var observedWindow: NSWindow?
+        private var keyStateObservers: [any NSObjectProtocol] = []
+
+        deinit {
+            MainActor.assumeIsolated {
+                keyStateObservers.forEach(NotificationCenter.default.removeObserver)
+            }
+        }
+
         init(_ parent: RichTextView) {
             self.parent = parent
         }
@@ -137,9 +150,35 @@ public struct RichTextView: NSViewRepresentable {
             liveTextView = textView
             liveBridge = bridge
             liveBlockId = blockId
+            observeKeyState(of: textView.window)
             if bridge != nil {
                 publishSelection(from: textView)
             }
+        }
+
+        /// 004 FR-012 (clarify 2026-08-10): republish the selection/focus
+        /// snapshot when the editor's window becomes key or resigns key, so
+        /// `bridge.hasFocus` tracks `NSWindow.isKeyWindow` — the contextual
+        /// format row must hide while the window is inactive and reappear on
+        /// reactivation (selection still present).
+        private func observeKeyState(of window: NSWindow?) {
+            guard window !== observedWindow else { return }
+            keyStateObservers.forEach(NotificationCenter.default.removeObserver)
+            keyStateObservers.removeAll()
+            observedWindow = window
+            guard let window else { return }
+            let center = NotificationCenter.default
+            keyStateObservers.append(center.addObserver(
+                forName: NSWindow.didResignKeyNotification, object: window, queue: .main
+            ) { [weak self] _ in self?.republishSelection() })
+            keyStateObservers.append(center.addObserver(
+                forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main
+            ) { [weak self] _ in self?.republishSelection() })
+        }
+
+        private func republishSelection() {
+            guard let textView = liveTextView else { return }
+            publishSelection(from: textView)
         }
 
         func apply(document: RichTextDocument, textSize: CGFloat, resolver: NoteFontResolver, to textView: NSTextView) {

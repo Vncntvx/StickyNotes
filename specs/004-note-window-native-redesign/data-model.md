@@ -17,7 +17,7 @@
 |---|---|---|---|
 | `NoteToolbarController`（新） | 窗口打开→关闭，与 `NoteWindowDelegate` 同生共死；由 `NoteWindowCoordinator.toolbars[noteId]` 强持有 | 状态读取源 = `NoteWindowHostModel.note`（只读观察）；动作源 = 协调器/host 方法 | 不持有独立状态副本；不持久化任何工具栏排列/弹出控件/上下文状态（spec FR-015c） |
 | `AppearancePanelView` 状态 | popover 会话内 | 每次改动即 `updateAppearance`（即时预览） | 无持久化中间态；关闭即弃 |
-| `EditorSelectionBridge`（新，@Observable） | 窗口打开→关闭 | NSTextView 选区/焦点快照（只读投影） | 不写回编辑器；仅驱动 SwiftUI 上下文 UI 呈现 |
+| `EditorSelectionBridge`（新，@Observable） | 窗口打开→关闭 | NSTextView 选区/焦点快照（只读投影；含窗口 key-state 变化重发布，004 FR-012） | 不写回编辑器；仅驱动 SwiftUI 上下文 UI 呈现 |
 
 ## 3. 状态所有权与同步规则
 
