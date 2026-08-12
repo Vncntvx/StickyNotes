@@ -1,15 +1,14 @@
 ---
+name: speckit-token-budget-restore
 description: 'Restore one or more Spec-Driven Development artifacts to their original (pre-compaction) state from the <artifact>.full.md backups created by /compact. Deletes each backup after a successful restore.
 
   '
-scripts:
-  sh: .specify/extensions/token-budget/scripts/bash/compact_helper.sh
-  ps: .specify/extensions/token-budget/scripts/powershell/compact_helper.ps1
+compatibility: Requires spec-kit project structure with .specify/ directory
+metadata:
+  author: github-spec-kit
+  source: token-budget:commands/restore.md
 ---
 
-
-<!-- Extension: token-budget -->
-<!-- Config: .specify/extensions/token-budget/ -->
 # /speckit.token-budget.restore
 
 The user has invoked `/speckit.token-budget.restore` with arguments: `$ARGUMENTS`.

@@ -8,7 +8,7 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "opencode": [
+        "zcode": [
           "speckit.token-budget.compact",
           "speckit.token-budget.scope",
           "speckit.token-budget.concise",

@@ -1,10 +1,12 @@
 ---
+name: speckit-token-budget-concise
 description: Toggle a project-local concise-output directive that suppresses agent prose padding during SDD steps. State lives in the project's agent memory file (AGENTS.md preferred when present, else CLAUDE.md / GEMINI.md / .cursor/rules / .windsurf/rules / etc.) inside a clearly marked block, so it is reversible and reviewable.
+compatibility: Requires spec-kit project structure with .specify/ directory
+metadata:
+  author: github-spec-kit
+  source: token-budget:commands/concise.md
 ---
 
-
-<!-- Extension: token-budget -->
-<!-- Config: .specify/extensions/token-budget/ -->
 # /speckit.token-budget.concise
 
 The user has invoked `/speckit.token-budget.concise` with arguments: `$ARGUMENTS`.

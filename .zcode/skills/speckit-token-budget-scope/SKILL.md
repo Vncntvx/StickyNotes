@@ -1,15 +1,14 @@
 ---
+name: speckit-token-budget-scope
 description: 'Build a focused reading manifest for the next workflow step. Names the files the agent should load, the sections it can skip, and the running token budget. Run this *before* /speckit.plan, /speckit.tasks, or /speckit.implement to keep their working context lean.
 
   '
-scripts:
-  sh: .specify/extensions/token-budget/scripts/bash/estimate_tokens.sh
-  ps: .specify/extensions/token-budget/scripts/powershell/estimate_tokens.ps1
+compatibility: Requires spec-kit project structure with .specify/ directory
+metadata:
+  author: github-spec-kit
+  source: token-budget:commands/scope.md
 ---
 
-
-<!-- Extension: token-budget -->
-<!-- Config: .specify/extensions/token-budget/ -->
 # /speckit.token-budget.scope
 
 The user has invoked `/speckit.token-budget.scope` with arguments: `$ARGUMENTS`.

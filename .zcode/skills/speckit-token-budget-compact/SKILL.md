@@ -1,15 +1,14 @@
 ---
+name: speckit-token-budget-compact
 description: 'Compact one or more Spec-Driven Development artifacts in place to reduce token cost on subsequent /speckit.* commands. Lossless on requirements, decisions, contracts, IDs; strips template scaffolding, examples, and prose padding. The original is preserved as <artifact>.full.md the first time an artifact is compacted.
 
   '
-scripts:
-  sh: .specify/extensions/token-budget/scripts/bash/compact_helper.sh
-  ps: .specify/extensions/token-budget/scripts/powershell/compact_helper.ps1
+compatibility: Requires spec-kit project structure with .specify/ directory
+metadata:
+  author: github-spec-kit
+  source: token-budget:commands/compact.md
 ---
 
-
-<!-- Extension: token-budget -->
-<!-- Config: .specify/extensions/token-budget/ -->
 # /speckit.token-budget.compact
 
 The user has invoked `/speckit.token-budget.compact` with arguments: `$ARGUMENTS`.

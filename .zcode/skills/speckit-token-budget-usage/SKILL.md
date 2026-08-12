@@ -1,15 +1,14 @@
 ---
+name: speckit-token-budget-usage
 description: 'Show token usage for every SDD artifact in the active feature, the projected context window for each upcoming phase, and the savings already realized by token-budget (full backups vs current files).
 
   '
-scripts:
-  sh: .specify/extensions/token-budget/scripts/bash/estimate_tokens.sh
-  ps: .specify/extensions/token-budget/scripts/powershell/estimate_tokens.ps1
+compatibility: Requires spec-kit project structure with .specify/ directory
+metadata:
+  author: github-spec-kit
+  source: token-budget:commands/usage.md
 ---
 
-
-<!-- Extension: token-budget -->
-<!-- Config: .specify/extensions/token-budget/ -->
 # /speckit.token-budget.usage
 
 The user has invoked `/speckit.token-budget.usage` with arguments: `$ARGUMENTS`.
