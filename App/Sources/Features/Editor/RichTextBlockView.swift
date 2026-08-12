@@ -174,20 +174,15 @@ public struct RichTextBlockView: View {
                 selectionBridge = EditorSelectionBridge(noteId: note.id)
             }
         }
-        // 004 T039 (FR-012): the contextual format row, anchored above the
-        // selection (bridge rect in window coordinates, flipped into the
-        // SwiftUI space; clamped so it never slides under the toolbar).
+        // 004 T039 (FR-012) + 2026-08-10 fix: the contextual format row is
+        // anchored at the AppKit level (topmost window-content subview via
+        // ContextualFormatOverlayAnchor) so it is hit-testable above the
+        // NSTextView — a SwiftUI overlay here could be drawn but never
+        // clicked (AppKit hit testing stops at the editor's real NSView).
+        // Position follows the bridge's window-coordinate selection rect.
         .overlay {
-            if let bridge = selectionBridge, bridge.isTextSelected, bridge.hasFocus,
-               let rect = bridge.selectionRectInWindow {
-                GeometryReader { proxy in
-                    let flippedY = proxy.size.height - rect.minY
-                    let clampedY = max(flippedY - 10, 56)
-                    let clampedX = min(max(rect.midX, 90), max(proxy.size.width - 90, 90))
-                    ContextualFormatBar(bridge: bridge)
-                        .position(x: clampedX, y: clampedY)
-                }
-                .allowsHitTesting(true)
+            if let bridge = selectionBridge {
+                ContextualFormatOverlayAnchor(bridge: bridge)
             }
         }
     }

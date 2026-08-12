@@ -138,6 +138,7 @@
 		E4FCE7D0CB0B4D859D057DA7 /* NoteToolbarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86EEB751C64244C6BA399042 /* NoteToolbarController.swift */; };
 		9BEFB4E6460B4D0C8B6C9419 /* AppearancePanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94C4C8EF4E2040B0B3E0E178 /* AppearancePanelView.swift */; };
 		72A31856C8DE40AC93160A81 /* EditorSelectionBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93C88888010A42A49DD8EB2C /* EditorSelectionBridge.swift */; };
+		F0E1D2C3B4A5968778695A4B /* ContextualFormatOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5C4B3A291807F6E5D4C3B2A /* ContextualFormatOverlay.swift */; };
 		07C6DE9F97664BE28316163D /* InsertionIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68883F3C1CCF4D98B9311BAC /* InsertionIntegrationTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -306,6 +307,7 @@
 		86EEB751C64244C6BA399042 /* NoteToolbarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteToolbarController.swift; sourceTree = "<group>"; };
 		94C4C8EF4E2040B0B3E0E178 /* AppearancePanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearancePanelView.swift; sourceTree = "<group>"; };
 		93C88888010A42A49DD8EB2C /* EditorSelectionBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorSelectionBridge.swift; sourceTree = "<group>"; };
+		D5C4B3A291807F6E5D4C3B2A /* ContextualFormatOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextualFormatOverlay.swift; sourceTree = "<group>"; };
 		68883F3C1CCF4D98B9311BAC /* InsertionIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsertionIntegrationTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -617,6 +619,7 @@
 				78CD3DDE7950E7C9897A7354 /* ScreenshotBlockView.swift */,
 				226231C3FA8C724BB9022CDD /* TodoBlockView.swift */,
 							93C88888010A42A49DD8EB2C /* EditorSelectionBridge.swift */,
+							D5C4B3A291807F6E5D4C3B2A /* ContextualFormatOverlay.swift */,
 );
 			path = Editor;
 			sourceTree = "<group>";
@@ -912,6 +915,7 @@
 				E4FCE7D0CB0B4D859D057DA7 /* NoteToolbarController.swift in Sources */,
 				9BEFB4E6460B4D0C8B6C9419 /* AppearancePanelView.swift in Sources */,
 				72A31856C8DE40AC93160A81 /* EditorSelectionBridge.swift in Sources */,
+				F0E1D2C3B4A5968778695A4B /* ContextualFormatOverlay.swift in Sources */,
 );
 			runOnlyForDeploymentPostprocessing = 0;
 		};

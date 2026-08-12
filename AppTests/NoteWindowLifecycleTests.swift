@@ -305,6 +305,45 @@ extension NoteWindowLifecycleTests {
         windowB.close()
     }
 
+    @Test
+    func contextualFormatOverlayTracksBridgeVisibility() async throws {
+        // 004 (2026-08-10): the format row lives in a topmost AppKit
+        // hosting view; it must show with a selection and hide when the
+        // window is inactive (FR-012) — mirror of the clickability fix.
+        let window = makeProbeWindow(title: "Overlay")
+        let bridge = EditorSelectionBridge(noteId: UUID())
+        let overlay = ContextualFormatOverlay()
+        overlay.install(in: window, bridge: bridge)
+        defer {
+            overlay.detach()
+            window.close()
+        }
+
+        #expect(!overlay.isVisible, "no selection → row hidden")
+
+        bridge.publish(
+            caretBlockId: nil,
+            isTextSelected: true,
+            hasFocus: true,
+            caretOffset: 0,
+            selectedRange: NSRange(location: 0, length: 2),
+            selectionRectInWindow: NSRect(x: 120, y: 140, width: 60, height: 16),
+            focusedSpecialBlockId: nil
+        )
+        try await waitUntil("row must show with a selection") { overlay.isVisible }
+
+        bridge.publish(
+            caretBlockId: nil,
+            isTextSelected: true,
+            hasFocus: false,
+            caretOffset: 0,
+            selectedRange: NSRange(location: 0, length: 2),
+            selectionRectInWindow: NSRect(x: 120, y: 140, width: 60, height: 16),
+            focusedSpecialBlockId: nil
+        )
+        try await waitUntil("row must hide on deactivation (FR-012)") { !overlay.isVisible }
+    }
+
     private func makeProbeWindow(title: String) -> NSWindow {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),

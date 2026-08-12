@@ -17,19 +17,22 @@ Capture procedure (on this Mac, with the app built from the `main` worktree):
 
 Widths: 220 / 320 / 480 / 640 / 800 / 1200 / 2000+ pt (each × 100% and 60%).
 
-Status: **NOT CAPTURED (2026-08-10)** — the agent session could not drive
+Status: **NOT CAPTURED (2026-08-13)** — the agent session could not drive
 the interactive GUI (accessory-app bootstrap requires opening the
 menu-bar library; AppleScript/CGEvent synthesis was unreliable and the
 app-group container stayed empty, so no note window could be opened).
-This is a manual task for the human reviewer; the procedure above is the
-contract.
+On 2026-08-13 the user directed that GUI automation and autonomous
+screenshots are off-limits for agents: manual tasks are handed to the
+human reviewer with the procedure above as the contract.
 
 ## width-matrix/ (T046)
 
 Post-redesign captures of the same widths on the current branch, plus a
 continuous drag check (quickstart §3.2). Same procedure and width list.
 
-Status: **NOT CAPTURED (2026-08-10)** — same environment limitation.
+Status: **NOT CAPTURED (2026-08-13)** — same environment limitation; per
+user direction (2026-08-13) capture is a manual task for the human
+reviewer.
 
 ## Verification proxy
 
