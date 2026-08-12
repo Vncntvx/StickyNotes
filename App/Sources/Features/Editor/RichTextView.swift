@@ -395,11 +395,26 @@ final class NotePaperTextView: NSTextView {
     static let minimumPaperHeight: CGFloat = 320
 
     override var intrinsicContentSize: NSSize {
+        // 004 T063 (2026-08-13): force the layout pass before reading
+        // usedRect — the enclosing SwiftUI ScrollView relies on this
+        // intrinsic height to grow its content and scroll a long note
+        // (without this, usedRect stays partial and the paper clips).
+        if let layoutManager, let textContainer {
+            layoutManager.ensureLayout(for: textContainer)
+        }
         let used = layoutManager?.usedRect(for: textContainer ?? NSTextContainer()).height ?? 0
         let contentHeight = used + textContainerInset.height * 2
         return NSSize(
             width: NSView.noIntrinsicMetric,
             height: max(contentHeight, Self.minimumPaperHeight)
         )
+    }
+
+    /// 004 T063: every text edit (typing AND model pushes) re-publishes
+    /// the intrinsic height so the SwiftUI ScrollView grows as the note
+    /// lengthens.
+    override func didChangeText() {
+        super.didChangeText()
+        invalidateIntrinsicContentSize()
     }
 }

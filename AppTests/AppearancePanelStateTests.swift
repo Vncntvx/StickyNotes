@@ -38,10 +38,10 @@ import Domain
 
     @Test
     func opacityClampsToBounds() {
-        #expect(NoteWindowDerivations.clampedOpacity(0.20) == 0.40, "clamps below the floor")
+        #expect(NoteWindowDerivations.clampedOpacity(-0.20) == 0.0, "clamps below the floor")
         #expect(NoteWindowDerivations.clampedOpacity(1.30) == 1.00, "clamps above the ceiling")
         #expect(NoteWindowDerivations.clampedOpacity(0.60) == 0.60, "steps stay exactly equal to their Double literal")
-        #expect(NoteWindowDerivations.clampedOpacity(0.40) == 0.40)
+        #expect(NoteWindowDerivations.clampedOpacity(0.0) == 0.0)
         #expect(NoteWindowDerivations.clampedOpacity(1.00) == 1.00)
     }
 
@@ -53,10 +53,21 @@ import Domain
     }
 
     @Test
-    func opacityStepsAreThirteen() {
-        #expect(NoteAppearance.OpacityBounds.allSteps.count == 13)
-        #expect(NoteAppearance.OpacityBounds.allSteps.first == 0.40)
+    func opacityStepsAreTwentyOne() {
+        #expect(NoteAppearance.OpacityBounds.allSteps.count == 21)
+        #expect(NoteAppearance.OpacityBounds.allSteps.first == 0.0)
         #expect(NoteAppearance.OpacityBounds.allSteps.last == 1.00)
+    }
+
+    @Test
+    func opacityBoundsSpanZeroToHundred() {
+        // 004 Q8 (2026-08-13 user directive): the slider range is 0%–100%,
+        // NOT 40%–100% — the shared OpacityBounds constants are the single
+        // source for the slider, the overflow menu steps, and the ⌥O
+        // stepping path.
+        #expect(NoteAppearance.OpacityBounds.minOpacity == 0.0, "floor is 0%")
+        #expect(NoteAppearance.OpacityBounds.maxOpacity == 1.00, "ceiling is 100%")
+        #expect(NoteAppearance.OpacityBounds.step == 0.05)
     }
 
     // MARK: Reset-to-default (FR-008)
@@ -93,5 +104,28 @@ import Domain
         #expect(lavender.colorKey == .purple, "紫→薰衣草 maps to the stored purple key (FR-032)")
         #expect(lavender.customColor == nil)
         #expect(NoteWindowDerivations.paletteKey(for: lavender) == .lavender)
+    }
+
+    // MARK: Live composition (004 T069, 2026-08-13 user report)
+
+    @Test
+    func appearanceCompositionCarriesLocalFieldsOverBaseNote() {
+        // The panel must compose each change from the ORIGINAL base note +
+        // the CURRENT local appearance state — never from a stale snapshot
+        // (the slider used to read the snapshot value back, so the knob
+        // never followed the mouse and the "NN%" label stayed frozen).
+        var base = Note(lastModifiedDeviceId: deviceId)
+        base.title = "keep me"
+        base.alwaysOnTop = true
+        let composed = NoteWindowDerivations.composeAppearance(
+            base: base,
+            colorKey: .blue,
+            customColor: nil,
+            transparency: 0.60
+        )
+        #expect(composed.transparency == 0.60, "current opacity wins over the snapshot")
+        #expect(composed.colorKey == .blue, "current color wins over the snapshot")
+        #expect(composed.title == "keep me", "non-appearance fields survive composition")
+        #expect(composed.alwaysOnTop == true, "non-appearance fields survive composition")
     }
 }

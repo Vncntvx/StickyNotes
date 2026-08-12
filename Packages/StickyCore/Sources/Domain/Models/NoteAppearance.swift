@@ -186,35 +186,45 @@ public struct NoteAppearance: Sendable, Equatable {
         }
     }
 
-    /// Opacity bounds (FR-041a): 0.40–1.00 inclusive, 0.05 steps.
+    /// Opacity bounds (FR-041a; 004 Q8 2026-08-13: 0.00–1.00 — the
+    /// original 0.40 floor was removed by user directive, the range is
+    /// now full 0–100%).
     public enum OpacityBounds {
-        public static let minOpacity = 0.40
+        public static let minOpacity = 0.0
         public static let maxOpacity = 1.00
         public static let step = 0.05
 
-        /// The full set of discrete opacity values (13 steps).
+        /// The full set of discrete opacity values (21 steps).
         public static let allSteps: [Double] = {
-            // Integer-percent arithmetic (40..100 step 5) so each value is
+            // Integer-percent arithmetic (0..100 step 5) so each value is
             // the exact same Double as the literal (e.g. 0.60).
-            let startPercent = Int(minOpacity * 100)   // 40
+            let startPercent = Int(minOpacity * 100)   // 0
             let endPercent = Int(maxOpacity * 100)     // 100
             let stepPercent = Int(step * 100)          // 5
             return stride(from: startPercent, through: endPercent, by: stepPercent)
                 .map { Double($0) / 100.0 }
         }()
 
-        /// Clamps a raw value into the allowed discrete steps.
+        /// Clamps a raw value into the allowed discrete steps. Integer-
+        /// percent arithmetic so every step equals the exact Double literal
+        /// (e.g. `clamped(0.30) == 0.30` — naive `0.3 / 0.05` drift gives
+        /// 0.30000000000000004).
         public static func clamped(_ value: Double) -> Double {
-            let raw = min(max(value, minOpacity), maxOpacity)
-            let steps = Int((raw / step).rounded())
-            return min(max(Double(steps) * step, minOpacity), maxOpacity)
+            let percent = Int((value * 100).rounded())
+            let stepPercent = Int(step * 100)
+            let clampedPercent = min(
+                max(percent, Int(minOpacity * 100)),
+                Int(maxOpacity * 100)
+            )
+            let stepped = Int((Double(clampedPercent) / Double(stepPercent)).rounded()) * stepPercent
+            return Double(min(max(stepped, 0), 100)) / 100.0
         }
     }
 
     public var background: RGBColor
     public var foreground: RGBColor
-    /// Effective opacity 0.40–1.00 in 0.05 steps (FR-041a). The persisted
-    /// field is named `transparency`; this is its semantic value.
+    /// Effective opacity 0.00–1.00 in 0.05 steps (FR-041a; 004 Q8). The
+    /// persisted field is named `transparency`; this is its semantic value.
     public var opacity: Double
     /// Per-note text size in points, 9–24 (FR-043a).
     public var textSize: Int

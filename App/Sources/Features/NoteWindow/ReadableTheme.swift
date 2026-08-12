@@ -14,9 +14,10 @@ import Domain
 /// Renders the note appearance as SwiftUI colors + fonts.
 public enum ReadableTheme {
 
-    /// The note background color. Built-in keys resolve through the
-    /// palette's per-appearance design (FR-030/031); custom colors use the
-    /// Domain projection (001 FR-040a/FR-041a).
+    /// The note background color (LEGACY — unused since 004 T072: the
+    /// window background `windowBackground(for:)` is the single source of
+    /// the note surface; the SwiftUI paper layer no longer fills). Kept for
+    /// API stability; text/content never use this (Q9: text stays opaque).
     public static func background(for note: Note) -> Color {
         if let paletteKey = NotePalette.paletteKey(for: note.colorKey) {
             // Dynamic per-appearance palette background; apply the note's

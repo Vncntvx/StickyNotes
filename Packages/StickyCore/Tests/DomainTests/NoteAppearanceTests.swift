@@ -11,7 +11,9 @@ import Domain
 // - The six built-in colors resolve to EXACTLY the canonical sRGB hexes
 //   (yellow #FFE08A, pink #F9A8C4, purple #C9A8E8, blue #A8CFF9,
 //   green #A8E8B8, gray #D8D8DC) shared across light/dark.
-// - Opacity is constrained to 0.40–1.00 in 0.05 steps with default 1.00.
+// - Opacity is constrained to 0.00–1.00 in 0.05 steps with default 1.00
+//   (004 Q8, 2026-08-13: the original 0.40 floor was removed by user
+//   directive).
 // - FR-042 WCAG contrast (≥4.5:1 normal, ≥3:1 large) holds for the full
 //   matrix: 6 colors × 13 opacity steps × light/dark, computed against the
 //   effective composited background, with automatic foreground adjustment.
@@ -109,19 +111,22 @@ import Domain
         #expect(note.textSize == 13)
     }
 
-    // MARK: - FR-041a opacity bounds
+    // MARK: - FR-041a opacity bounds (004 Q8: 0–100%, 2026-08-13)
 
     @Test
-    func opacityBoundsAreFortyToHundredInFivePointSteps() {
-        #expect(NoteAppearance.OpacityBounds.minOpacity == 0.40)
+    func opacityBoundsAreZeroToHundredInFivePointSteps() {
+        #expect(NoteAppearance.OpacityBounds.minOpacity == 0.0)
         #expect(NoteAppearance.OpacityBounds.maxOpacity == 1.00)
         #expect(NoteAppearance.OpacityBounds.step == 0.05)
-        #expect(NoteAppearance.OpacityBounds.allSteps == [0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.00])
+        #expect(NoteAppearance.OpacityBounds.allSteps.count == 21)
+        #expect(NoteAppearance.OpacityBounds.allSteps.first == 0.0)
+        #expect(NoteAppearance.OpacityBounds.allSteps.last == 1.00)
     }
 
     @Test
     func opacityClampsToDiscreteSteps() {
-        #expect(NoteAppearance.OpacityBounds.clamped(0.0) == 0.40)
+        #expect(NoteAppearance.OpacityBounds.clamped(-0.2) == 0.0)
+        #expect(NoteAppearance.OpacityBounds.clamped(0.0) == 0.0)
         #expect(NoteAppearance.OpacityBounds.clamped(0.42) == 0.40)
         #expect(NoteAppearance.OpacityBounds.clamped(0.48) == 0.50)
         #expect(NoteAppearance.OpacityBounds.clamped(1.0) == 1.0)
@@ -148,8 +153,8 @@ import Domain
             lastModifiedDeviceId: Self.deviceId
         )
         let appearance = NoteAppearance.projecting(from: note)
-        // Opacity 0.3 clamps to the FR-041a floor of 0.40.
-        #expect(appearance.opacity == 0.40)
+        // Opacity 0.3 snaps to the 0.05 grid (004 Q8: no 0.40 floor).
+        #expect(appearance.opacity == 0.30)
         #expect(appearance.textSize == 18)
         #expect(appearance.alwaysOnTop == true)
     }

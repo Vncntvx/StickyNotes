@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 import Domain
+import SystemBridge
 
 // MARK: - NoteToolbarController (004 T016, FR-001/FR-006/FR-015)
 //
@@ -36,9 +37,13 @@ final class NoteToolbarController: NSObject, NSToolbarDelegate {
     /// Item cache: identifiers → items. Items are built ONCE per window
     /// lifecycle and never rebuilt during resize (plan §9.5).
     private var items: [NSToolbarItem.Identifier: NSToolbarItem] = [:]
-    /// The appearance panel popover (closed on teardown; FR-015c — no
-    /// persistence of open state).
-    private var appearancePopover: NSPopover?
+    /// The appearance panel (004 T071: a manually-placed borderless CHILD
+    /// window — NSPopover anchoring is unreliable for Liquid Glass windows
+    /// on macOS 27; see `showAppearancePanel`). Closed on teardown;
+    /// FR-015c — no persistence of open state.
+    private var appearancePanel: NSWindow?
+    /// Dismissal monitor for the appearance panel (click-outside / ESC).
+    private var appearancePanelMonitor: Any?
     private var isTearingDown = false
 
     init(noteId: UUID, host: NoteWindowHostModel, coordinator: NoteWindowCoordinator) {
@@ -51,7 +56,8 @@ final class NoteToolbarController: NSObject, NSToolbarDelegate {
         // FR-015c/Q3: fixed toolbar — no user customization palette.
         toolbar.allowsUserCustomization = false
         toolbar.displayMode = .iconOnly
-        toolbar.sizeMode = .regular
+        // 004 T064: medium density (small size mode) — see NoteToolbarSpec.
+        toolbar.sizeMode = NoteToolbarSpec.toolbarSizeMode
         // Item sets come from the delegate methods
         // (`toolbarDefaultItemIdentifiers:`/`toolbarAllowedItemIdentifiers:`).
         startObserving()
@@ -59,14 +65,16 @@ final class NoteToolbarController: NSObject, NSToolbarDelegate {
 
     deinit {
         isTearingDown = true
+        MainActor.assumeIsolated {
+            removeAppearancePanelDismissalMonitor()
+        }
     }
 
     /// Closes transient UI and stops observation (called on the same
     /// release path as the window delegate — contracts §1).
     func teardown() {
         isTearingDown = true
-        appearancePopover?.close()
-        appearancePopover = nil
+        closeAppearancePanel()
         items.removeAll()
     }
 
@@ -104,6 +112,12 @@ final class NoteToolbarController: NSObject, NSToolbarDelegate {
     func refreshFromHost() {
         guard let note = host?.note else { return }
         syncPinState(alwaysOnTop: note.alwaysOnTop)
+        // 004 T069 (2026-08-13): the appearance submenu (overflow form)
+        // mirrors the CURRENT appearance — rebuilt on change so its
+        // color/opacity checkmarks never go stale vs the panel/note.
+        if let appearanceItem = items[NSToolbarItem.Identifier(NoteToolbarSpec.appearanceIdentifier)] {
+            appearanceItem.menuFormRepresentation = makeAppearanceSubmenu()
+        }
         // FR-003: title derivation is host-driven (the content layer owns
         // the title field); the window title follows.
         coordinator?.updateWindowTitle(noteId: noteId)
@@ -144,16 +158,18 @@ final class NoteToolbarController: NSObject, NSToolbarDelegate {
 
     // MARK: - Item factories
 
-    /// A standard toolbar button view (glass on macOS 26+; the deployment
-    /// floor is 26, but the defensive `.toolbar` fallback mirrors the
-    /// plan's compatibility matrix).
-    private func makeToolbarButton(systemImage: String, action: Selector) -> NSButton {
+    /// A standard toolbar button view (004 T067, 2026-08-13): borderless
+    /// at rest — the button has NO capsule boundary of its own; the system
+    /// shows a local glass response only on hover/press/keyboard focus.
+    /// Liquid Glass stays as the toolbar's overall surface (FR-021/FR-022:
+    /// system-provided; no hand-drawn chrome).
+    private func makeToolbarButton(systemImage: String, pointSize: CGFloat, action: Selector) -> NSButton {
         let button = NSButton()
-        button.bezelStyle = .toolbar
-        if #available(macOS 26.0, *) {
-            button.bezelStyle = .glass
-        }
-        button.image = NSImage(systemSymbolName: systemImage, accessibilityDescription: nil)
+        button.bezelStyle = NoteToolbarSpec.buttonBezelStyle
+        // 004 T064: small control size (medium density — see NoteToolbarSpec).
+        button.controlSize = NoteToolbarSpec.buttonControlSize
+        button.image = NSImage(systemSymbolName: systemImage, accessibilityDescription: nil)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: pointSize, weight: .regular))
         button.imagePosition = .imageOnly
         button.target = self
         button.action = action
@@ -183,15 +199,22 @@ final class NoteToolbarController: NSObject, NSToolbarDelegate {
     // MARK: Pin (004 T020, FR-007/FR-015a)
 
     private func makePinItem() -> NSToolbarItem {
-        let button = makeToolbarButton(systemImage: "pin", action: #selector(pinAction(_:)))
-        button.setButtonType(.toggle)
+        let button = makeToolbarButton(
+            systemImage: NoteToolbarSpec.pinSymbolName,
+            pointSize: NoteToolbarSpec.symbolPointSize,
+            action: #selector(pinAction(_:))
+        )
+        // 004 T067 (2026-08-13): the pinned state is expressed by the
+        // SYMBOL (pin ↔ pin.fill), not by a dark tinted button surface —
+        // momentary push-in keeps no persistent highlight; the
+        // accessibility value + menu checkmark carry the state.
         let item = toolbarItem(
             identifier: NoteToolbarSpec.pinIdentifier,
             button: button,
             label: String(localized: "Always on Top"),
             tooltip: String(localized: "Always on Top"),
             menuForm: makePinMenuItem(),
-            priority: NoteWindowDerivations.toolbarVisibilityPriority(pin: true)
+            priority: NoteWindowDerivations.toolbarVisibilityPriority(itemIdentifier: NoteToolbarSpec.pinIdentifier)
         )
         return item
     }
@@ -223,10 +246,14 @@ final class NoteToolbarController: NSObject, NSToolbarDelegate {
     private func syncPinState(alwaysOnTop: Bool) {
         guard let item = items[NSToolbarItem.Identifier(NoteToolbarSpec.pinIdentifier)],
               let button = item.view as? NSButton else { return }
-        button.state = alwaysOnTop ? .on : .off
+        // 004 T067: symbol-only state — no `button.state` toggle highlight.
         button.image = NSImage(
-            systemSymbolName: alwaysOnTop ? "pin.fill" : "pin",
+            systemSymbolName: alwaysOnTop
+                ? NoteToolbarSpec.pinSymbolName + ".fill"
+                : NoteToolbarSpec.pinSymbolName,
             accessibilityDescription: nil
+        )?.withSymbolConfiguration(
+            NSImage.SymbolConfiguration(pointSize: NoteToolbarSpec.symbolPointSize, weight: .regular)
         )
         button.toolTip = alwaysOnTop
             ? String(localized: "Always on Top: on")
@@ -242,7 +269,11 @@ final class NoteToolbarController: NSObject, NSToolbarDelegate {
     // MARK: Appearance (004 T027, FR-008/FR-009)
 
     private func makeAppearanceItem() -> NSToolbarItem {
-        let button = makeToolbarButton(systemImage: "paintpalette", action: #selector(appearanceAction(_:)))
+        let button = makeToolbarButton(
+            systemImage: NoteToolbarSpec.appearanceSymbolName,
+            pointSize: NoteToolbarSpec.paletteSymbolPointSize,
+            action: #selector(appearanceAction(_:))
+        )
         button.toolTip = String(localized: "Appearance")
         button.setAccessibilityLabel(String(localized: "Appearance"))
         let item = toolbarItem(
@@ -251,7 +282,7 @@ final class NoteToolbarController: NSObject, NSToolbarDelegate {
             label: String(localized: "Appearance"),
             tooltip: String(localized: "Appearance"),
             menuForm: makeAppearanceSubmenu(),
-            priority: NoteWindowDerivations.toolbarVisibilityPriority(pin: false)
+            priority: NoteWindowDerivations.toolbarVisibilityPriority(itemIdentifier: NoteToolbarSpec.appearanceIdentifier)
         )
         return item
     }
@@ -260,30 +291,94 @@ final class NoteToolbarController: NSObject, NSToolbarDelegate {
         showAppearancePanel(anchoredTo: sender)
     }
 
-    /// NSPopover → NSHostingController → AppearancePanelView (non-activating
-    /// anchor, standard behavior; FR-008 — immediate preview, no confirm).
+    /// 004 T071 (2026-08-13): a borderless CHILD window hosts the panel —
+    /// NSPopover anchoring proved unreliable for Liquid Glass windows on
+    /// macOS 27 (every conversion-based variant landed the popover at the
+    /// top of the screen; the shell windows misreport coordinates). A
+    /// child window placed from the note window's screen FRAME is
+    /// deterministic: it tracks the parent on move/resize, closes with it,
+    /// and dismisses on click-outside / ESC via a local event monitor.
     private func showAppearancePanel(anchoredTo view: NSView) {
         guard let host, let note = host.note else { return }
-        if let appearancePopover {
-            appearancePopover.close()
-            self.appearancePopover = nil
-        }
-        let panel = AppearancePanelView(note: note) { [weak self] updated in
+        closeAppearancePanel()
+        let panelView = AppearancePanelView(note: note) { [weak self] updated in
             guard let self else { return }
             host.updateAppearance(updated)
             self.coordinator?.updateNotePaper(noteId: self.noteId)
         }
-        let popover = NSPopover()
-        popover.contentViewController = NSHostingController(rootView: panel)
-        popover.behavior = .transient
-        popover.contentSize = NSSize(width: 252, height: 330)
-        popover.show(relativeTo: view.bounds, of: view, preferredEdge: .minY)
-        appearancePopover = popover
+        guard let noteWindow = NoteWindowBridge.registeredWindow(for: noteId) else { return }
+        let hosting = NSHostingController(rootView: panelView)
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 252, height: 360),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.contentViewController = hosting
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.hidesOnDeactivate = true
+        panel.isReleasedWhenClosed = false
+        let panelSize = hosting.view.fittingSize
+        // Screen-coordinate placement (window-management space — the only
+        // reliable space on the Liquid Glass shell): leading edge near the
+        // palette button, top edge just below the toolbar band.
+        let frame = noteWindow.frame
+        let panelFrame = NSRect(
+            x: frame.minX + NoteToolbarSpec.panelLeadingInset,
+            y: frame.maxY - NoteToolbarSpec.panelTopInset - panelSize.height,
+            width: panelSize.width,
+            height: panelSize.height
+        )
+        panel.setFrame(panelFrame, display: false)
+        noteWindow.addChildWindow(panel, ordered: .above)
+        panel.orderFront(nil)
+        installAppearancePanelDismissalMonitor(panel: panel)
+        appearancePanel = panel
     }
 
-    /// The appearance submenu (overflow form): colors 7 + opacity 13 steps
-    /// + reset — migrated from the former NoteControlsView context menu
-    /// (T027; single action source with the panel).
+    private func closeAppearancePanel() {
+        removeAppearancePanelDismissalMonitor()
+        if let appearancePanel {
+            if let parent = appearancePanel.parent {
+                parent.removeChildWindow(appearancePanel)
+            }
+            appearancePanel.close()
+        }
+        appearancePanel = nil
+    }
+
+    private func installAppearancePanelDismissalMonitor(panel: NSWindow) {
+        removeAppearancePanelDismissalMonitor()
+        appearancePanelMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown, .keyDown]
+        ) { [weak self, weak panel] event in
+            guard let self, let panel, self.appearancePanel === panel else { return event }
+            switch event.type {
+            case .leftMouseDown, .rightMouseDown:
+                if event.window !== panel {
+                    self.closeAppearancePanel()
+                }
+            case .keyDown where event.keyCode == 53:  // ESC
+                self.closeAppearancePanel()
+            default:
+                break
+            }
+            return event
+        }
+    }
+
+    private func removeAppearancePanelDismissalMonitor() {
+        if let appearancePanelMonitor {
+            NSEvent.removeMonitor(appearancePanelMonitor)
+        }
+        appearancePanelMonitor = nil
+    }
+
+    /// The appearance submenu (overflow form): colors 7 + opacity 21 steps
+    /// (0–100%, 004 Q8) + reset — migrated from the former NoteControlsView
+    /// context menu (T027; single action source with the panel).
     private func makeAppearanceSubmenu() -> NSMenuItem {
         let item = NSMenuItem(title: String(localized: "Appearance"), action: nil, keyEquivalent: "")
         let menu = NSMenu(title: String(localized: "Appearance"))
@@ -365,7 +460,11 @@ final class NoteToolbarController: NSObject, NSToolbarDelegate {
     // MARK: Insert (004 T032, FR-010)
 
     private func makeInsertItem() -> NSToolbarItem {
-        let button = makeToolbarButton(systemImage: "plus", action: #selector(insertAction(_:)))
+        let button = makeToolbarButton(
+            systemImage: NoteToolbarSpec.insertSymbolName,
+            pointSize: NoteToolbarSpec.symbolPointSize,
+            action: #selector(insertAction(_:))
+        )
         button.toolTip = String(localized: "Insert")
         button.setAccessibilityLabel(String(localized: "Insert"))
         let item = toolbarItem(
@@ -374,7 +473,7 @@ final class NoteToolbarController: NSObject, NSToolbarDelegate {
             label: String(localized: "Insert"),
             tooltip: String(localized: "Insert"),
             menuForm: makeInsertMenu(),
-            priority: NoteWindowDerivations.toolbarVisibilityPriority(pin: false)
+            priority: NoteWindowDerivations.toolbarVisibilityPriority(itemIdentifier: NoteToolbarSpec.insertIdentifier)
         )
         return item
     }
@@ -490,7 +589,11 @@ final class NoteToolbarController: NSObject, NSToolbarDelegate {
     // MARK: More (004 T022, FR-011)
 
     private func makeMoreItem() -> NSToolbarItem {
-        let button = makeToolbarButton(systemImage: "ellipsis.circle", action: #selector(moreAction(_:)))
+        let button = makeToolbarButton(
+            systemImage: NoteToolbarSpec.moreSymbolName,
+            pointSize: NoteToolbarSpec.symbolPointSize,
+            action: #selector(moreAction(_:))
+        )
         button.toolTip = String(localized: "More")
         button.setAccessibilityLabel(String(localized: "More"))
         let item = toolbarItem(
@@ -499,7 +602,7 @@ final class NoteToolbarController: NSObject, NSToolbarDelegate {
             label: String(localized: "More"),
             tooltip: String(localized: "More"),
             menuForm: makeMoreMenu(),
-            priority: NoteWindowDerivations.toolbarVisibilityPriority(pin: false)
+            priority: NoteWindowDerivations.toolbarVisibilityPriority(itemIdentifier: NoteToolbarSpec.moreIdentifier)
         )
         return item
     }

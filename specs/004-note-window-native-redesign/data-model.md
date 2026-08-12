@@ -6,7 +6,7 @@
 
 本特性**不新增、不修改任何持久化实体或字段**。沿用既有（001/003 已交付）：
 
-- **Note**（`Packages/StickyCore/Sources/Domain/Models/Models.swift:20-124`，`notes` 表，GRDB/WAL/FTS）：本特性使用字段 `title: String?`、`colorKey: NoteColorKey`、`customColor: String?`、`transparency: Double`（0.40–1.00/0.05，语义=透明度）、`textSize: Int`（9–24）、`alwaysOnTop: Bool`（=置顶，DB 列）、`widgetEligible: Bool`。**置顶跨关闭/重启的持久化 = 既有 DB 语义，本特性不改**。
+- **Note**（`Packages/StickyCore/Sources/Domain/Models/Models.swift:20-124`，`notes` 表，GRDB/WAL/FTS）：本特性使用字段 `title: String?`、`colorKey: NoteColorKey`、`customColor: String?`、`transparency: Double`（0.00–1.00/0.05，语义=透明度，004 Q8）、`textSize: Int`（9–24）、`alwaysOnTop: Bool`（=置顶，DB 列）、`widgetEligible: Bool`。**置顶跨关闭/重启的持久化 = 既有 DB 语义，本特性不改**。
 - **Block / TodoItem / RichTextDocument**：不变（块拆分仅改 `sortKey` 值，不改变 schema 或 payload 结构）。
 - **WindowState / WindowFrame**（`windowState` 表，设备本地，永不同步）：帧持久化语义不变。
 - 无偏好键变更；无迁移脚本。
@@ -33,7 +33,7 @@
 2. **`resolveInsertionTarget(blocks:selection:) -> InsertionTarget`**：`.caretSplit(blockId:offset:)` / `.afterBlock(blockId:)` / `.append`。规格：spec FR-010、plan §4.3。
 3. **`splitRichTextBlock(payload:offset:) -> (leading: RichTextDocument, trailing: RichTextDocument)`**：保留 run 属性与标记；用于光标处块拆分。规格：plan §4.3、R3。
 4. **`formatOpacityPercent(value: Double) -> String`**：`"NN%"` 完整数值，任何宽度不截断（spec FR-009）。
-5. **`toolbarVisibilityPriority(pin: Bool) -> NSToolbarItemVisibilityPriority`**：固定映射（Pin=.high，其余 .standard）。
+5. **`toolbarVisibilityPriority(itemIdentifier: String) -> NSToolbarItemVisibilityPriority`**：固定映射（Pin/Insert=`.high`，Appearance/More=`.standard`；T065，2026-08-13 窄窗口语义修订）。
 
 ## 5. 状态迁移
 
@@ -41,7 +41,7 @@
 
 ## 6. 校验规则（来自 spec）
 
-- 透明度 clamp 0.40–1.00、步长 0.05（001 FR-041a 语义不变；spec FR-008/009）。
+- 透明度 clamp 0.00–1.00、步长 0.05（001 FR-041a 语义经 004 Q8 修订；spec FR-008/009）。
 - 字号 clamp 9–24（001 FR-043a；spec FR-012）。
 - 颜色：7 键调色板 + custom，既有值逐字保留（001 FR-032；spec FR-008）。
 - 最小窗口：contentMinSize (320, 140)（spec FR-017a，Q6，2026-08-13 修订）。

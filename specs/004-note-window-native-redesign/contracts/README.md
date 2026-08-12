@@ -18,15 +18,15 @@
 ## 2. 工具栏项契约（NSToolbarDelegate）
 
 - 标识符固定集：`note.toolbar.pin` / `note.toolbar.appearance` / `note.toolbar.insert` / `note.toolbar.more`。
-- `defaultItemIdentifiers` = 上列全集；`allowedItemIdentifiers` = 同集（无用户定制，spec FR-015c/Q3）。
-- 每项必须提供：主形态（按钮）、`menuFormRepresentation`（溢出/菜单形态，与主形态**同一动作**）、`toolTip`、`accessibilityLabel`；Pin 额外提供 `accessibilityValue`（开/关）且溢出形态为带 state 的 toggle。
-- 优先级固定：Pin = `.high`；其余 = `.standard`（spec FR-015a；R7 预留仅一个常量的回退）。
+- 布局（T067，2026-08-13，撤回 T065 的 2+2）：`defaultItemIdentifiers` = 固定集 `[pin, appearance, insert, more]`（单一 strip，无分隔项）；`allowedItemIdentifiers` = 同集（无用户定制，spec FR-015c/Q3）。
+- 每项必须提供：主形态（按钮）、`menuFormRepresentation`（溢出/菜单形态，与主形态**同一动作**；Appearance/Insert/More 为子菜单形态）、`toolTip`、`accessibilityLabel`；Pin 额外提供 `accessibilityValue`（开/关）且溢出形态为带 state 的 toggle。
+- 优先级固定（T065）：Pin/Insert = `.high`；Appearance/More = `.standard`（spec FR-015a；R7 预留仅一个常量的回退）。
 - 项对象在控制器生命周期内缓存，不随缩放重建。
 
 ## 3. `AppearancePanelView` ↔ host
 
 - 输入：`note` 外观字段（只读初始）；输出：`onAppearanceChange(Note)` 闭包（面板合成修改后的 Note 副本）→ 调用方执行 `host.updateAppearance` + `updateNotePaper`（即时预览，spec FR-008）。
-- 数值契约：透明度 Slider 值域 0.40–1.00、步长 0.05；显示"NN%"（spec FR-009，禁止截断）。
+- 数值契约：透明度 Slider 值域 0.00–1.00、步长 0.05（Q8，2026-08-13）；显示"NN%"（spec FR-009，禁止截断）。
 - 重置语义：`NotePalette` 默认键 + `transparency = 1.0`（spec FR-008"恢复合理默认"）。
 - 颜色选择：7 键调色板 + custom（既有 `paletteStorage` 映射逐字保留）；选中态=勾选+名称+色块（001 FR-044）。
 

@@ -258,3 +258,6 @@ Prototypes/*/
 
 # Opencode image
 .opencode/images
+
+# Zcode
+.zcode/

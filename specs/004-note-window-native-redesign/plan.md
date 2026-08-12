@@ -165,6 +165,8 @@ close（红绿灯/⌘W/菜单）
 ### 3.1 结构
 
 - `NSToolbar(identifier: "note.window.toolbar")`；`window.toolbar = toolbar`；`toolbarStyle = .automatic`（系统决定统一形态）。
+- 视觉密度（T064，2026-08-13）：`sizeMode = .small` + 按钮 `controlSize = .small`——AppKit medium 密度带（总高约 -10–15%、单项水平 padding 约 -15–20%），避免"大型 segmented control"观感；玻璃 bezel 与 hover/pressed 形变仍由系统提供，常量单一可调（NoteToolbarSpec）。
+- 单一 Glass strip（T067，2026-08-13，撤回 T065 的 2+2）：布局 = `[pin, appearance, insert, more]` 无分隔——一个玻璃容器 + 四个无边界 item；按钮 resting 无独立胶囊（`.toolbar` bezel，hover/pressed/keyboard 系统局部响应）；symbol 紧凑（14pt，palette 光学 -1pt = 13pt）；More 用 `ellipsis`；置顶状态以符号（pin ↔ pin.fill）表达，不染色表面。
 - 固定项（Q3 决策：不开放用户定制；不提供 customization palette 扩展）：`defaultItemIdentifiers = [pin, appearance, insert, more]`；`allowedItemIdentifiers` 同集。
 - 委托：`itemForItemIdentifier(_:willBeInsertedIntoToolbar:)` 单点构造 + 缓存（`toolbarItems` 字典，窗口生命周期内不重建对象图——性能要求）。
 
@@ -172,17 +174,17 @@ close（红绿灯/⌘W/菜单）
 
 | 项 | 用途 | 原生表示 | 常驻/上下文 | 可见性优先级 | 溢出形态 | 状态源 | 动作路径 | 键盘/菜单等价 | API 依赖 |
 |---|---|---|---|---|---|---|---|---|---|
-| **Pin** | 置顶开关（FR-007/026） | NSToolbarItem（view = NSButton bezelStyle `.toolbar`/`.glass`，`setButtonType(.toggle)`，图标 pin/pin.fill 随 state 切换） | 常驻高优先级 | `.high`（头注释背书：>Standard 且 <User 建议常显，最后进溢出） | `menuFormRepresentation` = NSMenuItem（toggle，state 随动） | `host.note.alwaysOnTop`（DB） | `coordinator.updateAlwaysOnTop`（既有唯一入口） | 新 View 菜单 "Always on Top"（toggle，无快捷键）；`accessibilityValue` 开/关 + tooltip | `.glass` 需 macOS 26 guard |
-| **Appearance** | 颜色+透明度整合（FR-008/009） | NSToolbarItem（view = NSButton `.toolbar`/`.glass`，paintpalette 图标）→ 点击弹出 NSPopover（NSHostingController → `AppearancePanelView`） | 常驻中优先级 | `.standard` | `menuFormRepresentation` = 外观子菜单（颜色 7 项 + 透明度 13 步 + 重置） | `host.note`（colorKey/customColor/transparency） | 面板改动→`host.updateAppearance`+`coordinator.updateNotePaper`（即时预览，FR-008） | 既有 ⌥C/⌥O 步进保留；外观子菜单（从 NoteControlsView 上下文菜单迁移） | NSPopover 10.10+ |
-| **Insert** | 统一插入入口（FR-010/Q4） | NSToolbarItem（view = NSButton `.toolbar`/`.glass`，plus 图标，pullsDown）→ NSMenu：截图子菜单（区域/窗口）、插入文件引用…、插入图片…（新）、待办（⇧⌘T）、代码块（⇧⌘C） | 常驻中优先级 | `.standard` | 同上 menuFormRepresentation 菜单 | 无（动作型） | 菜单项→协调器→`host` 既有插入方法（目标解析见 §4.3） | 既有 ⇧⌘T/⇧⌘C + 既有 File/Edit 菜单 Insert 组 | — |
-| **More** | 低频动作（FR-011） | NSToolbarItem（view = NSButton `.toolbar`/`.glass`，ellipsis.circle）→ NSMenu：复制笔记、复制为 Markdown、导出 JSON…、移入废纸篓（⌘⌫）、分隔线、允许小组件（toggle）、设为小组件笔记/移除 | 常驻 | `.standard` | 同上（窄宽度时可自身溢出进 chevron） | 动作型 + `widgetEligible` | 既有闭包：duplicate/copy/export/moveToTrash/widget 选择（从 NoteControlsView 上下文菜单迁移） | 既有菜单：⌘⌫、上下文菜单（内容区 .contextMenu 保留） | — |
+| **Pin** | 置顶开关（FR-007/026） | NSToolbarItem（view = NSButton bezelStyle `.toolbar`（无边界，T067），momentaryPushIn，图标 pin/pin.fill 随 state 切换——符号表达状态，不染色表面） | 常驻高优先级（属性组） | `.high`（头注释背书：>Standard 且 <User 建议常显，最后进溢出） | `menuFormRepresentation` = NSMenuItem（toggle，state 随动） | `host.note.alwaysOnTop`（DB） | `coordinator.updateAlwaysOnTop`（既有唯一入口） | 新 View 菜单 "Always on Top"（toggle，无快捷键）；`accessibilityValue` 开/关 + tooltip | `.glass` 需 macOS 26 guard |
+| **Appearance** | 颜色+透明度整合（FR-008/009） | NSToolbarItem（view = NSButton `.toolbar`（无边界），paintpalette 图标 13pt（光学 -1pt，T067））→ 点击弹出无边框子窗口面板（T071 替换 NSPopover 锚定） | 常驻中优先级 | `.standard` | `menuFormRepresentation` = 外观子菜单（颜色 7 项 + 透明度 21 步（0–100%，Q8）+ 重置） | `host.note`（colorKey/customColor/transparency） | 面板改动→`host.updateAppearance`+`coordinator.updateNotePaper`（即时预览，FR-008） | 既有 ⌥C/⌥O 步进保留；外观子菜单（从 NoteControlsView 上下文菜单迁移） | NSWindow child 10.10+ |
+| **Insert** | 统一插入入口（FR-010/Q4） | NSToolbarItem（view = NSButton `.toolbar`（无边界），plus 图标 14pt，pullsDown）→ NSMenu：截图子菜单（区域/窗口）、插入文件引用…、插入图片…（新）、待办（⇧⌘T）、代码块（⇧⌘C） | 常驻高优先级（操作组，T065：窄窗口保持可见） | `.high` | 同上 menuFormRepresentation 菜单 | 无（动作型） | 菜单项→协调器→`host` 既有插入方法（目标解析见 §4.3） | 既有 ⇧⌘T/⇧⌘C + 既有 File/Edit 菜单 Insert 组 | — |
+| **More** | 低频动作（FR-011） | NSToolbarItem（view = NSButton `.toolbar`（无边界），ellipsis 图标 14pt（T067：弃 ellipsis.circle——少一层圆形））→ NSMenu：复制笔记、复制为 Markdown、导出 JSON…、移入废纸篓（⌘⌫）、分隔线、允许小组件（toggle）、设为小组件笔记/移除 | 常驻 | `.standard` | 同上（窄宽度时可自身溢出进 chevron） | 动作型 + `widgetEligible` | 既有闭包：duplicate/copy/export/moveToTrash/widget 选择（从 NoteControlsView 上下文菜单迁移） | 既有菜单：⌘⌫、上下文菜单（内容区 .contextMenu 保留） | — |
 | **标题** | 窗口身份（FR-003/Q7，Apple Notes 模式） | 内容首行标题框（唯一可见呈现）+ 原生 `window.title`（隐藏派生，Mission Control/窗口菜单/VoiceOver） | 内容层（标题栏不渲染标题文本） | 标题行内尾截断（不参与工具栏溢出体系） | 内容标题行尾截断 | `Note.title` 或内容首行 | 协调器 `updateWindowTitle(noteId:)`（host→window.title，隐藏） | 无 | 10.10 titleVisibility（= .hidden） |
 
 **禁止项**：无 title 工具栏项、无数字/文本项、无自定义间距项（弹性空间由系统工具栏布局提供）。
 
 ### 3.3 溢出行为
 
-- 系统 chevron 自动承载溢出项；顺序由 `visibilityPriority` + 系统布局决定：Pin（.high）最后溢出（Q6：320 pt 最小宽度下 Pin + chevron 直接可见，标题在内容首行不参与溢出体系）；Appearance/Insert/More（.standard）先进溢出。
+- 系统 chevron 自动承载溢出项；顺序由 `visibilityPriority` + 系统布局决定：Pin/Insert（.high）最后溢出（Q6/T065：320 pt 最小宽度下 Pin + Insert + chevron 直接可见，外观/更多先进溢出且子菜单形态承载低频动作——无产品级"…"被困于系统"»"）；Appearance/More（.standard）先进溢出。布局为单一 strip（T067：单项宽度收紧后溢出推迟，无分隔项）。
 - 溢出菜单中每个项使用 `menuFormRepresentation`（Pin 为带 state 的 toggle；其余与主菜单相同 NSMenuItem）——**同一动作单一实现，多形态呈现**（工具栏按钮/溢出项/应用菜单/上下文菜单指向同一操作）。
 - 不使用任何自定义"假溢出"。
 
@@ -219,11 +221,11 @@ close（红绿灯/⌘W/菜单）
 
 - 工具栏表示：Appearance 项（paintpalette）；点击 → NSPopover（非激活式锚定，标准行为），内容 `AppearancePanelView`（SwiftUI）：
   - 颜色：7 键调色板（`NotePaletteKey`，含 custom——peach 走既有 `paletteStorage` 映射，001 FR-032 语义：**既有颜色值逐字保留**）；选中态 = 勾选 + 名称 + 色块（不只靠颜色，001 FR-044）；
-  - 透明度：Slider 0.40–1.00 步 0.05（13 步，001 FR-041a），旁标"NN%"完整数值（**任何宽度不截断**，FR-009）；无障碍 value 播报；
+  - 透明度：Slider 0.00–1.00 步 0.05（21 步，Q8——001 FR-041a 原 40–100% 下限取消），旁标"NN%"完整数值（**任何宽度不截断**，FR-009）；无障碍 value 播报；
   - 重置："恢复默认"按钮（默认调色板 + transparency 1.0，FR-008"恢复合理默认"）；
   - 即时生效：每次改动 → `host.updateAppearance` + `updateNotePaper`（无确认按钮）；
   - 关闭：popover 标准消失（点外/ESC）；不持久化打开状态。
-- 不透明度语义（research §1.4）：透明度 = 内容层 alpha；本特性把 `ReadableTheme.windowBackground` 也应用 `note.transparency`，消除标题栏条带接缝；**不触碰 `window.alphaValue`**（否则连原生镀铬一起淡化，违反 FR-021 层级）；对比度校验沿用 `NoteAppearance.projecting`（custom+opacity 对合成背景）。
+- 不透明度语义（Q9，2026-08-13）：透明度 = **仅背景**（纸面/窗口背景）；文字/内容恒不透明、任何透明度（含 0%）清晰可读；本特性把 `ReadableTheme.windowBackground` 应用 `note.transparency`，消除标题栏条带接缝；**不触碰 `window.alphaValue`**（否则连原生镀铬一起淡化，违反 FR-021 层级）；对比度校验沿用 `NoteAppearance.projecting`（custom+opacity 对合成背景）。
 
 ### 4.3 插入工作流（FR-010 + Q4）
 
@@ -347,7 +349,7 @@ close（红绿灯/⌘W/菜单）
 
 | 宽度 | 直接可见动作 | 溢出动作 | 编辑器可用宽 | 上下文呈现 |
 |---|---|---|---|---|
-| 320 pt（最小，Q6） | Pin + 溢出 chevron | 外观/插入/更多（按优先级序） | ~280 pt（inset 10） | 格式化行照常（若选区） |
+| 320 pt（最小，Q6） | Pin + Insert + 溢出 chevron | 外观/更多（子菜单形态） | ~280 pt（inset 10） | 格式化行照常（若选区） |
 | 480 pt | Pin/外观/插入/更多全可见 | 无 | ~440 pt | 同上 |
 | 640 pt | 全部 | 无 | ~600 pt | 同上 |
 | 800 pt | 全部 | 无 | ~760 pt | 同上 |

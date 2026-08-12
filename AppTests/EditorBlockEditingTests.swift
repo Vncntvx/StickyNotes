@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import AppKit
 import Domain
 import Persistence
 import AssetStore
@@ -53,6 +54,23 @@ import AssetStore
         // not an article editor.
         #expect(RichTextView.textContainerVerticalInset == 12,
                 "vertical inset keeps first-line breathing without an editor-like gap")
+    }
+
+    // MARK: - 004 T063: the paper grows with content (scroll precondition)
+
+    @Test
+    func notePaperTextViewIntrinsicHeightGrowsWithLongContent() {
+        let textView = NotePaperTextView(frame: NSRect(x: 0, y: 0, width: 400, height: 320))
+        textView.string = String(repeating: "scrolling line\n", count: 200)
+        // No manual ensureLayout — the intrinsic size itself must reflect
+        // the full document (T063: ensureLayout inside intrinsicContentSize
+        // + didChangeText invalidation), otherwise the enclosing SwiftUI
+        // ScrollView never scrolls a long note.
+        let tall = textView.intrinsicContentSize.height
+        #expect(tall > NotePaperTextView.minimumPaperHeight,
+                "long content must grow the paper beyond the minimum — scroll precondition")
+        #expect(tall > 600,
+                "200 lines must produce a tall paper (actual \(tall))")
     }
 
     @Test

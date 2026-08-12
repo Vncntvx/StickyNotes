@@ -29,8 +29,11 @@ import Domain
     }
 
     @Test
-    func opacityClampsToFortyPercentFloor() {
-        #expect(NoteAppearance.OpacityBounds.clamped(0.1) == 0.40)
+    func opacityClampsToZeroToHundredRange() {
+        // 004 Q8 (2026-08-13): the 0.40 floor was removed — the range is
+        // 0–100% in 0.05 steps.
+        #expect(NoteAppearance.OpacityBounds.clamped(0.1) == 0.10)
+        #expect(NoteAppearance.OpacityBounds.clamped(-0.3) == 0.0)
         #expect(NoteAppearance.OpacityBounds.clamped(1.0) == 1.0)
     }
 

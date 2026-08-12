@@ -895,19 +895,23 @@ public struct NoteWindowContent: View {
     }
 }
 
-/// FR-030a: note-paper chrome — 8-pt rounded background and rounded
-/// clipping, drawn in SwiftUI so colors resolve per appearance. NO stroke
-/// is drawn here: the window's native frame already supplies the hairline
-/// edge (Liquid Glass), and the former NSHostingView layer border was
-/// reset by SwiftUI on macOS 26 and rendered as a stale square black ring
-/// (verified 2026-08-09). A SwiftUI stroke on top produced a doubled
-/// 2-line edge (screenshot 2026-08-09), so the border stays native.
+/// FR-030a: note-paper chrome — 8-pt rounded clipping, drawn in SwiftUI.
+/// The note surface color comes from the WINDOW background (T072 — single
+/// source, no double alpha). NO stroke is drawn here: the window's native
+/// frame already supplies the hairline edge (Liquid Glass), and the former
+/// NSHostingView layer border was reset by SwiftUI on macOS 26 and rendered
+/// as a stale square black ring (verified 2026-08-09). A SwiftUI stroke on
+/// top produced a doubled 2-line edge (screenshot 2026-08-09), so the
+/// border stays native.
 private extension View {
     func notePaperBackground(for note: Note) -> some View {
-        background {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(ReadableTheme.background(for: note))
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        // 004 T072 (2026-08-13): NO paper fill — the WINDOW background
+        // (`ReadableTheme.windowBackground`, note color × transparency) is
+        // the single source of the note surface. A second color×alpha fill
+        // here double-applied the transparency: the paper composited to
+        // ~1-(1-a)² and looked visibly MORE opaque than the titlebar strip
+        // (user report: strip vs paper transparency mismatch). The rounded
+        // clip stays for FR-030a content clipping.
+        clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }

@@ -24,6 +24,45 @@ public enum NoteToolbarSpec {
     ]
 
     public static let toolbarIdentifier = "note.window.toolbar"
+
+    // MARK: Visual density (004 T064, 2026-08-13 user feedback)
+    //
+    // The glass toolbar read as a LARGE segmented control (four heavy
+    // capsules inside a heavy outer capsule). System-native density
+    // reduction: `.small` size mode + `.small` control size land in
+    // AppKit's medium density band (rounded-rect rather than capsule-heavy)
+    // — toolbar height drops ~10–15%, per-item horizontal padding ~15–20%,
+    // while hover/press morphing stays system provided (FR-022/FR-034: no
+    // hand-drawn chrome). Single-constant tuning points if the density
+    // needs another step.
+    public static let toolbarSizeMode: NSToolbar.SizeMode = .small
+    public static let buttonControlSize: NSControl.ControlSize = .small
+
+    // MARK: Visual styling (004 T067, 2026-08-13 user feedback)
+    //
+    // ONE glass container + four borderless toolbar buttons: at rest the
+    // items have NO capsule boundaries (hover/press/keyboard focus shows
+    // the system response) — Liquid Glass stays as the overall surface,
+    // not as per-item pills. Symbols are tight (hit areas ~36–42 pt);
+    // the palette is optically 1pt smaller; More uses the light
+    // `ellipsis` glyph (not ellipsis.circle — one less circular layer).
+    public static let buttonBezelStyle: NSButton.BezelStyle = .toolbar
+    public static let symbolPointSize: CGFloat = 14
+    public static let paletteSymbolPointSize: CGFloat = 13
+    public static let pinSymbolName = "pin"
+    public static let appearanceSymbolName = "paintpalette"
+    public static let insertSymbolName = "plus"
+    public static let moreSymbolName = "ellipsis"
+
+    // MARK: Appearance panel placement (004 T071, 2026-08-13)
+    //
+    // The panel is a borderless child window placed from the note window's
+    // screen frame (NSPopover anchoring is unreliable on the macOS 27
+    // Liquid Glass shell). Leading offset ≈ traffic lights (~78) + pin
+    // item (~36) → the palette button's leading edge; top offset covers
+    // the titlebar + toolbar band (small size mode).
+    public static let panelLeadingInset: CGFloat = 110
+    public static let panelTopInset: CGFloat = 56
 }
 
 // MARK: - NoteWindowDerivations (004, data-model.md §4 pure functions)
@@ -216,25 +255,35 @@ public enum NoteWindowDerivations {
         "\(Int((value * 100).rounded()))%"
     }
 
-    /// Step-exact opacity clamp (0.40–1.00, 0.05 steps). Integer-percent
-    /// arithmetic so every step equals the exact Double literal (e.g.
-    /// `clampedOpacity(0.60) == 0.60`) — Domain's `OpacityBounds.clamped`
-    /// multiplies the inexact `0.05` step and returns 0.6000000000000001
-    /// (StickyCore is zero-change for this feature, so the panel clamps
-    /// here).
+    /// Step-exact opacity clamp (0.00–1.00, 0.05 steps — 004 Q8). Integer-
+    /// percent arithmetic so every step equals the exact Double literal
+    /// (e.g. `clampedOpacity(0.60) == 0.60`) — Domain's
+    /// `OpacityBounds.clamped` multiplies the inexact `0.05` step and
+    /// returns 0.6000000000000001.
     public static func clampedOpacity(_ value: Double) -> Double {
         let rawPercent = Int((value * 100).rounded())
-        let clamped = min(max(rawPercent, 40), 100)
+        let clamped = min(max(rawPercent, 0), 100)
         let stepped = Int((Double(clamped) / 5.0).rounded()) * 5
-        return Double(min(max(stepped, 40), 100)) / 100.0
+        return Double(min(max(stepped, 0), 100)) / 100.0
     }
 
     // MARK: Toolbar visibility priority (004 FR-015a, data-model.md §4.5)
 
-    /// The fixed semantic priority mapping: pin → `.high` (last into the
-    /// overflow chevron), everything else → `.standard`.
-    public static func toolbarVisibilityPriority(pin: Bool) -> NSToolbarItem.VisibilityPriority {
-        pin ? .high : .standard
+    /// The fixed semantic priority mapping (004 T065, 2026-08-13 user
+    /// feedback): pin + insert → `.high` (last into the overflow — the
+    /// narrow state keeps the two "primary" commands visible), appearance +
+    /// more → `.standard` (first into the system overflow, whose submenu
+    /// forms carry the low-frequency actions — no product-level "…" item
+    /// trapped inside the system "»").
+    public static func toolbarVisibilityPriority(
+        itemIdentifier: String
+    ) -> NSToolbarItem.VisibilityPriority {
+        switch itemIdentifier {
+        case NoteToolbarSpec.pinIdentifier, NoteToolbarSpec.insertIdentifier:
+            return .high
+        default:
+            return .standard
+        }
     }
 
     // MARK: Palette storage mapping (001 FR-032 semantics, shared by the
@@ -272,6 +321,24 @@ public enum NoteWindowDerivations {
         updated.colorKey = .yellow
         updated.customColor = nil
         updated.transparency = 1.0
+        return updated
+    }
+
+    /// 004 T069 (2026-08-13): composes a note for an appearance change from
+    /// the ORIGINAL base note + the CURRENT local appearance state. The
+    /// panel must never read appearance values back from a stale `note`
+    /// snapshot (the slider knob then refuses to follow the mouse and the
+    /// "NN%" label freezes until the popover is reopened).
+    public static func composeAppearance(
+        base: Note,
+        colorKey: NoteColorKey,
+        customColor: String?,
+        transparency: Double
+    ) -> Note {
+        var updated = base
+        updated.colorKey = colorKey
+        updated.customColor = customColor
+        updated.transparency = clampedOpacity(transparency)
         return updated
     }
 

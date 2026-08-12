@@ -61,6 +61,11 @@ public struct RichTextBlockView: View {
     // 004 T037: the per-window selection bridge (shared with the toolbar's
     // insertion-target resolution).
     @State private var selectionBridge: EditorSelectionBridge?
+    // 004 T063: the measured paper width (ScrollView viewport) feeding the
+    // FR-019 semantic insets — measured via onGeometryChange, NOT a
+    // wrapping GeometryReader (which would pin content height to the
+    // viewport and break vertical scrolling).
+    @State private var paperWidth: CGFloat = 480
 
     public init(
         note: Note,
@@ -108,63 +113,22 @@ public struct RichTextBlockView: View {
 
     public var body: some View {
         ScrollView {
-            // 004 T042 (FR-019): the ONLY custom width-aware rule — two
-            // semantic content insets (compact 10pt / regular 14–16pt,
-            // switching at 480pt; capped at 24pt so wide windows never
-            // center the text into a document column). NSToolbar cannot
-            // express content insets, so this stays the single exception
-            // (plan §5/§8).
-            GeometryReader { proxy in
-                // 004 T037: read the bridge state during body evaluation so
-                // SwiftUI observes it (the insertion-control trigger).
-                let textSelected = selectionBridge?.isTextSelected ?? false
-                let compact = proxy.size.width < 480
-                let inset: CGFloat = compact ? 10 : min(14 + (proxy.size.width - 480) / 240, 24)
-                VStack(alignment: .leading, spacing: 8) {
-                    // 004 T017 (FR-003): the editable title lives in the
-                    // paper, above the first content line (001 FR-050:
-                    // optional title; empty → nil).
-                    titleField
-
-                    BlockInsertionControl(
-                        onInsertTodo: onInsertTodo,
-                        onInsertCode: onInsertCode,
-                        onInsertFileReference: onInsertFileReference,
-                        onCaptureScreenshot: onCaptureScreenshot,
-                        isCursorLineHovered: $isCursorLineHovered,
-                        isTextSelected: Binding(
-                            get: { textSelected },
-                            set: { _ in }
-                        ),
-                        isIMEComposing: $isIMEComposing
-                    )
-
-                    // Rich-text block (the seamless primary surface) —
-                    // NSTextView-backed (verified 2026-08-07: SwiftUI
-                    // `TextEditor`'s binding never writes back on macOS 27
-                    // beta; plan-sanctioned fallback, canonical format
-                    // unchanged). Natural height so short notes fit without
-                    // a scroll track.
-                    primaryEditor
-
-                    // Special blocks rendered beneath (todo/code/file/image/
-                    // screenshot) with the unified container (FR-050b).
-                    // LazyVStack: FR-072b — only visible rows are realized
-                    // for notes with 100+ todo blocks (bounded row
-                    // realization). 004 FR-010: trailing rich-text blocks
-                    // (caret splits) render as editable blocks too.
-                    LazyVStack(alignment: .leading, spacing: 10) {
-                        ForEach(Array(secondaryBlocks.enumerated()), id: \.element.id) { index, block in
-                            BlockContainer {
-                                blockView(block, index: index)
-                            }
-                        }
-                    }
-                }
+            paper
                 .padding(.horizontal, inset)
                 .padding(.bottom, 10)
                 .padding(.top, 8)
-            }
+        }
+        // 004 T063 (2026-08-13 fix): the width-sensing GeometryReader
+        // previously WRAPPED the content — it accepted the ScrollView's
+        // viewport height proposal, so long notes were clipped at the
+        // viewport and could not scroll. Width is now measured via
+        // onGeometryChange (no wrapping); the content VStack sizes itself
+        // from its children (the NSTextView's intrinsic height grows with
+        // the text), so the ScrollView scrolls naturally.
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.width
+        } action: { width in
+            paperWidth = width
         }
         // 004 T037: the selection bridge (per window, @State — created
         // here so the primary editor can publish into it).
@@ -182,6 +146,66 @@ public struct RichTextBlockView: View {
         .overlay {
             if let bridge = selectionBridge {
                 ContextualFormatOverlayAnchor(bridge: bridge)
+            }
+        }
+    }
+
+    // MARK: - 004 T042 semantic insets (FR-019)
+
+    /// The FR-019 semantic content inset (compact 10pt / regular 14–16pt,
+    /// switching at 480pt; capped at 24pt) — driven by the measured
+    /// `paperWidth`. The ONLY custom width-aware rule (plan §5/§8).
+    private var inset: CGFloat {
+        paperWidth < 480 ? 10 : min(14 + (paperWidth - 480) / 240, 24)
+    }
+
+    /// The paper content: title → insertion control → primary editor →
+    /// special blocks. Sizes itself from its children — NOT wrapped in a
+    /// GeometryReader (that pins its height to the viewport and breaks
+    /// vertical scrolling — 2026-08-13 fix, T063).
+    private var paper: some View {
+        // 004 T037: read the bridge state during body evaluation so
+        // SwiftUI observes it (the insertion-control trigger).
+        let textSelected = selectionBridge?.isTextSelected ?? false
+        return VStack(alignment: .leading, spacing: 8) {
+            // 004 T017 (FR-003): the editable title lives in the
+            // paper, above the first content line (001 FR-050:
+            // optional title; empty → nil).
+            titleField
+
+            BlockInsertionControl(
+                onInsertTodo: onInsertTodo,
+                onInsertCode: onInsertCode,
+                onInsertFileReference: onInsertFileReference,
+                onCaptureScreenshot: onCaptureScreenshot,
+                isCursorLineHovered: $isCursorLineHovered,
+                isTextSelected: Binding(
+                    get: { textSelected },
+                    set: { _ in }
+                ),
+                isIMEComposing: $isIMEComposing
+            )
+
+            // Rich-text block (the seamless primary surface) —
+            // NSTextView-backed (verified 2026-08-07: SwiftUI
+            // `TextEditor`'s binding never writes back on macOS 27
+            // beta; plan-sanctioned fallback, canonical format
+            // unchanged). Natural height so short notes fit without
+            // a scroll track.
+            primaryEditor
+
+            // Special blocks rendered beneath (todo/code/file/image/
+            // screenshot) with the unified container (FR-050b).
+            // LazyVStack: FR-072b — only visible rows are realized
+            // for notes with 100+ todo blocks (bounded row
+            // realization). 004 FR-010: trailing rich-text blocks
+            // (caret splits) render as editable blocks too.
+            LazyVStack(alignment: .leading, spacing: 10) {
+                ForEach(Array(secondaryBlocks.enumerated()), id: \.element.id) { index, block in
+                    BlockContainer {
+                        blockView(block, index: index)
+                    }
+                }
             }
         }
     }

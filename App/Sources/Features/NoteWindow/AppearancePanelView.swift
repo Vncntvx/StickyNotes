@@ -5,8 +5,8 @@ import Domain
 //
 // Per plan.md §4.2 and contracts §3: the appearance popover content —
 // seven-key palette (with custom preserved byte-exact per 001 FR-032),
-// opacity slider (0.40–1.00 / 0.05, full "NN%" value at ANY width), and a
-// Restore Defaults button (default palette color + 1.0). Every change
+// opacity slider (0.00–1.00 / 0.05 — 004 Q8, full "NN%" value at ANY
+// width), and a Restore Defaults button (default palette color + 1.0). Every change
 // calls `onAppearanceChange` immediately (FR-008 instant preview — no
 // confirm button); nothing is persisted here (FR-015c: the popover is
 // session-only state).
@@ -14,6 +14,23 @@ import Domain
 struct AppearancePanelView: View {
     let note: Note
     let onAppearanceChange: (Note) -> Void
+
+    // 004 T069 (2026-08-13): LOCAL reactive state — the panel follows its
+    // own edits live (slider knob follows the mouse, "NN%" updates while
+    // dragging, palette checkmark moves on click). The base `note` stays
+    // the ORIGINAL snapshot; every change composes base + current local
+    // state (non-appearance fields survive the composition).
+    @State private var transparency: Double
+    @State private var colorKey: NoteColorKey
+    @State private var customColor: String?
+
+    init(note: Note, onAppearanceChange: @escaping (Note) -> Void) {
+        self.note = note
+        self.onAppearanceChange = onAppearanceChange
+        _transparency = State(initialValue: NoteWindowDerivations.clampedOpacity(note.transparency))
+        _colorKey = State(initialValue: note.colorKey)
+        _customColor = State(initialValue: note.customColor)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -35,12 +52,33 @@ struct AppearancePanelView: View {
             Divider()
 
             Button(String(localized: "Restore Defaults")) {
-                onAppearanceChange(NoteWindowDerivations.resetAppearance(of: note))
+                let updated = NoteWindowDerivations.resetAppearance(of: note)
+                colorKey = updated.colorKey
+                customColor = updated.customColor
+                transparency = 1.0
+                onAppearanceChange(updated)
             }
             .font(.body)
         }
         .padding(16)
         .frame(width: 252)
+        // 004 T072 (2026-08-13): SOLID material surface — the panel is a
+        // borderless child window with a clear background; without this
+        // the note shows through the panel (user report: "面板也变成透明
+        // 了，面板不应该更改"). The system material is opaque regardless
+        // of the note's transparency.
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    /// The composed note reflecting the CURRENT local appearance state
+    /// over the original snapshot (004 T069).
+    private var currentNote: Note {
+        NoteWindowDerivations.composeAppearance(
+            base: note,
+            colorKey: colorKey,
+            customColor: customColor,
+            transparency: transparency
+        )
     }
 
     // MARK: - Palette
@@ -58,9 +96,15 @@ struct AppearancePanelView: View {
     }
 
     private func paletteButton(_ key: NotePaletteKey) -> some View {
-        let selected = NoteWindowDerivations.paletteKey(for: note) == key
+        let selected = NoteWindowDerivations.paletteKey(for: currentNote) == key
         return Button {
-            onAppearanceChange(NoteWindowDerivations.note(applyingPaletteKey: key, to: note))
+            var base = note
+            base.transparency = transparency
+            base.customColor = customColor
+            let updated = NoteWindowDerivations.note(applyingPaletteKey: key, to: base)
+            colorKey = updated.colorKey
+            customColor = updated.customColor
+            onAppearanceChange(updated)
         } label: {
             VStack(spacing: 4) {
                 ZStack {
@@ -96,29 +140,48 @@ struct AppearancePanelView: View {
     // MARK: - Opacity
 
     private var opacityRow: some View {
-        HStack(spacing: 10) {
-            Slider(
-                value: Binding(
-                    get: { NoteWindowDerivations.clampedOpacity(note.transparency) },
-                    set: { newValue in
-                        var updated = note
-                        updated.transparency = NoteWindowDerivations.clampedOpacity(newValue)
-                        onAppearanceChange(updated)
-                    }
-                ),
-                in: 0.40...1.00,
-                step: 0.05
-            )
-            .accessibilityLabel(String(localized: "Background Opacity"))
-            .accessibilityValue(NoteWindowDerivations.formatOpacityPercent(note.transparency))
-            .help(String(localized: "Background Opacity"))
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 10) {
+                Slider(
+                    value: Binding(
+                        get: { transparency },
+                        set: { newValue in
+                            let stepped = NoteWindowDerivations.clampedOpacity(newValue)
+                            transparency = stepped
+                            onAppearanceChange(NoteWindowDerivations.composeAppearance(
+                                base: note,
+                                colorKey: colorKey,
+                                customColor: customColor,
+                                transparency: stepped
+                            ))
+                        }
+                    ),
+                    in: NoteAppearance.OpacityBounds.minOpacity...NoteAppearance.OpacityBounds.maxOpacity,
+                    step: NoteAppearance.OpacityBounds.step
+                )
+                .accessibilityLabel(String(localized: "Background Opacity"))
+                .accessibilityValue(NoteWindowDerivations.formatOpacityPercent(transparency))
+                .help(String(localized: "Background Opacity"))
 
-            // FR-009: complete "NN%" — fixed-width slot so the value never
-            // truncates at any panel width.
-            Text(NoteWindowDerivations.formatOpacityPercent(note.transparency))
-                .font(.system(.body, design: .monospaced))
-                .frame(minWidth: 44, alignment: .trailing)
-                .accessibilityHidden(true)
+                // FR-009: complete "NN%" — fixed-width slot so the value never
+                // truncates at any panel width.
+                Text(NoteWindowDerivations.formatOpacityPercent(transparency))
+                    .font(.system(.body, design: .monospaced))
+                    .frame(minWidth: 44, alignment: .trailing)
+                    .accessibilityHidden(true)
+            }
+            // 004 Q8 (2026-08-13): visible range endpoints — the range is
+            // 0%–100% (FR-008 / 001 FR-041a per Q8), matching the overflow
+            // menu's 21 steps and the ⌥O stepping path.
+            HStack {
+                Text(NoteWindowDerivations.formatOpacityPercent(NoteAppearance.OpacityBounds.minOpacity))
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(NoteWindowDerivations.formatOpacityPercent(NoteAppearance.OpacityBounds.maxOpacity))
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }
