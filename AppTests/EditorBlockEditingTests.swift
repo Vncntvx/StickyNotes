@@ -36,6 +36,25 @@ import AssetStore
         )
     }
 
+    // MARK: - 004 T061 (SC-004): title and body share one left edge
+
+    @Test
+    func bodyTextLeftOriginAlignsWithTitleField() {
+        #expect(RichTextView.textContainerHorizontalInset == 0,
+                "body text-container horizontal inset must be 0 — title and body share one left edge (2026-08-13 feedback)")
+        #expect(RichTextView.lineFragmentPadding == 0,
+                "body line-fragment padding must be 0 — no stray offset vs the title line")
+    }
+
+    @Test
+    func bodyVerticalBreathingRoomPreserved() {
+        // 004 T062 (2026-08-13): vertical inset compressed 16→12 as part of
+        // the title→body gap reduction (~-26% total) — sticky-note feel,
+        // not an article editor.
+        #expect(RichTextView.textContainerVerticalInset == 12,
+                "vertical inset keeps first-line breathing without an editor-like gap")
+    }
+
     @Test
     func insertTodoTogglePersistsCompletion() async throws {
         let env = try makeEnvironment()

@@ -53,7 +53,7 @@
 
 - `deriveWindowTitle(noteTitle:firstLine:)`：见 [data-model.md](../data-model.md) §4.1。
 - 同步时机：打开时；`Note.title` 变化时；无标题笔记的内容首行变化时（blocks 变化触发，字符串级节流）。
-- 方向：仅 host→window；标题栏不写回（编辑在内容顶部标题框，spec FR-003/澄清决策）。
+- 方向：仅 host→window；标题栏不渲染标题文本（`titleVisibility = .hidden`，Q7）；标题编辑仅发生在内容顶部标题框（唯一可见呈现）；`window.title` 为只读派生值（Mission Control/窗口菜单/VoiceOver）。
 
 ## 7. 窗口生命周期契约（修复项）
 

@@ -21,7 +21,7 @@
 
 ## 3. 状态所有权与同步规则
 
-- **标题**：持久化事实源 = `Note.title`；展示事实源 = `window.title`（派生值：`Note.title ?? 内容首行 ?? 本地化兜底`）。同步方向**仅 host→window**（协调器 `updateWindowTitle(noteId:)`；`NoteWindowContent.onChange` 触发；打开时设初值）。标题编辑写回 `Note.title`（空→nil），经既有 `updateAppearance` 持久化。
+- **标题**：持久化事实源 = `Note.title`；可见展示事实源 = 内容顶部首行标题框（可编辑、视觉区分，Apple Notes 模式 Q7）；`window.title` = 派生值（`Note.title ?? 内容首行 ?? 本地化兜底`），仅隐藏用途（Mission Control/窗口菜单/VoiceOver，titleVisibility 隐藏）。同步方向**仅 host→window**（协调器 `updateWindowTitle(noteId:)`；`NoteWindowContent.onChange` 触发；打开时设初值）。标题编辑写回 `Note.title`（空→nil），经既有 `updateAppearance` 持久化。
 - **置顶**：行为事实源 = `WindowLevelBridge`/`NoteWindowBridge.applyCollectionBehavior`（唯一入口 `coordinator.updateAlwaysOnTop`）；持久化事实源 = `Note.alwaysOnTop`（DB）。工具栏按钮/溢出项/View 菜单三形态呈现同一状态，无第二状态副本。
 - **文本与格式标记**：事实源 = NSTextView（textStorage/typingAttributes/selectedRange）；SwiftUI 只读投影（selection bridge）。格式写操作直改 NSTextView，经既有 canonicalDocument 往返（FR-053 标记集）。
 - **块与内容**：事实源 = `NoteWindowHostModel.blocks`（autosave 既有管线）。
@@ -44,5 +44,5 @@
 - 透明度 clamp 0.40–1.00、步长 0.05（001 FR-041a 语义不变；spec FR-008/009）。
 - 字号 clamp 9–24（001 FR-043a；spec FR-012）。
 - 颜色：7 键调色板 + custom，既有值逐字保留（001 FR-032；spec FR-008）。
-- 最小窗口：contentMinSize (220, 140)（spec FR-017a，Q1）。
+- 最小窗口：contentMinSize (320, 140)（spec FR-017a，Q6，2026-08-13 修订）。
 - 对比度：custom+opacity 对合成背景的既有校验（`NoteAppearance.projecting`）沿用；窗口背景统一透明度后需复检（plan §4.2）。

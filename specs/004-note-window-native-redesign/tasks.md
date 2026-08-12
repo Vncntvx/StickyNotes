@@ -31,7 +31,7 @@ description: "Task list for feature 004: 独立笔记窗口原生镀铬与自适
 **Purpose**: 基线确认与验证前置
 
 - [X] T001 运行基线测试套件（`DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild test -project StickyNotes.xcodeproj -scheme StickyNotes -destination 'platform=macOS'`），确认 `NoteWindowLifecycleTests.swift:114` fullSizeContentView 断言为唯一红灯，记录其余全绿基线
-- [ ] T002 在宽度清单（约 220/320/480/640/800/1200/2000+ pt）为当前 main 行为的笔记窗口各截一张基线截图（含 100% 与 60% 透明度各一张），存入 `specs/004-note-window-native-redesign/checklists/baseline-screenshots/`（Phase 9 视觉对比用）
+- [X] T002 ~~在宽度清单（320/480/640/800/1200/2000+ pt）为当前 main 行为的笔记窗口各截一张基线截图（含 100% 与 60% 透明度各一张），存入 `specs/004-note-window-native-redesign/checklists/baseline-screenshots/`（Phase 9 视觉对比用）~~（2026-08-13 用户决策取消：不做截图对比流程）
 
 ---
 
@@ -42,14 +42,14 @@ description: "Task list for feature 004: 独立笔记窗口原生镀铬与自适
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
 - [X] T003 代码事实审计：确认新笔记窗口打开时键盘焦点实际落点（NSHostingView/NSTextView first responder 现状），并在 `Packages/StickyCore/Sources/Domain/` 与 `App/Sources/Features/Library/` 定位卡片摘要/内容首行提取辅助函数（001 FR-020/021，CardProjection 摘要逻辑），记录 file:line 供标题派生复用；结论写入 plan.md §12 备注
-- [X] T004 修改 `AppTests/NoteWindowLifecycleTests.swift`：新增"`window.contentMinSize` == 220×140"断言（FR-017a/Q1，先红）
+- [X] T004 修改 `AppTests/NoteWindowLifecycleTests.swift`：新增"`window.contentMinSize` == 320×140"断言（FR-017a/Q6，2026-08-13 修订；原 220×140 被 Q6 取代，先红）
 - [X] T005 [P] 在 `AppTests/NoteWindowLifecycleTests.swift` 新增关闭反注册测试：红绿灯 `window.close()` 后 `NoteWindowBridge.isOpen(noteId:)` 必须为 false，再次 `open(noteId:)` 创建全新窗口（修复既有死 host 复活缺陷，先红）
 - [X] T006 [P] 新建 `AppTests/TitleDerivationTests.swift`：`deriveWindowTitle` 纯函数——手动标题优先/首行派生/空兜底本地化"无标题笔记"/长输入不截断值（spec FR-003，先红）
 - [X] T007 [P] 新建 `AppTests/InsertionTargetingTests.swift`：`resolveInsertionTarget`（caretSplit/afterBlock/append 三态）与 `splitRichTextBlock`（run 属性与标记保留、sortKey 中间值）纯函数断言（spec FR-010/Q4，先红）
 - [X] T008 [P] 新建 `AppTests/FormattingRoundTripTests.swift`：NSTextView 上应用 bold/italic/underline/strikethrough/inlineCode → `canonicalDocument` 往返标记保留；typingAttributes 无选区路径（FR-012/FR-053，先红）
 - [X] T009 [P] 新建 `AppTests/AppearancePanelStateTests.swift`：透明度 clamp 0.40–1.00/步 0.05、"NN%" 数值格式（禁止 "10…"）、重置=默认色+1.0（spec FR-008/009，先红）
 - [X] T010 [P] 新建 `AppTests/NoteToolbarStateTests.swift`：`toolbarVisibilityPriority` 映射（Pin=.high，其余 .standard，FR-015a）与工具栏项标识符固定集常量断言（FR-015c/Q3，先红）
-- [X] T011 Spike（手动验证，结果记录进 `research.md` §1）：标准 NSWindow + `.fullSizeContentView` + `titlebarAppearsTransparent` + 空 `NSToolbar` 组合——验证原生标题渲染、内容延伸至标题栏下、红绿灯正常（macOS 27 实测；R1 缓解）
+- [X] T011 Spike（手动验证，结果记录进 `research.md` §1）：标准 NSWindow + `.fullSizeContentView` + `titlebarAppearsTransparent` + 空 `NSToolbar` 组合——验证内容延伸至标题栏下、红绿灯正常（macOS 27 实测；R1 缓解；Q7 起标题不再渲染于标题栏）
 
 **Checkpoint**: Foundation ready - 全部新测试编译且红灯（除既有 fullSizeContentView 灯）；spike 结论记录完成；用户故事实现可开始
 
@@ -57,9 +57,9 @@ description: "Task list for feature 004: 独立笔记窗口原生镀铬与自适
 
 ## Phase 3: User Story 1 - 原生镀铬的独立笔记窗口 (Priority: P1) 🎯 MVP
 
-**Goal**: 标准 macOS 标题栏 + 系统窗口工具栏取代 NoteControlsView 控件行；标题入标题栏；置顶/更多进工具栏；生命周期修复。窗口在移除控件行后依旧完整可用（spec US1；plan Phase 2–3）。
+**Goal**: 标准 macOS 标题栏 + 系统窗口工具栏取代 NoteControlsView 控件行；标题为内容首行（标题栏不渲染标题文本，Q7）；置顶/更多进工具栏；生命周期修复。窗口在移除控件行后依旧完整可用（spec US1；plan Phase 2–3）。
 
-**Independent Test**: 打开有/无标题笔记 → 标题栏标题正确、工具栏四入口可见、无自定义关闭按钮、关闭走红绿灯且再次打开为全新窗口、置顶可用、内容首行贴近工具栏；`xcodebuild test` 既有生命周期/帧持久化/外观套件全绿。
+**Independent Test**: 打开有/无标题笔记 → 内容首行标题正确（唯一可见）、标题栏无标题文本、工具栏四入口可见、无自定义关闭按钮、关闭走红绿灯且再次打开为全新窗口、置顶可用、内容首行贴近工具栏；`xcodebuild test` 既有生命周期/帧持久化/外观套件全绿。
 
 ### Tests for User Story 1 ⚠️
 
@@ -67,12 +67,12 @@ description: "Task list for feature 004: 独立笔记窗口原生镀铬与自适
 
 ### Implementation for User Story 1
 
-- [X] T012 [US1] 窗口镀铬：`App/Sources/Features/NoteWindow/NoteWindowCoordinator.swift` `open(noteId:)` 中 styleMask 追加 `.fullSizeContentView`、`contentMinSize = NSSize(width: 220, height: 140)`（替换 300×200，FR-001/017a）
-- [X] T013 [US1] 标题模型：`NoteWindowCoordinator.swift` 中 `titleVisibility = .visible`、`updateWindowTitle(noteId:)`（`Note.title` → 首行 → 兜底，复用 T003 定位的摘要辅助）+ 打开时初值；`NoteWindowContent` 以 `.onChange(of: host.note?.title)` 与 `.onChange(of: host.blocks)` 触发同步（FR-003）
+- [X] T012 [US1] 窗口镀铬：`App/Sources/Features/NoteWindow/NoteWindowCoordinator.swift` `open(noteId:)` 中 styleMask 追加 `.fullSizeContentView`、`contentMinSize = NSSize(width: 320, height: 140)`（替换 300×200，FR-001/017a；Q6 修订）
+- [X] T013 [US1] 标题模型：`NoteWindowCoordinator.swift` 中 `titleVisibility = .hidden`（Q7：标题栏不渲染标题文本）、`updateWindowTitle(noteId:)`（`Note.title` → 首行 → 兜底，复用 T003 定位的摘要辅助；window.title 隐藏派生供 Mission Control/窗口菜单/VoiceOver）+ 打开时初值；`NoteWindowContent` 以 `.onChange(of: host.note?.title)` 与 `.onChange(of: host.blocks)` 触发同步（FR-003）
 - [X] T014 [US1] 内容层统一：`App/Sources/Features/NoteWindow/ReadableTheme.swift` `windowBackground(for:)` 应用 `note.transparency`（与纸面一致，消除 transparency<100% 接缝）；**不得**触碰 `window.alphaValue`
 - [X] T015 [US1] 生命周期修复：`NoteWindowCoordinator.swift` `NoteWindowDelegate.windowWillClose` 增加 `NoteWindowBridge.unregister` + 释放工具栏控制器（与 ⌘W 路径对齐）；T005 转绿
 - [X] T016 [US1] 新建 `App/Sources/Features/NoteWindow/NoteToolbarController.swift`：@MainActor 类，NSToolbar 创建（identifier `note.window.toolbar`）、固定项标识符集（`note.toolbar.pin/appearance/insert/more`）、`itemForItemIdentifier` 委托单点构造 + 项缓存（窗口生命周期内不重建）、挂载 `window.toolbar`；由协调器 `toolbars[noteId]` 持有，与 delegate 同释放（plan §3.1/contracts §1）
-- [X] T017 [US1] 内容结构重组：`NoteWindowCoordinator.swift` `NoteWindowContent` 移除 `NoteControlsView` + `Divider`；顶部新增标题输入框（编辑→`updateAppearance`，空→nil，001 FR-050 语义）；顶部内边距适配（工具栏高度 + 既有 inset，FR-018/FR-042 阈值复检）
+- [X] T017 [US1] 内容结构重组：`NoteWindowCoordinator.swift` `NoteWindowContent` 移除 `NoteControlsView` + `Divider`；顶部新增标题输入框（唯一可见标题呈现、视觉区分——Q7 Apple Notes 模式：`.title2` bold + 灰色占位；编辑→`updateAppearance`，空→nil，001 FR-050 语义）；顶部内边距适配（工具栏高度 + 既有 inset，FR-018/FR-042 阈值复检）
 - [X] T018 [US1] 迁移动画/快捷键：`NoteWindowContent` 增加 ⌥C/⌥O/⌥T 隐藏按钮 overlay（从 NoteControlsView 迁移，键位与行为不变）
 - [X] T019 [US1] 上下文菜单迁移：内容区 `.contextMenu` 承载复制笔记/复制为 Markdown/导出 JSON…/移入废纸篓/外观子菜单/小组件项（原 NoteControlsView 上下文菜单语义，001 FR-031）
 - [X] T020 [US1] Pin 工具栏项：`NoteToolbarController` 中置顶项——NSButton（`bezelStyle = .toolbar`，macOS 26 guard 内 `.glass`，`setButtonType(.toggle)`）、图标 pin/pin.fill 随 state、`visibilityPriority = .high`（FR-015a）、`menuFormRepresentation` = 带 state 的 toggle NSMenuItem、tooltip + `accessibilityValue` 开/关；动作 → `coordinator.updateAlwaysOnTop`（唯一入口）；`observe` host `alwaysOnTop` 刷新状态；切换零几何位移
@@ -153,11 +153,11 @@ description: "Task list for feature 004: 独立笔记窗口原生镀铬与自适
 
 ---
 
-## Phase 7: User Story 2 - 220 到 2000+ pt 始终是同一个窗口 (Priority: P1)
+## Phase 7: User Story 2 - 320 到 2000+ pt 始终是同一个窗口 (Priority: P1)
 
 **Goal**: 宽度矩阵验证 + 语义内边距 + 系统溢出行为确认（spec US2；plan Phase 6）。**执行顺序说明**：US2 为 P1 但其验证对象（四项工具栏+标题+上下文 UI）需 US1/3/4/5 落位后才可完整验证，故按 plan.md §8 依赖序置于其后。
 
-**Independent Test**: 220→2000+ pt 连续拖拽全程：无畸形/裁剪/截断数值/重叠/换行/图标残留/功能不可达；Pin 最后进溢出；标题截断；编辑器可用宽保持。
+**Independent Test**: 320→2000+ pt 连续拖拽全程：无畸形/裁剪/截断数值/重叠/换行/图标残留/功能不可达；Pin 最后进溢出；内容首行标题截断；编辑器可用宽保持。
 
 ### Tests for User Story 2 ⚠️
 
@@ -166,10 +166,10 @@ description: "Task list for feature 004: 独立笔记窗口原生镀铬与自适
 ### Implementation for User Story 2
 
 - [X] T042 [US2] 语义内边距：`NoteWindowContent` 内容水平内边距两态（compact 10pt / regular 14–16pt，以窗口宽度 480 切换；极宽上限 24pt 防居中列）——唯一允许的自定义宽度感知规则（NSToolbar 无法表达内容内边距，plan §5/§8 明示理由；不引入更多断点）
-- [X] T043 [US2] 溢出行为确认：宽度清单（220/320/480/640/800/1200/2000+）逐点核对 FR-015a/015b（220–240：截断标题+Pin+chevron 直接可见；外观/插入/更多进溢出；全部可发现可执行）；若系统溢出与期望不符，仅允许调整单一可见性优先级常量（R7 回退，记录于 plan.md §10）
+- [X] T043 [US2] 溢出行为确认：宽度清单（320/480/640/800/1200/2000+）逐点核对 FR-015a/015b（320：Pin+chevron 直接可见；外观/插入/更多进溢出；全部可发现可执行；标题在内容首行不参与溢出体系，Q7）；若系统溢出与期望不符，仅允许调整单一可见性优先级常量（R7 回退，记录于 plan.md §10）
 - [X] T044 [US2] 滚动条审计：`RichTextView`/`NoteWindowContent` 无自定义滚动条样式、无覆盖层；行为跟随系统偏好（spec FR-020）；窄宽度滚动条占比与缩放中无水平裁剪/文本容器宽度突变/布局跳动
 - [X] T045 [US2] 弹层与缩放：popover/菜单打开时缩放窗口无崩溃/布局错乱；连续拖拽不重置工具栏状态（Pin 状态保持）；无中心漂移簇、无标题栏/编辑器坐标系分叉观感（FR-017 全局不变量清单逐项过检）【代码级审计：外观 popover `.transient` + 标准 NSMenu（FR-014 系统默认行为）；窗口缩放路径仅 min-size 复检，无任何重置工具栏状态的处理；287 App 测试全绿；连续拖拽走查留 quickstart §3.2】
-- [ ] T046 [US2] 验证：`NoteToolbarStateTests` 转绿（287 App 测试含 NoteToolbarStateTests 全绿✅）+ quickstart §3.2 全矩阵截图（存入 `checklists/width-matrix/`，GUI 环境受限未捕获——README 契约保留人工捕获）与连续拖拽验收（人工）
+- [ ] T046 [US2] 验证：`NoteToolbarStateTests` 转绿（全量 App 测试含 NoteToolbarStateTests 全绿✅）+ quickstart §3.2 连续拖拽验收（人工）；~~全矩阵截图存入 `checklists/width-matrix/`~~（2026-08-13 用户决策取消截图流程）
 
 **Checkpoint**: US2 独立可用；响应式主要由系统机制提供（代码审查：除内边距两态外无新增手写断点）
 
@@ -203,10 +203,24 @@ description: "Task list for feature 004: 独立笔记窗口原生镀铬与自适
 
 - [X] T052 [P] 全量回归：`AppTests` + `Packages/StickyCore` 全部套件绿（含既有 12+ 套件与新增 5 文件；spec 成功标准 15）
 - [X] T053 [P] 多窗口验证：3+ 笔记不同宽度并存，各自独立缩放/置顶/外观/格式化状态；关闭一个不影响其余；激活/失活正确（spec 成功标准 14）【代码级审计+测试：每窗口独立 toolbars/hosts/windowDelegates 字典 + 按 noteId 的 bridges 注册表；新增 windowDeactivationClearsEditorFocusFlag 双窗口 key 互斥测试全绿；trafficLightCloseUnregistersAndReopenCreatesFreshWindow 覆盖关闭隔离；3 窗口实走留 quickstart §3.3.5 人工】
-- [ ] T054 [P] 视觉对比：T002 基线截图 vs 实现后同条件截图（宽度清单 × 100%/60% 透明度），逐项评估 plan §9.4（标题对齐/红绿灯原生/镀铬高度显著下降/编辑器起点与 inset/滚动条/背景连续性/玻璃层级/激活失活/宽窗）
+- [X] T054 ~~[P] 视觉对比：T002 基线截图 vs 实现后同条件截图（宽度清单 × 100%/60% 透明度），逐项评估 plan §9.4（标题对齐/红绿灯原生/镀铬高度显著下降/编辑器起点与 inset/滚动条/背景连续性/玻璃层级/激活失活/宽窗）~~（2026-08-13 用户决策取消：截图对比流程取消，T002/T046 截图部分同步取消）
 - [X] T055 [P] 性能核查：连续缩放无卡顿、缩放/打字/选区变化不重建 NSTextView/块/工具栏对象图、Pin/外观切换不重建 NSWindow、空闲无轮询（001 SC-003/004a/006）
-- [X] T056 完成度审计：`specs/004-note-window-native-redesign/quickstart.md` 全场景走查 + spec 成功标准 SC-001~016 逐条核对 + 文档（spec/plan/research/contracts/data-model）与实现同步【文档同步完成（2026-08-10 clarify+implement pass）：spec FR-003/008/010/012/014/015b/017/019/025/031 澄清落位，contracts §4 补 key-state 重发布契约，research §2 Q1 最小高 140 pt 对齐，data-model §2 桥职责补注；自动套件 287 App + 196 StickyCore 全绿；SC 视觉/走查类（001/002/004/005/012/013）留人工，见 T002/T046/T054】
+- [X] T056 完成度审计：`specs/004-note-window-native-redesign/quickstart.md` 全场景走查 + spec 成功标准 SC-001~016 逐条核对 + 文档（spec/plan/research/contracts/data-model）与实现同步【文档同步完成（2026-08-10 clarify+implement pass；2026-08-13 Q6/Q7 pass）：spec FR-003/008/010/012/014/015b/017/019/025/031 澄清落位，2026-08-13 新增 Q6（最小宽度 320）/Q7（Apple Notes 标题模式）改写 FR-003/015a/015b/017a/SC-004/005a/011；contracts §4 补 key-state 重发布契约，§6 标题契约 Q7 修订；research §2 Q1 最小高 140 pt 对齐；data-model §2 桥职责补注；自动套件 App + StickyCore 全绿；SC 视觉/走查类留人工（连续拖拽，T046；截图对比流程 2026-08-13 用户决策取消）】
 - [X] T057 提交序列：按 AGENTS.md 约定（conventional commits，中 body，FR 引用）分阶段提交：镀铬+生命周期 → 外观 → 插入 → 格式化 → 响应式/无障碍 → 回归收尾；每提交前 `git status`/`git diff` 检查，禁止提交 secrets/真实笔记内容
+
+---
+
+## Phase 10: 收口修正（320 最小宽度 + Apple Notes 标题模式）
+
+**Purpose**: 2026-08-13 会话决策（Q6/Q7）：最小宽度 220→320 pt（合适常规值、标题允许截断、最小宽保持美观）；标题走 Apple Notes 模式——仅内容顶部首行呈现一次且可编辑（视觉区分），标题栏不渲染标题文本，`window.title` 隐藏派生（Mission Control/窗口菜单/VoiceOver）。测试先行后落地并全量同步工件。
+
+- [X] T058 测试先行（先红后绿）：`AppTests/NoteWindowLifecycleTests.swift` minSize 断言 220×140→320×140（Q6）+ 新增 `titleVisibility == .hidden` 与 `window.title` 派生断言（Q7）；红灯确认（2 issues）后实现转绿
+- [X] T059 实现：`NoteWindowCoordinator.swift` contentMinSize 三处 220→320 + `titleVisibility = .hidden`（保留 `updateWindowTitle`）；`RichTextBlockView.swift` 标题框 `.title2.weight(.bold)` + 占位符改 `String(localized: "editor.titleField", defaultValue: "Title")`
+- [X] T060 工件同步与回归：spec（Q6/Q7 决策记录 + FR-003/015/015a/015b/017/017a/SC-001/004/005a/011 改写）、plan（§3.2/§3.4/§9.1/§9.4/R7 等）、quickstart §3.1/§3.2、contracts §6、data-model §3/§6、tasks 各引用同步；全量 `xcodebuild test` 绿
+- [X] T061 标题/正文左线对齐（SC-004，2026-08-13 用户反馈"标题与正文没有共用同一条左边线"）：`RichTextView` 新增对齐常量（textContainerHorizontalInset=0、lineFragmentPadding=0、垂直 inset 16 保留）并接线 `makeNSView`；`EditorBlockEditingTests` 新增对齐断言（先红 2 issues → 实现转绿）
+- [X] T062 标题→正文垂直间距压缩（2026-08-13 用户反馈"间距略大，像文章编辑器"）：`RichTextBlockView` VStack spacing 10→8 + BlockInsertionControl 底部 padding 2→0 + `RichTextView` 垂直 inset 16→12（合计约 -26%，便签感）；`EditorBlockEditingTests.bodyVerticalBreathingRoomPreserved` 断言先红（16≠12）→ 实现转绿；Toolbar→标题间距不动
+
+**Checkpoint**: Q6/Q7 收口完成；320 起连续拖拽验收 + 标题单源观感留人工验证（T046；截图对比流程已按 2026-08-13 用户决策取消）
 
 ---
 
@@ -218,6 +232,7 @@ description: "Task list for feature 004: 独立笔记窗口原生镀铬与自适
 - **Foundational (Phase 2)**: Depends on Setup completion - BLOCKS all user stories（审计/红测试/spike 全部前置）
 - **User Stories (Phase 3+)**: 均依赖 Foundational；故事间顺序遵循 plan.md §8 依赖序（非并行——同一 `NoteWindowCoordinator.swift`/`StickyNotesApp.swift` 被多故事触碰，串行实现避免同文件冲突）
 - **Polish (Phase 9)**: Depends on all user stories complete
+- **Phase 10（Q6/Q7 收口修正）**: 依赖全部故事完成；测试先行（T058 红→绿）→ 实现（T059）→ 工件同步+回归（T060）
 
 ### User Story Dependencies
 

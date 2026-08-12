@@ -118,10 +118,23 @@ import SystemBridge
         // paper layer compose it; verified via the lifecycle suite).
         #expect(window.styleMask.contains(.fullSizeContentView), "content extends under the titlebar (004 FR-001/T012)")
 
-        // 004 T004 (FR-017a/Q1): 220pt is the enforced real minimum width;
-        // 140pt the minimum height.
-        #expect(window.contentMinSize == NSSize(width: 220, height: 140),
-                "min size 220×140 (004 FR-017a/T004) — actual \(window.contentMinSize)")
+        // 004 T058 (FR-017a/Q6): 320pt is the enforced real minimum width
+        // (2026-08-13 decision — the 220pt extreme-narrow state was dropped
+        // in favor of a beautiful conventional minimum; truncation of long
+        // titles is accepted). 140pt the minimum height (Q1, unchanged).
+        #expect(window.contentMinSize == NSSize(width: 320, height: 140),
+                "min size 320×140 (004 FR-017a/T058) — actual \(window.contentMinSize)")
+
+        // 004 T058 (Q7, Apple Notes title pattern): the title is rendered
+        // ONLY as the in-content first line (editable, visually distinct).
+        // The titlebar must NOT render title text (titleVisibility hidden),
+        // while the derived window.title stays set for Mission Control /
+        // window menus / VoiceOver.
+        #expect(window.titleVisibility == .hidden,
+                "titlebar renders no title text (Q7 Apple Notes pattern)")
+        #expect(window.title == NoteWindowDerivations.deriveWindowTitle(
+                    noteTitle: note.title, firstLine: ""),
+                "window.title stays derived while hidden (Mission Control)")
 
         // Ownership/lifetime guard from the 2026-08-07 crash fix.
         #expect(window.isReleasedWhenClosed == false, "coordinator retains ownership")

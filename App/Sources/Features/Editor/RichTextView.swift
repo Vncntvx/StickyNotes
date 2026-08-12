@@ -33,6 +33,18 @@ import EditorCore
 
 /// An NSTextView-backed rich-text editor for a note's primary block.
 public struct RichTextView: NSViewRepresentable {
+    // MARK: Alignment metrics (004 T061, SC-004)
+    //
+    // The body's text left origin MUST sit on the SAME line as the title
+    // field's left edge (Apple Notes pattern — title and body share one
+    // left edge; 2026-08-13 user feedback). Horizontal insets are ZERO:
+    // the paper's horizontal padding lives in the SwiftUI container
+    // (RichTextBlockView `.padding(.horizontal, inset)`), which applies to
+    // title and body alike. Vertical inset stays for first-line breathing.
+    static let textContainerHorizontalInset: CGFloat = 0
+    static let lineFragmentPadding: CGFloat = 0
+    static let textContainerVerticalInset: CGFloat = 12
+
     /// The canonical document currently owned by the model.
     let document: RichTextDocument
     let textSize: CGFloat
@@ -93,7 +105,11 @@ public struct RichTextView: NSViewRepresentable {
         // eat — verified 2026-08-09: a 24pt SwiftUI top padding rendered
         // as ~12pt). The caret starts at the inset, so the typing
         // position matches the visual inset.
-        textView.textContainerInset = NSSize(width: 4, height: 16)
+        textView.textContainerInset = NSSize(
+            width: Self.textContainerHorizontalInset,
+            height: Self.textContainerVerticalInset
+        )
+        textView.textContainer?.lineFragmentPadding = Self.lineFragmentPadding
         textView.font = fontResolver.font(size: textSize, for: "")
         textView.delegate = context.coordinator
         textView.autoresizingMask = [.width]

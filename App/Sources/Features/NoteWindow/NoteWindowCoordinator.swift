@@ -178,17 +178,22 @@ public final class NoteWindowCoordinator {
         // transparency (T014) render continuously behind the system glass.
         // The former FR-030a black-bar regression is gone: the window
         // background and the SwiftUI paper layer compose the same color.
+        // 004 T058 (Q7, Apple Notes title pattern): window.title stays
+        // derived (Mission Control / window menus / VoiceOver), but the
+        // titlebar renders NO title text — the in-content first line is
+        // the single visible, editable title.
         window.title = NoteWindowDerivations.deriveWindowTitle(
             noteTitle: note.title,
             firstLine: NoteWindowDerivations.firstMeaningfulLine(blocks: [])
         )
         window.titlebarAppearsTransparent = true
-        window.titleVisibility = .visible
+        window.titleVisibility = .hidden
         window.backgroundColor = ReadableTheme.windowBackground(for: note)
         window.isReleasedWhenClosed = false
         window.hasShadow = true
-        // 004 T012 (FR-017a/Q1): 220pt is the AppKit-enforced real minimum
-        // width — a first-class narrow state, not a stress-test width.
+        // 004 T058 (FR-017a/Q6): 320pt is the AppKit-enforced real minimum
+        // width (2026-08-13 decision — a beautiful conventional minimum;
+        // long titles truncate in the content title line, not the chrome).
         // Set AFTER the toolbar is attached (a toolbar momentarily
         // overrides min-size with its own defaults; FR-017a wins).
         NoteWindowBridge.applyCollectionBehavior(window, alwaysOnTop: note.alwaysOnTop)
@@ -204,9 +209,9 @@ public final class NoteWindowCoordinator {
         toolbars[noteId] = toolbarController
         window.toolbar = toolbarController.toolbar
         toolbarController.syncState()
-        // FR-017a/Q1: enforced AFTER the toolbar attach (AppKit resets the
+        // FR-017a/Q6: enforced AFTER the toolbar attach (AppKit resets the
         // min size to its toolbar-derived default during attachment).
-        window.contentMinSize = NSSize(width: 220, height: 140)
+        window.contentMinSize = NSSize(width: 320, height: 140)
         let content = NoteWindowContent(noteId: noteId, host: host, environment: environment, coordinator: self)
         // FR-030a: the 8-pt corner radius, 1-pt subtle border and rounded
         // clipping are drawn IN SwiftUI (NoteWindowContent.background) —
@@ -241,13 +246,13 @@ public final class NoteWindowCoordinator {
         // FR-007a: the new note window receives keyboard focus immediately.
         window.makeKeyAndOrderFront(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
-        // FR-017a/Q1 (verified 2026-08-10): the SwiftUI hosting view
-        // propagates its intrinsic minimum (ScrollView → ~0) during the
-        // first layout pass, overriding the min set earlier. Force that
-        // pass, then enforce the real 220×140 minimum synchronously; the
+        // FR-017a/Q6 (verified pattern 2026-08-10): the SwiftUI hosting
+        // view propagates its intrinsic minimum (ScrollView → ~0) during
+        // the first layout pass, overriding the min set earlier. Force that
+        // pass, then enforce the real 320×140 minimum synchronously; the
         // delegate re-asserts it after user resizes.
         window.contentView?.layoutSubtreeIfNeeded()
-        window.contentMinSize = NSSize(width: 220, height: 140)
+        window.contentMinSize = NSSize(width: 320, height: 140)
         return window
     }
 
@@ -486,10 +491,10 @@ private final class NoteWindowDelegate: NSObject, NSWindowDelegate {
 
     func windowDidResize(_ notification: Notification) {
         saveFrame(from: notification)
-        // FR-017a (004 T012): re-assert the enforced minimum after any
+        // FR-017a (004 T058, Q6): re-assert the enforced minimum after any
         // layout-driven change (SwiftUI may re-propagate its intrinsic min).
         if let window = notification.object as? NSWindow {
-            window.contentMinSize = NSSize(width: 220, height: 140)
+            window.contentMinSize = NSSize(width: 320, height: 140)
         }
     }
 

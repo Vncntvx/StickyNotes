@@ -120,7 +120,7 @@ public struct RichTextBlockView: View {
                 let textSelected = selectionBridge?.isTextSelected ?? false
                 let compact = proxy.size.width < 480
                 let inset: CGFloat = compact ? 10 : min(14 + (proxy.size.width - 480) / 240, 24)
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 8) {
                     // 004 T017 (FR-003): the editable title lives in the
                     // paper, above the first content line (001 FR-050:
                     // optional title; empty → nil).
@@ -138,7 +138,6 @@ public struct RichTextBlockView: View {
                         ),
                         isIMEComposing: $isIMEComposing
                     )
-                    .padding(.bottom, 2)
 
                     // Rich-text block (the seamless primary surface) —
                     // NSTextView-backed (verified 2026-08-07: SwiftUI
@@ -187,10 +186,15 @@ public struct RichTextBlockView: View {
         }
     }
 
-    // MARK: - 004 T017 title field (FR-003)
+    // MARK: - 004 T058 title field (Q7 Apple Notes pattern, FR-003)
 
+    /// The single visible title surface (Apple Notes pattern): the titlebar
+    /// renders no title text (titleVisibility hidden); this in-content
+    /// first line IS the title — editable, visually distinct from body
+    /// text (bolder + larger; placeholder localizes via the catalog key
+    /// `editor.titleField`).
     private var titleField: some View {
-        TextField("Title", text: Binding(
+        TextField(String(localized: "editor.titleField", defaultValue: "Title"), text: Binding(
             get: { note.title ?? "" },
             set: { newValue in
                 var updated = note
@@ -199,7 +203,7 @@ public struct RichTextBlockView: View {
             }
         ))
         .textFieldStyle(.plain)
-        .font(.title3.weight(.semibold))
+        .font(.title2.weight(.bold))
         .lineLimit(1)
         .truncationMode(.tail)
         .accessibilityLabel(String(localized: "Note Title"))
