@@ -39,6 +39,10 @@ import Foundation
         "Disconnect Sync?", "Disconnect",
         // Settings polish round 2 (2026-08-14)
         "Vault ID", "Copy Vault ID", "Copied.",
+        // Settings polish round 3 (2026-08-14)
+        "S3-compatible storage", "WebDAV storage", "Recovery",
+        "Keeps sync unlocked using Keychain until you restart or lock the vault.",
+        "When enabled, changes sync automatically. Periodic syncing is optional.",
     ]
 
     @Test

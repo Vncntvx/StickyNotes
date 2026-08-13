@@ -86,62 +86,77 @@ public enum FontPreferenceUI {
     public static let bilingualPreviewEnabled = true
 }
 
-// MARK: - SyncLocationPresentation (Settings polish round 2, 2026-08-14)
+// MARK: - SyncLocationPresentation (Settings polish round 2/3, 2026-08-14)
 
 /// Display-only composition of the user-facing storage location.
 ///
-/// Current builds persist ONLY the user-chosen folder in
-/// `RedactedSyncConfig.prefix` (the vault locator is composed at provider
-/// construction time, never persisted — verified against every app-side
-/// writer in this repo's history). A persisted prefix whose LEADING segment
-/// equals the vault locator is therefore a legacy/foreign write with the
-/// auto-generated layout `<locator>` or `<locator>/<user-folder>…`; only
-/// that leading segment is stripped for display. Everything else — ordinary
-/// user prefixes, user-typed 32-hex segments, the locator in any
-/// non-leading position — is kept verbatim. This is structural legacy-layout
-/// recognition, NOT generic locator filtering.
+/// The verified persisted schema (data-model.md §VaultConfiguration, and
+/// every app-side writer in this repo's history) stores ONLY the
+/// user-chosen folder in `RedactedSyncConfig.prefix`; the vault locator is
+/// composed at provider construction and never persisted. Display rules are
+/// therefore schema-based, not shape-guessing:
+///
+/// 1. A LEADING segment equal to `vaultLocator` (or
+///    `replacedFromVaultLocator`) is a legacy/foreign auto-generated write —
+///    stripped.
+/// 2. Any REMAINING segment satisfying the repo's own structural predicate
+///    `RemoteLayout.isOpaque` (the canonical generated-namespace shape)
+///    means the persisted prefix does not conform to the user-prefix schema
+///    and the user's original path cannot be recovered reliably: `location`
+///    returns nil (honest degradation — the caller shows provider-only copy
+///    and keeps the technical path in Advanced). We never invent a path.
 public enum SyncLocationPresentation {
 
-    /// The persisted prefix with the legacy leading locator segment removed
-    /// (nil when nothing user-meaningful remains).
-    public static func userPrefix(prefix: String?, vaultLocator: String) -> String? {
-        guard let prefix, !prefix.isEmpty else { return nil }
-        let trimmed = prefix.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        guard !trimmed.isEmpty else { return nil }
-        let segments = trimmed
-            .split(separator: "/", omittingEmptySubsequences: true)
-            .map(String.init)
-        if segments.first == vaultLocator {
-            let rest = segments.dropFirst()
-            return rest.isEmpty ? nil : rest.joined(separator: "/")
-        }
-        return trimmed
-    }
-
     /// The user-facing storage location for a configuration: bucket/prefix
-    /// (S3) or host+path/prefix (WebDAV), with the legacy locator segment
-    /// stripped. Never includes the opaque vault locator.
-    public static func location(for configuration: VaultConfiguration) -> String {
-        let prefix = userPrefix(
-            prefix: configuration.providerConfig.prefix,
-            vaultLocator: configuration.vaultLocator
-        )
+    /// (S3) or host+path/prefix (WebDAV), legacy locator segments stripped.
+    /// `nil` when the persisted prefix does not conform to the schema (see
+    /// rule 2) — the caller degrades to provider-only copy.
+    public static func location(for configuration: VaultConfiguration) -> String? {
+        let base: String
         switch configuration.providerType {
         case .webdav:
-            let host = endpointHost(configuration.providerConfig.endpoint)
-            if let prefix {
-                return "\(host)/\(prefix)"
-            }
-            return host
+            base = endpointHost(configuration.providerConfig.endpoint)
         case .s3:
-            let bucket = configuration.providerConfig.bucket
+            base = configuration.providerConfig.bucket
                 .flatMap { $0.isEmpty ? nil : $0 }
                 ?? configuration.providerConfig.endpoint
-            if let prefix {
-                return "\(bucket)/\(prefix)"
-            }
-            return bucket
         }
+
+        let raw = configuration.providerConfig.prefix ?? ""
+        let trimmed = raw.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !trimmed.isEmpty else { return base }
+
+        var segments = trimmed
+            .split(separator: "/", omittingEmptySubsequences: true)
+            .map(String.init)
+        if let first = segments.first,
+           first == configuration.vaultLocator || first == configuration.replacedFromVaultLocator {
+            segments.removeFirst()
+        }
+        guard !segments.isEmpty else { return base }
+        // Rule 2: an opaque generated-namespace segment anywhere in the
+        // remainder → schema non-conformance → honest degradation.
+        if segments.contains(where: { RemoteLayout.isOpaque($0) }) {
+            return nil
+        }
+        return "\(base)/\(segments.joined(separator: "/"))"
+    }
+
+    /// The full technical path (protocol-level, unshortened) — for Advanced /
+    /// diagnostics only, never the default Storage display.
+    public static func technicalPath(for configuration: VaultConfiguration) -> String {
+        let base: String
+        switch configuration.providerType {
+        case .webdav:
+            base = endpointHost(configuration.providerConfig.endpoint)
+        case .s3:
+            base = configuration.providerConfig.bucket
+                .flatMap { $0.isEmpty ? nil : $0 }
+                ?? configuration.providerConfig.endpoint
+        }
+        let raw = configuration.providerConfig.prefix ?? ""
+        let trimmed = raw.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return trimmed.isEmpty ? base : "\(base)/\(trimmed)"
     }
 
     /// Endpoint without the URL scheme for display (e.g.
@@ -150,5 +165,19 @@ public enum SyncLocationPresentation {
         guard let url = URL(string: endpoint), let host = url.host else { return endpoint }
         let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         return path.isEmpty ? host : "\(host)/\(path)"
+    }
+}
+
+// MARK: - VaultIDPresentation (Settings polish round 3, 2026-08-14)
+
+/// Active presentation shortening for the Vault ID row. This is NOT overflow
+/// truncation (which never triggers when the row has room): the UI shows a
+/// fixed short form, while Copy / help always expose the full ID.
+public enum VaultIDPresentation {
+    /// "1870ff55…c5299"; short values pass through unchanged; empty → "—".
+    public static func abbreviated(_ id: String) -> String {
+        guard !id.isEmpty else { return "—" }
+        guard id.count > 13 else { return id }
+        return "\(id.prefix(8))…\(id.suffix(5))"
     }
 }

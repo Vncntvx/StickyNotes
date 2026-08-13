@@ -34,27 +34,26 @@ public struct NoteFontSection: View {
         Group {
             // FR-055: ONE "note font" field (no implementation typography
             // terms). The family name persists under the unchanged key.
-            // Polish round 2: a visible input affordance matching the real
-            // interaction (direct typing) — bordered field, bounded width,
-            // localized help. The width is a bounded maximum, verified
-            // against en/zh-Hans at the minimum window width.
-            TextField("Note font", text: $noteFontFamily)
-                .textFieldStyle(.roundedBorder)
-                .frame(maxWidth: 240)
-                .help("Type a font family name — for example, Helvetica Neue.")
-                .onChange(of: noteFontFamily) { _, _ in persist() }
+            // Polish round 2/3: LabeledContent rows give the form-native
+            // label/value column alignment — the field sits in the value
+            // column (trailing, bounded width) and the preview aligns to
+            // the same column; roundedBorder keeps the real interaction
+            // (direct typing) visibly editable.
+            LabeledContent("Note font") {
+                TextField("", text: $noteFontFamily)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 240)
+                    .help("Type a font family name — for example, Helvetica Neue.")
+                    .onChange(of: noteFontFamily) { _, _ in persist() }
+            }
 
             // FR-055: meaningful bilingual live preview (Latin + CJK
-            // rendered together with the system fallback).
-            HStack(spacing: 8) {
+            // rendered together with the system fallback), aligned to the
+            // same value column as the field.
+            LabeledContent("Preview") {
                 Text(FontPreferenceUI.bilingualPreviewSample)
                     .font(.custom(noteFontFamily, size: 15, relativeTo: .body))
-                Spacer()
-                Text("Preview")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
-            .padding(.top, 4)
 
             if let saveNotice {
                 Label(saveNotice, systemImage: "exclamationmark.triangle")

@@ -60,6 +60,16 @@ public struct SyncSettingsView: View {
         }
     }
 
+    /// Provider-only fallback copy for the degraded Storage display (the
+    /// user's original path cannot be recovered reliably).
+    private var providerStorageCopy: String {
+        switch syncCoordinator?.configuration?.providerType {
+        case .webdav: return String(localized: "WebDAV storage")
+        case .s3: return String(localized: "S3-compatible storage")
+        case nil: return "—"
+        }
+    }
+
     public init(syncCoordinator: SyncCoordinator?) {
         self.syncCoordinator = syncCoordinator
     }
@@ -75,7 +85,6 @@ public struct SyncSettingsView: View {
                     storageSection
                     automaticSyncSection
                     securitySection
-                    actionsSection
                     advancedSection
                 } else {
                     notConfiguredSection
@@ -85,6 +94,10 @@ public struct SyncSettingsView: View {
             .formStyle(.grouped)
             .padding(20)
         }
+        // Polish round 3: the system scroll-edge effect (macOS 26+) fades
+        // and blurs content at the toolbar boundary — fixes the ghost text
+        // under the Liquid Glass tab strip without any opaque overlay.
+        .scrollEdgeEffectStyle(.automatic, for: .top)
         .sheet(isPresented: $showConfigureSheet) {
             SyncConfigureSheet(
                 syncCoordinator: syncCoordinator,
@@ -157,8 +170,11 @@ public struct SyncSettingsView: View {
 
     // MARK: - Sections
 
-    /// FR-053: the status row is derived from the FR-012 mapping (or the
-    /// Locked state) — never the internal "Configured" string.
+    /// FR-053 + polish round 3: the FIRST row always expresses the current
+    /// sync state (resolver-driven — `Up to Date` / error category / locked
+    /// / syncing). Manual sync is a state-dependent ACTION, so it lives here
+    /// as the trailing control instead of its own empty card; the aged-out
+    /// informational note is a weak caption, never the primary status.
     @ViewBuilder
     private var statusSection: some View {
         Section("Status") {
@@ -170,21 +186,36 @@ public struct SyncSettingsView: View {
                 }
             } else if !isVaultUnlocked {
                 LabeledContent {
-                    // Polish round 2: the restore action is the primary
-                    // next step while locked — native prominent, not a big
-                    // CTA.
+                    // The restore action is the primary next step while
+                    // locked — native prominent, not a big CTA.
                     Button("Unlock…") { showUnlockAlert = true }
                         .buttonStyle(.borderedProminent)
                 } label: {
                     Label("Sync vault is locked", systemImage: "lock.fill")
                 }
-                // Polish round 2: describe the verifiable state ("still
-                // available on this Mac") instead of an absolute "safe".
                 Text("Unlock to resume syncing. Your notes on this Mac are still available.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                statusResolvedRow
+                LabeledContent {
+                    Button("Sync Now") {
+                        Task { await syncCoordinator?.manualSync() }
+                    }
+                    .buttonStyle(.borderless)
+                } label: {
+                    if let presentation = resolvedPresentation {
+                        Label(presentation.title, systemImage: presentation.symbolName)
+                            .foregroundStyle(.orange)
+                    } else {
+                        Label("Up to Date", systemImage: "checkmark.circle")
+                            .foregroundStyle(.green)
+                    }
+                }
+                if let detail = resolvedPresentation?.detail {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             LabeledContent("Last synced") {
                 if let date = syncCoordinator?.lastSuccessfulSyncAt {
@@ -193,35 +224,27 @@ public struct SyncSettingsView: View {
                     Text("—")
                 }
             }
+            // FR-174-d (sync.historyAgedOut) is INFORMATIONAL: a weak
+            // caption below the primary status, never a substitute for it.
+            if syncCoordinator?.lastErrorCode == "sync.historyAgedOut" {
+                Label("Some sync history may have aged out; your notes were preserved.", systemImage: "clock.arrow.circlepath")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
-    @ViewBuilder
-    private var statusResolvedRow: some View {
-        // FR-174-d (sync.historyAgedOut) is INFORMATIONAL, not an error:
-        // show it muted instead of the alarming orange.
-        if syncCoordinator?.lastErrorCode == "sync.historyAgedOut" {
-            Label("Some sync history may have aged out; your notes were preserved.", systemImage: "clock.arrow.circlepath")
-                .foregroundStyle(.secondary)
-        } else if let presentation = SyncStatusResolver.resolve(
+    /// The FR-012 mapping for the current sync state (nil = healthy).
+    /// 003 T058 (FR-011/SC-012): the HUMAN-READABLE mapping — never the raw
+    /// internal code (codes stay in the diagnostic export experience only).
+    private var resolvedPresentation: SyncStatusPresentation? {
+        SyncStatusResolver.resolve(
             isConfigured: true,
             lastErrorCode: syncCoordinator?.lastErrorCode,
             vaultLocked: false,
             hasOfflineChangesPending: false,
             summary: .empty
-        ) {
-            // 003 T058 (FR-011/SC-012): the HUMAN-READABLE FR-012 mapping —
-            // never the raw internal code (codes stay in the diagnostic
-            // export experience only).
-            Label(presentation.title, systemImage: presentation.symbolName)
-                .foregroundStyle(.orange)
-            Text(presentation.detail)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        } else {
-            Label("Up to Date", systemImage: "checkmark.circle")
-                .foregroundStyle(.green)
-        }
+        )
     }
 
     /// Rev 2 + polish round 2: user-meaningful storage semantics — which
@@ -237,12 +260,23 @@ public struct SyncSettingsView: View {
                     Text(providerText)
                 }
                 LabeledContent("Location") {
-                    Text(SyncLocationPresentation.location(for: configuration))
-                        .truncationMode(.middle)
-                        .lineLimit(1)
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                        .help(SyncLocationPresentation.location(for: configuration))
+                    if let location = SyncLocationPresentation.location(for: configuration) {
+                        Text(location)
+                            .truncationMode(.middle)
+                            .lineLimit(1)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .help(location)
+                    } else {
+                        // Honest degradation (polish round 3): the persisted
+                        // prefix does not conform to the user-folder schema
+                        // (contains a generated namespace segment) — never
+                        // guess a path. The technical path lives in
+                        // Advanced (Vault ID help).
+                        Text(providerStorageCopy)
+                            .foregroundStyle(.secondary)
+                            .help(SyncLocationPresentation.technicalPath(for: configuration))
+                    }
                 }
             }
         }
@@ -272,10 +306,11 @@ public struct SyncSettingsView: View {
             .disabled(!(syncCoordinator?.autoSyncEnabled ?? false) || !isVaultUnlocked)
             .help("When automatic sync is on: sync after local changes only, or also on a fixed interval")
 
-            // Polish round 2: describe the behavior WHEN enabled (2-4 s
-            // debounce after editing + optional periodic interval), not a
-            // present-tense claim that reads as currently happening.
-            Text("When enabled, changes sync automatically a few seconds after editing. You can also choose a periodic interval.")
+            // Polish round 2/3: describe the behavior WHEN enabled. The
+            // 2-4 s debounce is an implementation detail; the copy that
+            // matters is "automatic" + "periodic is optional" (true for
+            // every policy, including change-only).
+            Text("When enabled, changes sync automatically. Periodic syncing is optional.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -307,29 +342,9 @@ public struct SyncSettingsView: View {
             ))
             .disabled(!isVaultUnlocked)
             .help("Keeps the vault unlocked across app relaunches until this Mac restarts or you lock the vault.")
-            Text("Saves the vault key securely in Keychain. It's cleared when you restart or lock the vault.")
+            Text("Keeps sync unlocked using Keychain until you restart or lock the vault.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-        }
-    }
-
-    private var actionsSection: some View {
-        Section {
-            Button {
-                Task {
-                    await syncCoordinator?.manualSync()
-                }
-            } label: {
-                if isInProgress {
-                    HStack(spacing: 6) {
-                        ProgressView().controlSize(.small)
-                        Text("Syncing…")
-                    }
-                } else {
-                    Text("Sync Now")
-                }
-            }
-            .disabled(!isVaultUnlocked || isInProgress)
         }
     }
 
@@ -348,10 +363,12 @@ public struct SyncSettingsView: View {
         }
     }
 
-    /// The disclosure content: semantically grouped, system rows. Borderless
-    /// buttons carry the hierarchy (no per-action gray button chrome);
-    /// dividers only BETWEEN groups (Vault/Storage → Export/Support →
-    /// Vault ID/Recovery → Connection), never per action.
+    /// The disclosure content: semantically grouped, system rows. Polish
+    /// round 3: `.buttonStyle(.link)` — the system link presentation (accent
+    /// color, hover/focus, keyboard reachable) so enabled actions read as
+    /// enabled; the earlier `.borderless` presentation inherited the Form
+    /// container's subdued styling and looked disabled. Dividers only
+    /// BETWEEN groups, never per action.
     @ViewBuilder
     private var advancedContent: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -361,13 +378,13 @@ public struct SyncSettingsView: View {
             Button("Join Another Vault…") {
                 showJoinSheet = true
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.link)
             .help("Connects this Mac to a vault created on another Mac. Your local notes are preserved.")
 
             Button("Set Up New Storage Location…") {
                 showReplaceSheet = true
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.link)
             .help("Creates a new vault at a new storage location. Local notes are preserved; the previous location's data is not deleted.")
 
             Divider()
@@ -379,30 +396,41 @@ public struct SyncSettingsView: View {
             Button("Export Sync Profile…") {
                 exportSyncProfile()
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.link)
             .help("Saves a sync profile for another Mac. Contains no credentials, keys, or note content.")
 
             // FR-191 (T186): diagnostic bundle export.
             Button("Export Diagnostic Bundle…") {
                 exportDiagnosticBundle()
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.link)
             .help("Saves a sanitized diagnostics JSON for support. No note content or credentials are included.")
 
             Divider()
                 .padding(.vertical, 6)
 
-            // Vault ID (copyable) + Recovery
+            // Vault ID (copyable) — its own row.
             if let configuration = syncCoordinator?.configuration {
-                vaultIDRow(configuration.vaultLocator)
+                vaultIDRow(
+                    configuration.vaultLocator,
+                    technicalPath: SyncLocationPresentation.location(for: configuration) == nil
+                        ? SyncLocationPresentation.technicalPath(for: configuration)
+                        : nil
+                )
             }
 
-            // FR-163: unrecoverable-password information — concise, standard
-            // style, no absolute "by anyone" phrasing.
-            Label("There is no password recovery. If you forget your sync password, your encrypted sync data can't be recovered.", systemImage: "info.circle")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.top, 6)
+            // FR-163: unrecoverable-password information — its own block
+            // (not a footnote of the Vault ID row): concise, standard style,
+            // no absolute "by anyone" phrasing.
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Recovery")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Label("There is no password recovery. If you forget your sync password, your encrypted sync data can't be recovered.", systemImage: "info.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.top, 8)
 
             Divider()
                 .padding(.vertical, 6)
@@ -411,7 +439,7 @@ public struct SyncSettingsView: View {
             Button("Disconnect Sync…") {
                 showRemoveConfirmation = true
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.link)
             .help("Stops syncing on this Mac. Your notes and the data at the storage location are kept.")
         }
         .padding(.vertical, 4)
@@ -419,21 +447,20 @@ public struct SyncSettingsView: View {
 
     /// FR-008/US1: the vault locator is the join key for another Mac
     /// (manual entry fallback when scan/profile import are unavailable).
-    /// Opaque and non-sensitive (CHK032); middle-truncated so it never
-    /// drives window width, full value via help/selection, and a LOCAL
-    /// lightweight Copy affordance (never routed through the sync transient
-    /// feedback).
-    private func vaultIDRow(_ locator: String) -> some View {
+    /// Opaque and non-sensitive (CHK032). Polish round 3: ACTIVE
+    /// presentation shortening (a fixed short form — overflow truncation
+    /// never triggers when the row has room); Copy always copies the full
+    /// ID; the help tag shows the full ID (plus the technical path when the
+    /// Storage display degraded).
+    private func vaultIDRow(_ locator: String, technicalPath: String?) -> some View {
         HStack(spacing: 8) {
             Text("Vault ID")
                 .foregroundStyle(.secondary)
             Spacer(minLength: 8)
-            Text(locator)
+            Text(VaultIDPresentation.abbreviated(locator))
                 .font(.system(.body, design: .monospaced))
-                .truncationMode(.middle)
                 .lineLimit(1)
-                .textSelection(.enabled)
-                .help(locator)
+                .help(helpTextForVaultID(locator, technicalPath: technicalPath))
             Button {
                 copyVaultID(locator)
             } label: {
@@ -444,6 +471,15 @@ public struct SyncSettingsView: View {
             .accessibilityLabel("Copy Vault ID")
             .help("Copy Vault ID")
         }
+    }
+
+    /// Full-ID tooltip; appends the technical path when the default Storage
+    /// display degraded (the user's original folder could not be recovered).
+    private func helpTextForVaultID(_ locator: String, technicalPath: String?) -> String {
+        if let technicalPath {
+            return "\(locator)\n\(String(localized: "Technical path: \(technicalPath)"))"
+        }
+        return locator
     }
 
     /// Local copy feedback: clipboard + VoiceOver announcement + a brief

@@ -133,6 +133,24 @@ public final class SyncCoordinator {
             }
             autoSyncEnabled = LocalPreferences().autoSyncEnabled
             autoSyncPolicy = LocalPreferences().autoSyncPolicy
+            // Polish round 3 Step 0 (sanitized diagnostics, FR-165): the
+            // Storage display helper needs the real relationship between the
+            // persisted prefix and the locator columns. Log booleans only —
+            // never the prefix/endpoint values (paths are FR-165/FR-191
+            // sensitive).
+            let prefix = config.providerConfig.prefix ?? ""
+            let segments = prefix
+                .split(separator: "/", omittingEmptySubsequences: true)
+                .map(String.init)
+            let first = segments.first
+            StickyLogger(category: .app).debug(
+                "sync-config-shape",
+                code: config.providerType.rawValue,
+                sanitizedContext: "lead=loc:\(first == config.vaultLocator ? 1 : 0)"
+                    + " lead=replaced:\((config.replacedFromVaultLocator.map { first == $0 } ?? false) ? 1 : 0)"
+                    + " anyOpaque:\(segments.contains(where: { RemoteLayout.isOpaque($0) }) ? 1 : 0)"
+                    + " segCount:\(segments.count)"
+            )
             // FR-162a: silent launch unlock when remembered + no restart.
             if let vault = launchUnlockVault(configuration: config) {
                 wireEngine(configuration: config, vault: vault)
