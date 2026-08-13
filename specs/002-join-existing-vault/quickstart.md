@@ -18,7 +18,7 @@ Swift 6 language mode, strict concurrency.
 # StickyCore package suites (all 7 module suites + join/schema tests):
 DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer swift test --package-path Packages/StickyCore
 
-# App / Widget targets + AppTests (SyncCompositionTests JoinExistingVault suite,
+# App target + AppTests (SyncCompositionTests JoinExistingVault suite,
 # SyncProfileExportTests, LocalizationCompletenessTests):
 DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild build -project StickyNotes.xcodeproj -scheme StickyNotes -configuration Debug CODE_SIGNING_ALLOWED=NO
 DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild test -project StickyNotes.xcodeproj -scheme StickyNotes -destination 'platform=macOS'

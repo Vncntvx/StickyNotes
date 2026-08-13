@@ -33,7 +33,6 @@ public enum StickyLogCategory: String, Sendable {
     case sync
     case systemBridge
     case app
-    case widget
     case migration
     case performance
 }

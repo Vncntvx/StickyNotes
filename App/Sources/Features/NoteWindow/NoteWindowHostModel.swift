@@ -12,7 +12,7 @@ import SystemBridge
 // to the repository + the EditorCore AutoSave debouncer (FR-141a: 500 ms
 // debounce, single-transaction save, flush before close).
 //
-// - Appearance edits (title/color/opacity/textSize/alwaysOnTop/widgetEligible)
+// - Appearance edits (title/color/opacity/textSize/alwaysOnTop)
 //   persist immediately — they are structural (FR-141a "structural ops persist
 //   immediately").
 // - Ordinary text edits debounce 500 ms; the save sink diffs the snapshot
@@ -95,7 +95,6 @@ public final class NoteWindowHostModel {
 
     /// Persists an appearance edit immediately (structural op, FR-141a).
     public func updateAppearance(_ updated: Note) {
-        let eligibilityChanged = (note?.widgetEligible != updated.widgetEligible)
         self.note = updated
         if Self.isMeaningful(updated, blocks: blocks) {
             hasEverHadMeaningfulContent = true
@@ -111,10 +110,6 @@ public final class NoteWindowHostModel {
                 try? await service.reindexNote(noteId: noteId, title: updated.title, blocks: blocks)
             }
             await environment.syncCoordinator?.localContentChanged()
-        }
-        // FR-110a (T294): widget-eligibility changes refresh eligible kinds.
-        if eligibilityChanged {
-            WidgetRefreshCoordinator.reload(for: .eligibilityChanged)
         }
     }
 
@@ -343,7 +338,6 @@ public final class NoteWindowHostModel {
             pendingFocusBlockId = blockId
             await flush()
             try await todoRepo.insert(item)
-            notifyWidgetRefresh(.todoToggled)
             return blockId
         } catch {
             return nil
@@ -373,7 +367,6 @@ public final class NoteWindowHostModel {
         )
         pendingFocusBlockId = blockId
         await flush()
-        notifyWidgetRefresh(.noteCreatedEditedDeletedTrashedRestored)
         return blockId
     }
 
@@ -439,7 +432,6 @@ public final class NoteWindowHostModel {
                     try? await locatorRepo.upsert(locator)
                 }
             )
-            notifyWidgetRefresh(.noteCreatedEditedDeletedTrashedRestored)
             return blockId
         } catch {
             return nil
@@ -470,7 +462,6 @@ public final class NoteWindowHostModel {
                     restoreNew: { [weak self] in self?.updateBlocks(after, isStructural: true) }
                 )
             }
-            notifyWidgetRefresh(.noteCreatedEditedDeletedTrashedRestored)
         } catch {
             // silent (FR-141b: background/structural ops give no toast)
         }
@@ -510,7 +501,6 @@ public final class NoteWindowHostModel {
                 )
             }
         )
-        notifyWidgetRefresh(.todoToggled)
     }
 
     /// Deletes a todo block (children reparent to grandparent — FR-070).
@@ -576,7 +566,6 @@ public final class NoteWindowHostModel {
                 try? await self.environment.persistence.todoRepository?.reorder(todoId: target.id, newSortKey: itemSortKey, deviceId: DeviceIdentity.current.id)
             }
         )
-        notifyWidgetRefresh(.todoToggled)
     }
 
     /// Indents a todo one level (reparent under the previous sibling) with
@@ -601,7 +590,6 @@ public final class NoteWindowHostModel {
                 try? await self.environment.persistence.todoRepository?.reparent(todoId: item.id, newParentId: parent.id, deviceId: DeviceIdentity.current.id)
             }
         )
-        notifyWidgetRefresh(.todoToggled)
     }
 
     /// Outdents a todo one level (reparent under its parent's parent).
@@ -622,7 +610,6 @@ public final class NoteWindowHostModel {
                 try? await self.environment.persistence.todoRepository?.reparent(todoId: item.id, newParentId: parent?.parentTodoId, deviceId: DeviceIdentity.current.id)
             }
         )
-        notifyWidgetRefresh(.todoToggled)
     }
 
     // MARK: - Screenshot cover + captions (T292, FR-094/FR-094b)
@@ -656,7 +643,6 @@ public final class NoteWindowHostModel {
             }
         }
         if !updated.isEmpty { updateBlocks(updated, isStructural: true) }
-        notifyWidgetRefresh(.noteCreatedEditedDeletedTrashedRestored)
     }
 
     /// Persists a screenshot caption edit (FR-093).
@@ -741,7 +727,6 @@ public final class NoteWindowHostModel {
                 restoreNew: { [weak self] in self?.updateBlocks(newBlocks, isStructural: true) }
             )
             await flush()
-            notifyWidgetRefresh(.noteCreatedEditedDeletedTrashedRestored)
             return true
         } catch {
             return false
@@ -784,7 +769,6 @@ public final class NoteWindowHostModel {
                 restoreNew: { [weak self] in self?.updateBlocks(newBlocks, isStructural: true) }
             )
             await flush()
-            notifyWidgetRefresh(.noteCreatedEditedDeletedTrashedRestored)
             return blockId
         } catch {
             return nil
@@ -1002,12 +986,6 @@ public final class NoteWindowHostModel {
               case .image(let payload) = block.payload,
               let assetStore = environment.assets.store else { return nil }
         return try? await assetStore.readData(assetID: payload.originalAssetId)
-    }
-
-    // MARK: - Widget refresh (T294, FR-110a)
-
-    private func notifyWidgetRefresh(_ change: WidgetRefreshCoordinator.Change) {
-        WidgetRefreshCoordinator.reload(for: change)
     }
 
     private func reloadBlocks() async {

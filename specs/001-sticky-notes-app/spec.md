@@ -15,7 +15,7 @@ encoded directly in the sections below: FR-001a, FR-002a, FR-012a, FR-014b,
 FR-014c, FR-022a,
 FR-022b,
 FR-023a, FR-031a, FR-040a, FR-041a, FR-050a, FR-072a, FR-072b, FR-090a,
-FR-090b, FR-094a, FR-110a, FR-140a, FR-141a, FR-152a, FR-154,
+FR-090b, FR-094a, FR-140a, FR-141a, FR-152a, FR-154,
 FR-160a–FR-160e, FR-162a, FR-174, FR-180a, FR-191,
 and the "different vault detected" edge case. The original question-and-answer
 log is archived in `history/clarifications.md` for audit purposes.
@@ -28,8 +28,6 @@ log is archived in `history/clarifications.md` for audit purposes.
 - Q: How should in-progress async operations provide visual feedback? → A: Silent for background operations (autosave, search, thumbnail generation); explicit, non-blocking status for user-initiated operations (screenshot capture, manual sync, export/import), surfaced as status text/indicator per FR-151 (FR-153).
 - Q: Which exception/failure scenarios should the spec cover for the library and search surfaces? → A: A general resilience guarantee (no crash, no data loss, non-blocking status) plus explicit rules for search no-results (FR-014c empty-state) and note-window-open failure (FR-011a); sort/reorder failures are covered by the general guarantee and FR-022a persistence rules (FR-011a).
 - Q: Should the spec require VoiceOver labels/announcements for every interactive element, or rely on platform defaults plus a scoped set of custom requirements? → A: Platform defaults for standard controls; explicit enumerated custom-label requirements for custom-built controls (file-reference card, screenshot viewer, upper-area hover controls, editor block affordances) and required VoiceOver announcements for the deletion toast and user-initiated operation completion (FR-180b).
-- Q: Where should the widget-eligibility setting (per-note "may appear in widgets" control per FR-112) live in the note UI? → A: A note-level toggle in the note's contextual menu alongside the other note-level actions (duplicate, export as JSON, copy as Markdown, move to Trash per FR-031); the upper-area control bar stays uncluttered (FR-112; FR-031).
-- Q: What should a widget show when no eligible note exists (all notes widget-excluded, or the configured note is gone)? → A: Reuse the sanitized "temporarily unavailable" placeholder per FR-140a — localized, no content, no title; the widget never implies an excluded note exists (FR-112; FR-140a).
 - Q: When two different notes start with byte-identical first lines, should the spec define how cards stay distinguishable? → A: Identical generated summaries are accepted; cards remain distinguishable via the existing deterministic card fields — last-modified time, note color, and the 2-line body preview (FR-020a). No summary disambiguation rule (FR-021; FR-020a).
 - Q: Should the file-reference card's visual design (icon size, metadata layout, availability-status indicator) be pinned in the spec? → A: Card layout and icon size stay implementation choices per FR-050b; the spec pins only the availability-status indicator semantics — enumerated states (available / missing / stale / on-another-device), communicated by more than color alone (FR-044) (FR-100; FR-103; FR-104; FR-050b).
 - Q: Should the spec add a VoiceOver response-time target for navigating a large note, or leave accessibility performance unquantified? → A: Leave VoiceOver traversal latency unquantified; SC-004a (keystroke-to-glyph <16 ms) and SC-006 (no sustained CPU) remain the accessibility performance guarantees, since traversal latency is dominated by the system accessibility engine (SC-004a; SC-006).
@@ -170,9 +168,8 @@ opening it from the note and revealing it in Finder.
    strikethrough, communicated by more than color alone), dragged to reorder,
    indented as a subtask, un-indented, edited, and deleted.
 2. **Given** two todo items with identical text, **When** they are reordered or
-   their text changes, or one is updated from a widget, or notes synchronize
-   between devices, **Then** each todo retains a stable identity distinct from
-   its text.
+   their text changes, or notes synchronize between devices, **Then** each todo
+   retains a stable identity distinct from its text.
 3. **Given** a note, **When** the user inserts a multiline code block, **Then**
    it shows monospaced display, preserved spaces/tabs/line breaks, a copy
    button, an optional language label, and readable presentation of long lines
@@ -305,11 +302,10 @@ opening the screenshot viewer to zoom, copy, and navigate between screenshots.
 
 ---
 
-### User Story 8 - Widgets, Dock, and Permissions (Priority: P2)
+### User Story 8 - Dock and Permissions (Priority: P2)
 
-A user adds a desktop widget showing a note or todos, toggles todos from the
-widget, hides the Dock icon while keeping all functions reachable, and grants
-permissions only when actually needed.
+A user hides the Dock icon while keeping all functions reachable from the menu
+bar, and grants permissions only when actually needed.
 
 > **REMOVED 2026-08-10 — global shortcuts (FR-120/FR-121)**: the product no
 > longer offers global hotkeys. No Carbon hotkey is registered at launch and
@@ -317,40 +313,38 @@ permissions only when actually needed.
 > decision): the shortcuts collided with shortcuts of other applications and
 > were unwanted. In-app menu shortcuts (⌘N, ⌘F, ⌘W, ⌘, …) are unaffected.
 
-**Why this priority**: Widgets and Dock behavior extend the always-available
-surface. Permission management is grouped here because widgets may surface the
-same features that need permissions.
+> **REMOVED 2026-08-13 — desktop widgets (FR-110/FR-110a/FR-111/FR-112)**: the
+> product no longer ships a WidgetKit extension or any widget surface. The
+> per-note widget-eligibility setting, change-driven timeline refresh, and the
+> "temporarily unavailable" widget fallback are all removed. Rationale (user
+> decision): the placeholder App Group (required for the app↔widget shared
+> database) cannot be registered without a paid developer account, so
+> production widget data access could never work; the widget surface and the
+> App Group container were removed together. Dock toggling and permission
+> management remain (this story).
 
-**Independent Test**: Can be tested by adding each widget form, marking a todo
-from a widget, disabling the Dock icon, and verifying Settings/Help/About/sync
-status/Quit remain reachable from the menu-bar interface.
+**Why this priority**: Dock behavior extends the always-available surface.
+Permission management is grouped here because the same features may need
+permissions.
+
+**Independent Test**: Can be tested by disabling the Dock icon, and verifying
+Settings/Help/About/sync status/Quit remain reachable from the menu-bar
+interface.
 
 **Acceptance Scenarios**:
 
-1. **Given** the system supports widgets, **When** the user adds a widget,
-   **Then** available forms include a small widget for one user-selected note, a
-   small widget for the most recently modified eligible note, a medium widget
-   for multiple recent notes, a medium widget for todos from a selected note, a
-   large widget for a broader overview, and a quick-create action.
-2. **Given** a widget, **When** the user interacts with it, **Then** the user
-   may open a specific note window, mark an individual todo complete or
-   incomplete, create a new note, and move between eligible recent notes where
-   appropriate; widgets do not attempt full rich-text editing.
-3. **Given** a note, **When** the user excludes it from widgets, **Then** its
-   title, body, todo text, images, screenshots, and summaries do not appear in
-   widget timelines, previews, placeholders, or snapshots.
-4. ~~**Given** settings, **When** the user configures a global shortcut, **Then**
+1. ~~**Given** settings, **When** the user configures a global shortcut, **Then**
    available actions include opening/closing the menu-bar library, creating a
    blank note, capturing a region into a new note, selecting a window into a new
    note, creating a note from clipboard contents, searching all notes, and
    showing or hiding open note windows; the application detects conflicts and
    does not silently replace an existing system or application shortcut.~~
    **REMOVED 2026-08-10 with FR-120/FR-121** (no global hotkeys in the
-   product; scenario renumbered: 5→4, 6→5 below).
-5. **Given** the Dock icon is enabled by default, **When** the user disables it
+   product; scenario renumbered: 5→2, 6→3 below).
+2. **Given** the Dock icon is enabled by default, **When** the user disables it
    in Settings, **Then** Settings, Help, About, synchronization status, and Quit
    remain reachable from the menu-bar interface.
-6. **Given** accessibility permission is denied, **When** the user uses the
+3. **Given** accessibility permission is denied, **When** the user uses the
    product, **Then** ordinary notes and manual screenshot selection remain
    usable and only advanced window-identification behavior is unavailable;
    accessibility permission is never requested merely because a future feature
@@ -464,9 +458,9 @@ cited FR.
 - Pasted rich text contains unsupported or private attributed-string
   formatting: only application-supported formatting may persist; unsupported
   properties must not silently enter the durable format (FR-053).
-- A todo item is toggled complete from a widget on one Mac while the note is
-  open and being edited on another: todo identity stays stable and the change
-  reconciles without losing either side (FR-071; US10).
+- A todo item is toggled complete on one Mac while the note is open and being
+  edited on another: todo identity stays stable and the change reconciles
+  without losing either side (FR-071; US10).
 - The user changes the synchronization password: this does not require
   uploading all unchanged content again (FR-164).
 - The user configures synchronization against a repository that already
@@ -524,8 +518,9 @@ cited FR.
 - Note appearance (colors, transparency, text size, Always on Top, position
   memory) and Trash with 30-day recovery.
 - Markdown-style input shortcuts with single-Undo restoration.
-- Native desktop widgets (multiple forms), Dock toggling, and
-  graceful permission management.
+- Native desktop widgets (multiple forms) — REMOVED 2026-08-13 (US8 note;
+  no WidgetKit extension ships). Dock toggling and graceful permission
+  management remain in scope.
 - Optional end-to-end encrypted synchronization to exactly one WebDAV or
   S3-compatible repository, with non-destructive conflict handling and safe
   deletion propagation.
@@ -593,8 +588,8 @@ cited FR.
   closing MUST NEVER delete the note.
 - **FR-007**: Note windows MUST NOT be automatically restored when the
   application is relaunched.
-- **FR-007a**: When a new note window is created (from the menu-bar library, a
-  deep link, or a widget action), the new note window MUST immediately receive
+- **FR-007a**: When a new note window is created (from the menu-bar library or
+  a deep link), the new note window MUST immediately receive
   keyboard focus so the user can begin typing without an extra click (US1
   capture intent). The menu-bar library window, if open, MUST remain open but
   MUST yield focus to the new note window — it MUST NOT auto-dismiss on note
@@ -958,8 +953,7 @@ cited FR.
   completing adds a visible completed state and strikethrough.
 - **FR-071**: Every todo item MUST have a stable identity independent of its
   text, preserved when two todos share identical text, when text changes, when
-  reordered, when updated from a widget, and when notes synchronize between
-  devices.
+  reordered, and when notes synchronize between devices.
 - **FR-072**: The first release MUST NOT require due dates, reminders, priority
   levels, recurring tasks, assignees, or automatic movement of completed items.
 - **FR-072a**: Todo nesting depth MUST be bounded at a maximum of 6 levels.
@@ -1031,7 +1025,7 @@ cited FR.
   saved state, explaining the limit to the user. The limit constants MUST
   be documented and covered by automated tests; assets within the limits
   MUST still sync as independent objects (FR-090a) and MUST NOT be decoded
-  at full resolution for card-grid or widget rendering (FR-094a).
+  at full resolution for card-grid rendering (FR-094a).
 - **FR-091**: The user MUST be able to capture a screen region into a new note,
   select an application window into a new note, add a region screenshot to an
   existing note, and add a window screenshot to an existing note.
@@ -1043,15 +1037,14 @@ cited FR.
   original screenshot, a thumbnail, and an optional user caption; a note MAY
   contain multiple screenshot associations.
 - **FR-094**: The user MAY select one screenshot as the note card's cover image.
-- **FR-094a**: Thumbnails used for note-card covers, card-grid previews, and
-  widget rendering MUST be generated with a longest edge of 256 pixels,
-  preserving aspect ratio. The 256px longest-edge dimension is the single
-  canonical thumbnail size for both card and widget display. Full-resolution
-  screenshots and embedded images MUST NOT be decoded for card-grid or
-  widget rendering (see SC-008); only the 256px thumbnail participates in
-  those surfaces. Thumbnail generation MUST be lazy, off the main actor, and
-  MUST produce a stable hash so identical source images dedup to a single
-  stored thumbnail.
+- **FR-094a**: Thumbnails used for note-card covers and card-grid previews
+  MUST be generated with a longest edge of 256 pixels, preserving aspect
+  ratio. The 256px longest-edge dimension is the single canonical thumbnail
+  size for card display. Full-resolution screenshots and embedded images MUST
+  NOT be decoded for card-grid rendering (see SC-008); only the 256px
+  thumbnail participates in that surface. Thumbnail generation MUST be lazy,
+  off the main actor, and MUST produce a stable hash so identical source
+  images dedup to a single stored thumbnail.
 - **FR-094b**: When a screenshot block that is currently selected as the note
   card's cover (FR-094) is deleted from its note, the application MUST
   nullify `Note.coverScreenshotBlockId` within the same database transaction
@@ -1112,14 +1105,14 @@ cited FR.
 - **FR-105**: Security-scoped access for long-term local file access MUST remain
   device-local; bookmark data and absolute local paths MUST NOT be synchronized.
 
-**Widgets**
+**Widgets — REMOVED 2026-08-13**
 
-- **FR-110**: The product MUST provide multiple widget forms: a small widget for
+- ~~**FR-110**: The product MUST provide multiple widget forms: a small widget for
   one user-selected note, a small widget for the most recently modified eligible
   note, a medium widget for multiple recent notes, a medium widget for todos
   from a selected note, a large widget for a broader overview, and a
-  quick-create action.
-- **FR-110a**: Widget content MUST be refreshed change-driven: whenever local
+  quick-create action.~~
+- ~~**FR-110a**: Widget content MUST be refreshed change-driven: whenever local
   data affecting a widget changes (note created, edited, deleted, trashed,
   restored, todo toggled, widget-eligibility changed, conflict copy
   created), the main application MUST proactively trigger a timeline
@@ -1132,11 +1125,11 @@ cited FR.
   occurs while the main application is not running, widgets MAY show
   last-known content until the application next runs or the system
   refreshes its timeline (FR-140a's "temporarily unavailable" status
-  applies on read failure).
-- **FR-111**: Widgets MAY allow opening a note window, marking an individual
+  applies on read failure).~~
+- ~~**FR-111**: Widgets MAY allow opening a note window, marking an individual
   todo complete or incomplete, creating a new note, and moving between eligible
-  recent notes; widgets MUST NOT attempt full rich-text editing.
-- **FR-112**: Each note MUST have a setting controlling whether it may appear in
+  recent notes; widgets MUST NOT attempt full rich-text editing.~~
+- ~~**FR-112**: Each note MUST have a setting controlling whether it may appear in
   widgets; when excluded, its title, body, todo text, images, screenshots, and
   summaries MUST NOT appear in widget timelines, previews, placeholders, or
   snapshots. The widget-eligibility toggle MUST be a note-level action in the
@@ -1146,7 +1139,15 @@ cited FR.
   bar. When no eligible note exists for a widget (every note excluded, or the
   configured note deleted/trashed/conflicted), the widget MUST present the
   sanitized "temporarily unavailable" placeholder per FR-140a — localized, no
-  content, no note title — and MUST NOT imply that an excluded note exists.
+  content, no note title — and MUST NOT imply that an excluded note exists.~~
+
+All four requirements are withdrawn (user decision 2026-08-13 — see US8 note:
+the placeholder App Group cannot be registered without a paid developer
+account, so widget data access could never work in production). The
+WidgetExtension target, the per-note widget-eligibility field
+(`Note.widgetEligible`, schema column dropped by migration v3), the
+widget-note-selection store, change-driven refresh coordinator, and all
+widget UI entries were removed.
 
 **Global shortcuts — REMOVED 2026-08-10**
 
@@ -1187,14 +1188,10 @@ tasks (T096/T102/T145/T150/T169 shortcuts part/T296) are closed as removed.
   FR-190).
 - **FR-140a**: Database access (SQLite via GRDB, in WAL mode) MUST use a
   bounded busy timeout of 5 seconds: when a database operation cannot acquire
-  a lock because another connection (app or widget) holds it, the operation
-  MUST wait up to 5 seconds before reporting a "database busy" condition
-  rather than blocking indefinitely or failing immediately. Widget read
-  transactions MUST be short enough to complete well within this timeout. If
-  a widget read cannot complete within the timeout, the widget MUST report a
-  sanitized "temporarily unavailable" status (never a raw error or note
-  content) and retry on its next refresh. This makes app+widget concurrent
-  WAL access behavior testable and eliminates realistic deadlock risk.
+  a lock because another connection holds it, the operation MUST wait up to 5
+  seconds before reporting a "database busy" condition rather than blocking
+  indefinitely or failing immediately. This makes concurrent WAL access
+  behavior testable and eliminates realistic deadlock risk.
 - **FR-141**: The user MUST be able to create, edit, search, delete, restore,
   and view all locally available content while offline; changes MUST save
   automatically.
@@ -1277,8 +1274,8 @@ tasks (T096/T102/T145/T150/T169 shortcuts part/T296) are closed as removed.
   tombstone, manifest); (c) structural metadata (block ordering, todo
   nesting and completion state, note-to-block composition, cover-screenshot
   selection, manual sort-key position); (d) note appearance and behavior
-  choices (color, transparency, text size, Always-on-Top state,
-  widget-eligibility setting); and (e) version-lineage fields that reveal
+  choices (color, transparency, text size, Always-on-Top state); and (e)
+  version-lineage fields that reveal
   editing patterns (parentVersionId, lastModifiedDeviceId, semantic
   modifiedAt distinct from upload time). Any new field added to a
   synchronized object MUST be evaluated against this enumeration; if it
@@ -1479,7 +1476,7 @@ tasks (T096/T102/T145/T150/T169 shortcuts part/T296) are closed as removed.
 - **Note**: The unit a user creates, edits, and retrieves. Carries an optional
   manual title (distinct from any generated summary), a color, transparency,
   text size, Always-on-Top state, window size and preferred position, sorting
-  position under manual order, widget-eligibility setting, last-modified time,
+  position under manual order, last-modified time,
   and a current lifecycle state (active, in Trash, permanently deleted,
   recovered conflict copy). It contains blocks of content.
 - **Block**: A piece of content within a note. Categories: rich text, todo,
@@ -1487,8 +1484,8 @@ tasks (T096/T102/T145/T150/T169 shortcuts part/T296) are closed as removed.
   individually identifiable.
 - **Todo Item**: A block with stable identity independent of its text,
   supporting complete/incomplete state, nesting as a subtask, and reordering.
-  Identity is shared across the main app, widgets, synchronization, and
-  conflict handling.
+  Identity is shared across the main app, synchronization, and conflict
+  handling.
 - **Code Block**: A block preserving exact whitespace and line breaks with an
   optional language label, copyable as code contents only.
 - **File Reference**: A block pointing to a local file by reference (not a
@@ -1562,9 +1559,6 @@ tasks (T096/T102/T145/T150/T169 shortcuts part/T296) are closed as removed.
 - Users understand that forgetting the synchronization password makes remote
   encrypted data unrecoverable; the product communicates this clearly rather
   than assuming it (FR-163).
-- The system widget platform supports the widget forms described; where a form
-  is unavailable on a given OS configuration, the product provides the closest
-  available form and degrades gracefully.
 - Dock behavior follows standard macOS capabilities and
   permissions; where the system restricts an action, the product explains the
   restriction rather than working around it insecurely.

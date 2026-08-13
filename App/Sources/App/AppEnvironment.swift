@@ -99,11 +99,10 @@ public struct AppEnvironment: Sendable {
     /// `CGRequest*` / `AXIsProcessTrustedWithOptions` API.
     @MainActor
     public static func bootstrap(
-        appGroupContainerURL: URL
+        applicationSupportURL: URL
     ) async throws -> AppEnvironment {
         let fm = FileManager.default
-        let baseURL = appGroupContainerURL.appendingPathComponent("Library", isDirectory: true)
-            .appendingPathComponent("Application Support", isDirectory: true)
+        let baseURL = applicationSupportURL
         try fm.createDirectory(at: baseURL, withIntermediateDirectories: true)
 
         let databasePath = baseURL
@@ -115,8 +114,9 @@ public struct AppEnvironment: Sendable {
             backupPath: backupPath
         )
 
-        // T293: compose the asset store under the App Group container
-        // (originals/thumbnails/app-icons; never in SQLite).
+        // T293: compose the asset store under the sandbox Application
+        // Support directory (originals/thumbnails/app-icons; never in
+        // SQLite).
         let assetDirectory = baseURL.appendingPathComponent("Assets", isDirectory: true)
         try FileManager.default.createDirectory(at: assetDirectory, withIntermediateDirectories: true)
         let assetStore = try AssetStore(directoryURL: assetDirectory)

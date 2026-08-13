@@ -40,7 +40,6 @@ import SyncCore
             transparency: 1.0,
             textSize: 13,
             alwaysOnTop: false,
-            widgetEligible: true,
             coverScreenshotBlockId: nil,
             manualSortKey: sortKey,
             lifecycleState: .active,

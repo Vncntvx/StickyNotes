@@ -179,7 +179,7 @@ import SystemBridge
     // MARK: - 003 T028 (FR-042/SC-003, regression verification)
     //
     // Per tasks.md T028: a new note window (from Library / global shortcut /
-    // menu / deep link / widget) places keyboard focus near the content top
+    // menu / deep link) places keyboard focus near the content top
     // with no large unexplained blank; typing plain rich text needs no
     // block-type selection. Per plan.md §6 this behavior ALREADY exists —
     // these run as regression verification (pass = baseline; any failure is

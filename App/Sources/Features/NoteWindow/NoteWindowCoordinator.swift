@@ -695,7 +695,7 @@ public struct NoteWindowContent: View {
                 }
                 // 004 T019 (FR-031): note-level actions live on the content
                 // area's context menu (duplicate/copy/export/trash +
-                // appearance + widget) — the toolbar More menu presents the
+                // appearance) — the toolbar More menu presents the
                 // SAME actions.
                 .contextMenu {
                     noteContextMenu
@@ -821,28 +821,6 @@ public struct NoteWindowContent: View {
             }
         }
         Divider()
-        // FR-112 (T280): widget eligibility lives here (note level).
-        Toggle(isOn: Binding(
-            get: { host?.note?.widgetEligible ?? true },
-            set: { newValue in
-                guard let host, var note = host.note else { return }
-                note.widgetEligible = newValue
-                host.updateAppearance(note)
-            }
-        )) {
-            Text("Allow in Widgets")
-        }
-        Divider()
-        // FR-110 (T306): the selected-note widget forms.
-        if WidgetNoteSelection.selectedNote() == noteId {
-            Button("Remove from Widget") {
-                WidgetNoteSelection.setSelectedNote(nil)
-            }
-        } else {
-            Button("Set as Widget Note") {
-                WidgetNoteSelection.setSelectedNote(noteId)
-            }
-        }
     }
 
     private func applyPalette(_ key: NotePaletteKey) {

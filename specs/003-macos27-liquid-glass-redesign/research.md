@@ -46,7 +46,7 @@
 
 - `AppTests/` 44 套件；`AppUITests/CriticalFlowsUITests`（5 条，XCUITest，`-UITestSeedNote` 播种）；`Packages/StickyCore/Tests/` 8 目标 92 套件（Swift Testing）。
 - `project.yml`（XcodeGen 源）+ 提交的 `StickyNotes.xcodeproj`（objectVersion 77）；部署目标 macOS 26.0；SWIFT_VERSION 6.0；`LSUIElement YES`；App Group `group.local.stickynotes.placeholder`。
-- `WidgetExtension/` 6 个 StaticConfiguration 小组件；只链 Domain+Persistence（绝不 SyncCore/SecurityCore）。
+- ~~`WidgetExtension/` 6 个 StaticConfiguration 小组件；只链 Domain+Persistence（绝不 SyncCore/SecurityCore）。~~ 已移除 2026-08-13（001 widget 删除）。
 - `Prototypes/`：Milestone-0 验证用；**无 Liquid Glass 原型**。
 - `Documentation/`：`architecture.md`、`privacy.md`、`security.md`、`toolchain.md`。
 

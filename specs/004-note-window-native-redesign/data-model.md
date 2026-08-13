@@ -6,7 +6,7 @@
 
 本特性**不新增、不修改任何持久化实体或字段**。沿用既有（001/003 已交付）：
 
-- **Note**（`Packages/StickyCore/Sources/Domain/Models/Models.swift:20-124`，`notes` 表，GRDB/WAL/FTS）：本特性使用字段 `title: String?`、`colorKey: NoteColorKey`、`customColor: String?`、`transparency: Double`（0.00–1.00/0.05，语义=透明度，004 Q8）、`textSize: Int`（9–24）、`alwaysOnTop: Bool`（=置顶，DB 列）、`widgetEligible: Bool`。**置顶跨关闭/重启的持久化 = 既有 DB 语义，本特性不改**。
+- **Note**（`Packages/StickyCore/Sources/Domain/Models/Models.swift:20-124`，`notes` 表，GRDB/WAL/FTS）：本特性使用字段 `title: String?`、`colorKey: NoteColorKey`、`customColor: String?`、`transparency: Double`（0.00–1.00/0.05，语义=透明度，004 Q8）、`textSize: Int`（9–24）、`alwaysOnTop: Bool`（=置顶，DB 列）。**置顶跨关闭/重启的持久化 = 既有 DB 语义，本特性不改**。（`widgetEligible` 已随 001 widget 移除于 2026-08-13 删除。）
 - **Block / TodoItem / RichTextDocument**：不变（块拆分仅改 `sortKey` 值，不改变 schema 或 payload 结构）。
 - **WindowState / WindowFrame**（`windowState` 表，设备本地，永不同步）：帧持久化语义不变。
 - 无偏好键变更；无迁移脚本。

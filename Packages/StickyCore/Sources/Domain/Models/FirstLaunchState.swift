@@ -4,7 +4,7 @@ import Foundation
 //
 // Per tasks.md T206 and research R28 / data-model.md §LocalPreferences:
 // a pure Foundation-only state machine for the first-launch onboarding hint.
-// No UserDefaults or App Group references in Domain (storage lives in the
+// No UserDefaults references in Domain (storage lives in the
 // App layer, T207). The state machine decides whether the dismissible
 // onboarding hint (explaining auto-save and the menu-bar-primary model)
 // should be shown on launch.

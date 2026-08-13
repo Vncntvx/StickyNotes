@@ -85,10 +85,10 @@ public enum ConflictCopyBuilder {
             sql: """
                 INSERT INTO note (
                     id, title, colorKey, customColor, transparency, textSize,
-                    alwaysOnTop, widgetEligible, coverScreenshotBlockId, manualSortKey,
+                    alwaysOnTop, coverScreenshotBlockId, manualSortKey,
                     lifecycleState, trashedAt, conflictOriginNoteId, conflictLabel,
                     versionId, parentVersionId, lastModifiedDeviceId, createdAt, modifiedAt
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'conflictCopy', NULL, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'conflictCopy', NULL, ?, ?, ?, ?, ?, ?, ?)
                 """,
             arguments: [
                 conflictNoteId.uuidString,
@@ -98,7 +98,6 @@ public enum ConflictCopyBuilder {
                 remote.transparency,
                 remote.textSize,
                 remote.alwaysOnTop,
-                remote.widgetEligible,
                 remote.coverScreenshotBlockId?.uuidString,
                 ManualSortKeys.initialSortKey,
                 originalNoteId.uuidString,

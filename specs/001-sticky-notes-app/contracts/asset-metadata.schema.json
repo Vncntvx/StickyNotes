@@ -2,17 +2,50 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://stickynotes.local/contracts/asset-metadata.schema.json",
   "title": "Asset Metadata",
-  "description": "Synchronized metadata for a binary asset. Assets (originals, thumbnails, app icons) are synchronized as independent encrypted objects (FR-090a, clarified 2026-08-07) — never bundled inside an encrypted note envelope. Each asset object carries a SHA-256 contentHash for dedup and corruption detection (Constitution IV) and is independently retried on partial upload/download failure (Constitution VIII); a failed asset upload MUST NOT block synchronization of the referencing note's metadata. Thumbnails use a 256px longest edge (FR-094a) — the single canonical thumbnail size for card-grid and widget display. The asset bytes themselves are synchronized as an independent encrypted object (see encrypted-envelope.schema.json). storagePath is device-local and MUST NOT be synchronized. Scale limit (FR-090b, clarified 2026-08-07): a single asset MUST NOT exceed 50 MB raw bytes, and its longest pixel edge MUST NOT exceed 16,384 after capture/paste normalization; oversize insertions are rejected with no partial asset write. Schema version 1.",
+  "description": "Synchronized metadata for a binary asset. Assets (originals, thumbnails, app icons) are synchronized as independent encrypted objects (FR-090a, clarified 2026-08-07) — never bundled inside an encrypted note envelope. Each asset object carries a SHA-256 contentHash for dedup and corruption detection (Constitution IV) and is independently retried on partial upload/download failure (Constitution VIII); a failed asset upload MUST NOT block synchronization of the referencing note's metadata. Thumbnails use a 256px longest edge (FR-094a) — the single canonical thumbnail size for card-grid display. The asset bytes themselves are synchronized as an independent encrypted object (see encrypted-envelope.schema.json). storagePath is device-local and MUST NOT be synchronized. Scale limit (FR-090b, clarified 2026-08-07): a single asset MUST NOT exceed 50 MB raw bytes, and its longest pixel edge MUST NOT exceed 16,384 after capture/paste normalization; oversize insertions are rejected with no partial asset write. Schema version 1.",
   "type": "object",
-  "required": ["schemaVersion", "id", "kind", "contentHash", "byteSize", "contentType", "createdAt"],
+  "required": [
+    "schemaVersion",
+    "id",
+    "kind",
+    "contentHash",
+    "byteSize",
+    "contentType",
+    "createdAt"
+  ],
   "additionalProperties": false,
   "properties": {
-    "schemaVersion": { "const": 1 },
-    "id": { "type": "string", "format": "uuid", "description": "Asset identity." },
-    "kind": { "enum": ["original", "thumbnail", "appIcon"] },
-    "contentHash": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "SHA-256 content hash; enables dedup and corruption detection." },
-    "byteSize": { "type": "integer", "minimum": 0 },
-    "contentType": { "type": "string", "description": "UTType identifier (e.g. public.png, public.jpeg)." },
-    "createdAt": { "type": "string", "format": "date-time" }
+    "schemaVersion": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Asset identity."
+    },
+    "kind": {
+      "enum": [
+        "original",
+        "thumbnail",
+        "appIcon"
+      ]
+    },
+    "contentHash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "SHA-256 content hash; enables dedup and corruption detection."
+    },
+    "byteSize": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "contentType": {
+      "type": "string",
+      "description": "UTType identifier (e.g. public.png, public.jpeg)."
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    }
   }
 }

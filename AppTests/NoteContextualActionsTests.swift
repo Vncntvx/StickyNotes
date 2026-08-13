@@ -7,12 +7,12 @@ import Persistence
 // MARK: - FR-031 contextual-action wiring tests (T282)
 //
 // Per tasks.md T282: the note-level contextual menu actions (duplicate,
-// copy-as-Markdown, export-as-JSON, move-to-Trash per FR-031, plus the
-// FR-112 widget-eligibility toggle) must be functional — the menu rendered
-// no-op stubs before this task. These tests exercise the exact repository
-// operations the wired actions perform (duplicate via NoteDuplicator +
-// repo.create/insert; move-to-Trash via repo.trash; eligibility via the
-// host's appearance persistence).
+// copy-as-Markdown, export-as-JSON, move-to-Trash per FR-031) must be
+// functional — the menu rendered no-op stubs before this task. These tests
+// exercise the exact repository operations the wired actions perform
+// (duplicate via NoteDuplicator + repo.create/insert; move-to-Trash via
+// repo.trash). (The FR-112 widget-eligibility toggle was removed 2026-08-13
+// with the widget surface.)
 
 @MainActor
 @Suite struct NoteContextualActionsTests {
@@ -94,27 +94,4 @@ import Persistence
         #expect(fetched?.lifecycleState == .trashed)
     }
 
-    @Test
-    func widgetEligibilityTogglePersists() async throws {
-        let env = try makeEnvironment()
-        let model = LibraryModel(environment: env)
-        guard let noteId = await model.createBlankNote() else {
-            Issue.record("createBlankNote failed")
-            return
-        }
-        let host = NoteWindowHostModel(noteId: noteId, environment: env)
-        await host.load()
-        guard var note = host.note else {
-            Issue.record("note missing")
-            return
-        }
-        // FR-112: the eligibility toggle in the contextual menu persists
-        // through the host's appearance path.
-        note.widgetEligible = false
-        host.updateAppearance(note)
-        try await Task.sleep(nanoseconds: 300_000_000)
-
-        let fetched = try await env.persistence.noteRepository!.fetch(id: noteId)
-        #expect(fetched?.widgetEligible == false)
-    }
 }

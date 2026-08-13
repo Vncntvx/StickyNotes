@@ -2534,57 +2534,6 @@
         }
       }
     },
-    "editor.allowInWidgets": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Allow in Widgets"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "允许在小组件中显示"
-          }
-        }
-      }
-    },
-    "widget.temporarilyUnavailable": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Temporarily unavailable"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "暂时不可用"
-          }
-        }
-      }
-    },
-    "widget.newNote": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "New Note"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "新建便笺"
-          }
-        }
-      }
-    },
     "Sticky Notes Help": {
       "extractionState": "manual",
       "localizations": {

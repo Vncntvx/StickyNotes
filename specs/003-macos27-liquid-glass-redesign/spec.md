@@ -202,7 +202,7 @@
 - 修改 001 的菜单栏附属窗口定位/开合行为（FR-001/FR-001a 保留）。
 - 使用自定义着色器或手工视觉特效替代系统 Liquid Glass 行为。
 - 最低支持系统版本变更（保持 macOS 26+；目标系统行为按 macOS 27 校验）。
-- WidgetExtension 表面重设计（不属于本特性；仅保证 001 FR-110–FR-112 行为不回退）。
+- ~~WidgetExtension 表面重设计~~（WidgetExtension 已随 001 widget 删除于 2026-08-13 移除，本特性不再涉及）。
 
 ## Requirements *(mandatory)*
 
@@ -358,7 +358,7 @@ MUST NOT 发明 API 名称、修饰符、材质、环境键或 Liquid Glass 兼�
 - 系统行为测试：Reduce Transparency / Reduce Motion / Increase Contrast / Show Borders 下自定义控件可理解性断言（如环境键驱动的外观断言）；失活窗口外观断言；显示比例断言（若可行）。
 - 性能验证：001 SC-001/002/003/004a/005/006 回归（FR-091）；10,000 笔记网格虚拟化滚动与搜索时效。
 - 无障碍与本地化测试：新增控件键盘/VoiceOver 可访问；zh-Hans/en 文案完整（001 FR-180a）。
-- 回归：001 全部测试套件 + AppTests + UI 旅程保持绿色；WidgetExtension 行为不回退（001 FR-110a/FR-111/FR-112）。
+- 回归：001 全部测试套件 + AppTests + UI 旅程保持绿色；~~WidgetExtension 行为不回退（001 FR-110a/FR-111/FR-112）~~（widget 已移除 2026-08-13）。
 - 平台 API 验证任务：对照已安装 macOS 27 SDK 验证平台约束节所列 API 的可用性与签名，记录到 `Documentation/toolchain.md`（001 T008 延续）。
 
 ## Success Criteria *(mandatory)*
@@ -401,6 +401,6 @@ MUST NOT 发明 API 名称、修饰符、材质、环境键或 Liquid Glass 兼�
 - 块功能与全部编辑器行为（001 FR-050–FR-105）不变，仅插入呈现方式改变（FR-043）。
 - 同步引擎、加密、契约 schema（`contracts/`）、冲突与墓碑语义不变（FR-090）。
 - ~~全局快捷键动作集合不变（001 FR-120）；仅录入界面与呈现重设计（FR-052）；"搜索全部笔记"增加聚焦搜索框的呈现补全（FR-072）。~~ **REMOVED 2026-08-10**（全局快捷键随 001 FR-120/FR-121 移除；`stickynotes://search` 深链的聚焦补全保留）。
-- 本特性不修改 WidgetExtension 的呈现；仅保证其行为不回退。
+- ~~本特性不修改 WidgetExtension 的呈现；仅保证其行为不回退。~~（WidgetExtension 已移除 2026-08-13）。
 - 平台 API 清单为规划期约束：实际可用性以安装的 macOS 27 SDK 为准（见平台约束节）。
 - 本规范语言遵循 002 先例（中文 + 英文术语/FR 引用）；交付物本地化仍为 zh-Hans/en（001 FR-180a）。

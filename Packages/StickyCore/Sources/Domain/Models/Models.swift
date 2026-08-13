@@ -42,9 +42,6 @@ public struct Note: Sendable, Identifiable, Equatable, Hashable {
     /// Per-note floating state (FR-036).
     public var alwaysOnTop: Bool
 
-    /// Per-note widget privacy gate (FR-112).
-    public var widgetEligible: Bool
-
     /// At most one cover screenshot per note; references a screenshot block
     /// id. Enforced transactionally (data-model.md §Constraints).
     public var coverScreenshotBlockId: UUID?
@@ -78,7 +75,6 @@ public struct Note: Sendable, Identifiable, Equatable, Hashable {
         transparency: Double = 1.0,
         textSize: Int = NoteAppearance.TextSizeBounds.defaultSize,
         alwaysOnTop: Bool = false,
-        widgetEligible: Bool = true,
         coverScreenshotBlockId: UUID? = nil,
         manualSortKey: Int = ManualSortKeys.initialSortKey,
         lifecycleState: NoteLifecycleState = .active,
@@ -98,7 +94,6 @@ public struct Note: Sendable, Identifiable, Equatable, Hashable {
         self.transparency = transparency
         self.textSize = textSize
         self.alwaysOnTop = alwaysOnTop
-        self.widgetEligible = widgetEligible
         self.coverScreenshotBlockId = coverScreenshotBlockId
         self.manualSortKey = manualSortKey
         self.lifecycleState = lifecycleState
@@ -225,7 +220,8 @@ public struct TodoItem: Sendable, Identifiable, Equatable, Hashable {
 
 // MARK: - Asset
 
-/// A binary asset stored outside SQLite in the App Group container
+/// A binary asset stored outside SQLite in the sandbox Application Support
+/// directory
 /// (originals, thumbnails, app icons). Referenced by blocks.
 ///
 /// Per data-model.md §Asset. Asset bytes are synchronized as independent
@@ -240,7 +236,7 @@ public struct Asset: Sendable, Identifiable, Equatable, Hashable {
     public var contentType: String  // UTType identifier
 
     // Device-local only — NEVER in canonical JSON.
-    public var storagePath: String  // relative path under App Group
+    public var storagePath: String  // relative path under the sandbox
     public var isSynced: Bool
     public var syncFailureState: AssetSyncFailureState
 

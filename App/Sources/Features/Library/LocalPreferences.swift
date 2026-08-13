@@ -4,9 +4,9 @@ import Domain
 // MARK: - LocalPreferences (T207, FR-014a clarified 2026-08-07)
 //
 // Per tasks.md T207 and data-model.md §LocalPreferences: device-local
-// persistence of first-launch state in App Group UserDefaults. NEVER
-// synchronized, NEVER in canonical JSON, NEVER in exported diagnostics
-// (FR-191). The Widget Extension does NOT read these keys.
+// persistence of first-launch state in the standard UserDefaults domain.
+// NEVER synchronized, NEVER in canonical JSON, NEVER in exported diagnostics
+// (FR-191).
 //
 // Keys:
 // - `onboardingHintSeen`: first-launch hint shown at least once.
@@ -18,18 +18,13 @@ import Domain
 // removed 2026-08-10 with the feature (no Carbon hotkeys in the app).
 
 /// Device-local persistence of first-launch preferences (FR-014a). Stored
-/// in App Group UserDefaults so the app and any future App-Group-aware
-/// surface share the state; NEVER synchronized, NEVER in canonical JSON,
-/// NEVER in exported diagnostics.
+/// in the standard UserDefaults domain; NEVER synchronized, NEVER in
+/// canonical JSON, NEVER in exported diagnostics.
 ///
 /// `@unchecked Sendable`: `UserDefaults` is not statically Sendable, but
 /// UserDefaults access is thread-safe (Apple documentation). The stored
 /// keys are simple booleans with no intermediate inconsistent state.
 public final class LocalPreferences: @unchecked Sendable {    private let defaults: UserDefaults
-
-    /// The App Group UserDefaults suite. The widget does NOT read these
-    /// keys (data-model.md §LocalPreferences).
-    public static let suiteName = "group.local.stickynotes.placeholder"
 
     /// The UserDefaults keys. Prefixed to avoid collisions.
     private enum Key {
@@ -44,9 +39,9 @@ public final class LocalPreferences: @unchecked Sendable {    private let defaul
         self.defaults = defaults
     }
 
-    /// Convenience initializer using the App Group suite.
+    /// Convenience initializer using the standard domain.
     public init() {
-        self.defaults = UserDefaults(suiteName: Self.suiteName) ?? .standard
+        self.defaults = .standard
     }
 
     // MARK: - FirstLaunchState (FR-014a)

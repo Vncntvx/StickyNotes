@@ -20,7 +20,7 @@
 
 **Target Platform**: macOS 26.0+（macOS 27 目标行为）；macOS 专属桌面应用（LSUIElement，菜单栏为主入口）
 
-**Project Type**: desktop-app（macOS，SwiftUI-first + 隔离 AppKit 桥；模块化单体：App + WidgetExtension + StickyCore 7 模块）
+**Project Type**: desktop-app（macOS，SwiftUI-first + 隔离 AppKit 桥；模块化单体：App + StickyCore 7 模块；WidgetExtension 已移除 2026-08-13）
 
 **Performance Goals**: 保持 001 SC-001/002/003/004a/005/006（FR-091）：菜单栏暖启 ≤150 ms、卡片 ≤300 ms、新笔记窗口 ≤200 ms、击键 <16 ms、10k 搜索 ≤200 ms、空闲零 CPU（卡片网格不整图解码由 001 FR-094a/FR-072b 虚拟化保证）
 
@@ -79,7 +79,7 @@ App/Sources/
 ├── AppTests/                # 更新 GridMetricsTests/CardRenderingTests 等；新增 FR-012/021/026/031/SC-017 测试
 └── AppUITests/              # CriticalFlowsUITests 扩展：工具栏结构/搜索聚焦/Trash 确认
 Packages/StickyCore/         # 零改动
-WidgetExtension/             # 零改动（行为不回退）
+~~WidgetExtension/~~             # 已移除 2026-08-13（001 widget 删除）
 ```
 
 **Structure Decision**: 沿用现有模块化单体结构；呈现层新增仅限 `App/Sources/Features/DesignSystem/`（语义令牌与调色板），不新建 manager/service 层（现有 `@Observable` model + SystemBridge 桥已覆盖）。
@@ -99,7 +99,7 @@ WidgetExtension/             # 零改动（行为不回退）
 - **设置**：`Settings` 场景 + NSWindow fallback（标题匹配 hack）；分段控件导航（刻意非 TabView）；快捷键录制器（本地 keyDown monitor + Carbon 注册 + 冲突报错）；同步面板含 Join/Replace/Remove/Export Profile/Export Diagnostic；字体面板两个字段；权限面板状态 + 懒请求。
 - **StickyCore（7 模块）**：Domain/Persistence（GRDB v1/v2、FTS5、CardProjection 500 行）/EditorCore/AssetStore/SecurityCore（Argon2id/AES-GCM/Keychain，RememberedUnlock=untilLockOrRestart+启动时间戳）/SyncCore（SyncEngine actor、冲突副本、OfflineReconciler、WebDAV/S3、`SyncSummary.historyAgedOutDetected`）/SystemBridge（Carbon 热键、SCK 捕获、窗口桥、权限、书签）。
 - **测试**：AppTests 44 套件（含 GridMetricsTests/CardRenderingTests/LibraryWindowPresentationTests 编码当前视觉常量）、AppUITests 5 条（XCUITest + 种子）、StickyCore 92 套件（性能/迁移/加密/同步全覆盖）。
-- **其他**：XcodeGen（project.yml）；WidgetExtension 6 小组件（只链 Domain+Persistence）；Prototypes 无 Liquid Glass 原型；Documentation/architecture|privacy|security|toolchain.md。
+- **其他**：XcodeGen（project.yml）；~~WidgetExtension 6 小组件（只链 Domain+Persistence）~~（已移除 2026-08-13）；Prototypes 无 Liquid Glass 原型；Documentation/architecture|privacy|security|toolchain.md。
 
 详细仓库地图见 `research.md` §1。
 
@@ -252,7 +252,7 @@ WidgetExtension/             # 零改动（行为不回退）
 
 # 14. File-by-File Change Map
 
-**REUSE 分类（StickyCore 全部、WidgetExtension 全部、窗口桥/编辑器核心/捕获/权限/快捷键引擎/字体存储/Toast/EmptyStateView）——零改动。**
+**REUSE 分类（StickyCore 全部、窗口桥/编辑器核心/捕获/权限/快捷键引擎/字体存储/Toast/EmptyStateView）——零改动。（WidgetExtension 已移除 2026-08-13。）**
 
 **REFACTOR**：
 

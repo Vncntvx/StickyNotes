@@ -8,7 +8,7 @@ import Domain
 // Chinese/English fallback selection for unsupported glyphs per FR-043".
 //
 // Verifies:
-// - Codable round-trip (persistence through App Group UserDefaults JSON).
+// - Codable round-trip (persistence through standard UserDefaults JSON).
 // - CJK text selects the fallback family; Latin text selects the primary.
 // - Mixed Chinese-English text selects the fallback (needed for the CJK
 //   glyphs).

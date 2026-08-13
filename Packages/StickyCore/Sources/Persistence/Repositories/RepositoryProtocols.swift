@@ -8,8 +8,8 @@ import Domain
 // return `Sendable` snapshots. The App UI depends on these protocols, not
 // on concrete DB/provider types.
 //
-// These protocols are defined in the Persistence module so the App and
-// WidgetExtension can both depend on them. The concrete implementations
+// These protocols are defined in the Persistence module so the App depends
+// on them rather than on concrete DB types. The concrete implementations
 // (NoteRepository, BlockRepository, etc.) live alongside and conform to
 // these protocols.
 

@@ -32,8 +32,8 @@ consistent, measurable, and traceable.
 - [X] CHK011 - Is the sort-key gap value (1024) and the normalization threshold (e.g. < 64) explicitly quantified as fixed numbers rather than "e.g."? [Clarity, data-model §Conventions]
 - [X] CHK012 - Is the maximum todo nesting depth (`depth ≤ maxDepth`) given an explicit numeric bound rather than the illustrative "e.g. ≤ 6"? [Clarity, data-model §TodoItem]
 - [X] CHK013 - Are the FTS5 table mode (external-content vs contentless-with-rowid) and the rowid-to-Note.id mapping unambiguously specified? [Clarity, data-model §SearchDocument]
-- [X] CHK014 - Is the thumbnail "longest edge" pixel size for card/widget display quantified rather than "appropriate for card and widget display"? [Clarity, Gap, plan §Asset storage]
-- [X] CHK015 - Is "short write transaction" for widget access quantified with a target duration or operation bound? [Clarity, Gap, plan §Local storage]
+- [X] CHK014 - Is the thumbnail "longest edge" pixel size for card display quantified rather than "appropriate for card display"? [Clarity, Gap, plan §Asset storage]
+- [X] ~~CHK015~~ REMOVED 2026-08-13 (widget surface removal). [Clarity, Gap, plan §Local storage]
 - [X] CHK016 - Is the bounded busy timeout value for the GRDB DatabasePool specified as a concrete duration? [Clarity, Gap, plan §Local storage]
 - [X] CHK017 - Are the Argon2id parameters (memoryKiB, iterations, parallelism) given required minimum values rather than only the schema minimums (8/1/1)? [Clarity, Contracts §vault-bootstrap.schema.json]
 - [X] CHK018 - Is the "approximately 3 seconds after local changes" sync-trigger delay expressed as a precise range or exact value? [Clarity, Spec §FR-152, plan §Sync engine]
@@ -54,7 +54,7 @@ consistent, measurable, and traceable.
 - [X] CHK027 - Are the todo-hierarchy validation rules (no cycles, depth bound, no orphaned children after parent deletion) stated as machine-checkable assertions rather than goals? [Measurability, data-model §TodoItem, Spec §FR-071]
 - [X] CHK028 - Can "asset writes MUST be atomic" be verified via a testable sequence (temp-write → hash → verify → rename → metadata commit)? [Measurability, Constitution IV, data-model §Asset lifecycle]
 - [X] CHK029 - Are migration-test requirements stated so that "a fixture DB exists for every historical schema version" is objectively verifiable as a deliverable? [Measurability, Constitution XII, data-model §Migration strategy]
-- [X] CHK030 - Is the "widget detects unsupported schema and falls back to privacy-safe read-only placeholders" requirement stated as an observable, testable behavior? [Measurability, data-model §Migration strategy, Spec §FR-112]
+- [X] ~~CHK030~~ REMOVED 2026-08-13 (widget surface removal). [Measurability, data-model §Migration strategy, Spec §FR-112]
 
 ## Scenario Coverage (Data Layer)
 
@@ -62,7 +62,7 @@ consistent, measurable, and traceable.
 - [X] CHK032 - Are Alternate scenario requirements defined for manual-sort reorder persistence and sort-key gap normalization on collision? [Coverage, Spec §FR-022, data-model §Conventions]
 - [X] CHK033 - Are Exception/Error scenario requirements defined for interrupted migration, corrupt DB detection, and backup-restore-on-migration-failure? [Coverage, data-model §Migration strategy, plan §Local storage]
 - [X] CHK034 - Are Recovery scenario requirements defined for partial-asset-sync-failure (metadata synced, bytes failed) retry without re-encrypting metadata? [Coverage, data-model §SyncVersionState, Spec §FR-090]
-- [X] CHK035 - Are Non-Functional scenario requirements defined for app+widget concurrent WAL access (read during write, widget toggle during app migration)? [Coverage, research R6, plan §Local storage]
+- [X] ~~CHK035~~ REMOVED 2026-08-13 (widget surface removal). [Coverage, research R6, plan §Local storage]
 - [X] CHK036 - Are requirements defined for the delete-vs-edit data path (recovered conflict copy preserves blocks/assets/file-ref metadata via ref-count or safe duplication)? [Coverage, Spec §FR-173, data-model §Conflict-copy lifecycle]
 
 ## Edge Case Coverage
@@ -72,7 +72,7 @@ consistent, measurable, and traceable.
 - [X] CHK039 - Is the edge case specified where multiple note cards reference the same file and an explicit move updates only the initiating card's bookmark (others report missing + relink)? [Edge Case, research R8, data-model §FileLocator]
 - [X] CHK040 - Is the edge case specified where a cover screenshot block is deleted (Note.coverScreenshotBlockId must null transactionally)? [Edge Case, data-model §Constraints]
 - [X] CHK041 - Is the edge case specified for sort-key gap exhaustion requiring contiguous-run renormalization within a single transaction? [Edge Case, data-model §Conventions]
-- [X] CHK042 - Is the edge case specified where a widget-configured note is deleted/trashed/conflicted/unavailable while the widget is displaying it? [Edge Case, Spec §FR-112, plan §Widgets]
+- [X] ~~CHK042~~ REMOVED 2026-08-13 (widget surface removal). [Edge Case, Spec §FR-112, plan §Widgets]
 
 ## Non-Functional Requirements (Data Layer)
 
@@ -85,7 +85,7 @@ consistent, measurable, and traceable.
 ## Dependencies & Assumptions
 
 - [X] CHK048 - Is the assumption that GRDB.swift is the only approved persistence dependency documented with selection rationale and replacement strategy? [Dependency, Constitution XIII, plan §Dependencies]
-- [X] CHK049 - Is the assumption that the App Group container is shared between app and widget for SQLite + assets documented as a platform requirement? [Assumption, plan §Local storage]
+- [X] ~~CHK049~~ REMOVED 2026-08-13 (App Group + widget removal). [Assumption, plan §Local storage]
 - [X] CHK050 - Is the external dependency on FTS5 availability in the macOS 26 SQLite build documented, with a fallback if unavailable? [Dependency, Gap, plan §Search]
 - [X] CHK051 - Is the assumption that the local DB is the source of truth and sync is additive documented as a product-level invariant (not just an implementation choice)? [Assumption, Constitution III, Spec §FR-140]
 - [X] CHK052 - Is the dependency on a future OCR extension documented without implying OCR text enters the durable rich-text format (only the FTS column)? [Dependency, Spec §Non-goals, data-model §SearchDocument]
@@ -115,7 +115,7 @@ consistent, measurable, and traceable.
   `[Gap]` (missing requirement), `[Ambiguity]`, `[Conflict]`, `[Assumption]`,
   `[Dependency]`.
 - Focus: data model / persistence / migrations / canonical format / local-vs-
-  synced separation / widget data access / file-reference data separation
+  synced separation / file-reference data separation
   (constitutional IV/VIII/IX/XII). Depth: Standard (PR review gate). Strong
   traceability: every item carries ≥1 reference.
 - Items flagged `[Gap]` indicate a requirement that should be added or made

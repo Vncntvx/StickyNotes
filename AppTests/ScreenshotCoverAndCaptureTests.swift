@@ -153,7 +153,7 @@ import AssetStore
         }
         // Asset files live under the composed root (T293).
         let files = try FileManager.default.contentsOfDirectory(atPath: assetRoot.path)
-        #expect(!files.isEmpty, "assets written to the App Group asset root (T293)")
+        #expect(!files.isEmpty, "assets written to the sandbox asset root (T293)")
     }
 
     @Test

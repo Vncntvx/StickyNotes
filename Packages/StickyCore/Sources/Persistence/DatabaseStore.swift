@@ -5,18 +5,17 @@ import Domain
 // MARK: - DatabaseStore (T017)
 //
 // Per plan §Local storage: GRDB `DatabasePool` with WAL mode, bounded busy
-// timeout, short write transactions. Main app owns migrations; widgets
-// detect unsupported schema and fall back to privacy-safe placeholders
-// (read-only). Integrity checking, pre-migration backup, interrupted-
-// migration recovery (T022).
+// timeout, short write transactions. The main app owns migrations.
+// Integrity checking, pre-migration backup, interrupted-migration recovery
+// (T022).
 //
-// Per research.md R6: WAL allows concurrent readers + one writer across
-// processes (app + widget). Widget writes are tiny and retried on
-// SQLITE_BUSY. Bounded busy timeout prevents indefinite waits.
+// Per research.md R6: WAL allows concurrent readers + one writer; the
+// bounded busy timeout prevents indefinite waits.
 
-/// The DatabaseStore wraps a GRDB `DatabasePool` configured for the App Group
-/// container. It is the single source of truth for all note/block/todo/asset
-/// metadata. Asset bytes live outside SQLite in the App Group container.
+/// The DatabaseStore wraps a GRDB `DatabasePool` configured for the app
+/// sandbox container. It is the single source of truth for all
+/// note/block/todo/asset metadata. Asset bytes live outside SQLite in the
+/// sandbox Application Support directory.
 ///
 /// `Sendable` — `DatabasePool` is itself `Sendable`. Cross-actor handoffs
 /// pass `Sendable` value types or `isolated` references (plan §State
@@ -28,18 +27,17 @@ public final class DatabaseStore: Sendable {
     /// The bounded busy timeout this store was opened with (FR-140a).
     public let busyTimeout: TimeInterval
 
-    /// The production default busy timeout (FR-140a: 5 seconds). Widget
-    /// pools use a shorter timeout via `WidgetDatabase.readBusyTimeout`.
+    /// The production default busy timeout (FR-140a: 5 seconds).
     public static let defaultBusyTimeout: TimeInterval = 5.0
 
     /// Opens (or creates) the database at the given path with WAL mode and a
     /// bounded busy timeout.
     ///
     /// - Parameters:
-    ///   - path: Absolute path to the SQLite file in the App Group container.
+    ///   - path: Absolute path to the SQLite file in the app sandbox
+    ///     container.
     ///   - busyTimeout: Maximum time to wait on SQLITE_BUSY before failing
-    ///     (default 5 seconds per FR-140a; the widget uses shorter timeouts
-    ///     via its own pool).
+    ///     (default 5 seconds per FR-140a).
     public init(path: String, busyTimeout: TimeInterval = DatabaseStore.defaultBusyTimeout) throws {
         self.databasePath = path
         self.busyTimeout = busyTimeout
@@ -48,7 +46,6 @@ public final class DatabaseStore: Sendable {
         config.busyMode = .timeout(busyTimeout)
         // Foreign keys ON (data-model.md §Constraints).
         config.foreignKeysEnabled = true
-        // Read-only mode is opted into per-pool by the widget, not here.
         config.prepareDatabase { db in
             try db.execute(sql: "PRAGMA journal_mode = WAL")
             try db.execute(sql: "PRAGMA foreign_keys = ON")

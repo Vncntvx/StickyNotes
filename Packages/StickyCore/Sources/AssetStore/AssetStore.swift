@@ -7,7 +7,8 @@ import UniformTypeIdentifiers
 //
 // Per tasks.md T087 and plan §Asset storage:
 //
-// - Binary assets live OUTSIDE SQLite in the App Group container, in
+// - Binary assets live OUTSIDE SQLite in the sandbox Application Support
+//   directory, in
 //   opaque-UUID subdirectories (originals/, thumbnails/, appIcons/,
 //   temp-imports/) — never user-facing names (constitution IV, VI).
 // - Atomic temp-write + rename: bytes are written to temp-imports/ and
@@ -73,7 +74,7 @@ public actor AssetStore {
     private var recordsByID: [UUID: StoredAsset] = [:]
     private var filenameByContentKey: [String: StoredAsset] = [:]
 
-    /// - Parameter directoryURL: the asset root (e.g. the App Group
+    /// - Parameter directoryURL: the asset root (e.g. the sandbox
     ///   container "Assets" directory). Subdirectories are created lazily.
     public init(directoryURL: URL) throws {
         self.directoryURL = directoryURL

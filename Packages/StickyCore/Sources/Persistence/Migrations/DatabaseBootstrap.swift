@@ -11,19 +11,16 @@ import Domain
 // the App target wires a single call and the sequence itself is testable in
 // the package (constitution XII — tests are mandatory).
 //
-// Widgets do NOT use this: they open the database read-only, detect an
-// unsupported schema via `StickyMigrator.currentSchemaVersion`, and fall
-// back to privacy-safe placeholders without running any migration
 // (research.md R6; plan §Local storage).
 
 /// Composes interrupted-migration recovery, store opening, and schema
 /// migration for app startup.
 public enum DatabaseBootstrap {
-    /// App Group container subpath for the database file.
+    /// Sandbox Application Support subpath for the database file.
     public static let databaseFileName = "stickynotes.sqlite"
 
     /// Backup file used during high-risk migrations. Lives beside the
-    /// database file in the App Group container.
+    /// database file in the sandbox container.
     public static func backupPath(forDatabasePath databasePath: String) -> String {
         databasePath + ".backup"
     }
@@ -32,7 +29,7 @@ public enum DatabaseBootstrap {
     /// foreign keys, bounded busy timeout), and runs all pending migrations.
     ///
     /// - Parameters:
-    ///   - databasePath: Absolute path to the SQLite file in the App Group
+    ///   - databasePath: Absolute path to the SQLite file in the sandbox
     ///     container.
     ///   - backupPath: Absolute path for the pre-migration backup.
     ///   - busyTimeout: SQLITE_BUSY timeout for the pool.

@@ -104,7 +104,6 @@ import AppKit
         note.transparency = 0.6
         note.textSize = 18
         note.alwaysOnTop = true
-        note.widgetEligible = false
         host.updateAppearance(note)
 
         // Wait for the immediate structural write.
@@ -118,7 +117,6 @@ import AppKit
         #expect(fetched?.transparency == 0.6)
         #expect(fetched?.textSize == 18)
         #expect(fetched?.alwaysOnTop == true)
-        #expect(fetched?.widgetEligible == false)
     }
 
     @Test

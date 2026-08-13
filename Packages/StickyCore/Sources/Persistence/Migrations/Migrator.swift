@@ -13,8 +13,6 @@ import Domain
 // - High-risk migrations: back up the DB file before running; on failure,
 //   restore backup and report `SchemaCompatibility` error; never leave a
 //   half-migrated DB.
-// - Widget: on open, read schema version; if unsupported, fall back to
-//   privacy-safe read-only placeholders (no migration, no crash).
 // - Interrupted migration recovery: a `schema_migrations` table records
 //   applied migrations atomically; an incomplete migration is rolled back
 //   via the backup on next launch.
@@ -27,7 +25,7 @@ import Domain
 /// - Pre-migration backup (high-risk migrations).
 /// - Interrupted-migration recovery (restore backup on next launch).
 /// - Integrity check before and after migration.
-/// - Schema version query for the widget's privacy-safe fallback.
+/// - Schema version query.
 public struct StickyMigrator: Sendable {
     public let migrator: DatabaseMigrator
     public let databasePath: String
@@ -77,20 +75,17 @@ public struct StickyMigrator: Sendable {
     }
 
     /// Returns the current schema version (the identifier of the latest
-    /// applied migration). Used by the widget to detect unsupported schemas
-    /// and fall back to privacy-safe placeholders (research.md R6).
+    /// applied migration).
     ///
     /// Returns `nil` when no migration has been applied (fresh or unmigrated
-    /// database, or a database the widget cannot read) — the caller's
-    /// fallback path.
+    /// database) — the caller's fallback path.
     public func currentSchemaVersion(_ dbPool: DatabasePool) async -> String? {
         await Self.currentSchemaVersion(dbPool, migrator: migrator)
     }
 
-    /// Static form used by widgets: opens no store of its own, only reads
-    /// the latest applied migration identifier from `grdb_migrations`.
-    /// Returns `nil` (never throws) when the table is missing or unreadable
-    /// — the widget falls back to privacy-safe placeholders (research.md R6).
+    /// Static form: opens no store of its own, only reads the latest applied
+    /// migration identifier from `grdb_migrations`. Returns `nil` (never
+    /// throws) when the table is missing or unreadable.
     public static func currentSchemaVersion(
         _ dbPool: DatabasePool,
         migrator: DatabaseMigrator = InitialSchema.migrator()
@@ -104,9 +99,8 @@ public struct StickyMigrator: Sendable {
             }
             return applied.first
         } catch {
-            // Missing/unreadable grdb_migrations: treat as unmigrated. The
-            // widget must never crash on schema mismatch (plan §Local
-            // storage; constitution X).
+            // Missing/unreadable grdb_migrations: treat as unmigrated
+            // (plan §Local storage).
             return nil
         }
     }

@@ -10,24 +10,23 @@ import Domain
 // `FontPreferenceView`).
 
 public enum FontPreferenceStore {
-    /// The App Group suite used for device-local preferences (same group as
-    /// the app and widget containers).
-    public static let suiteName = "group.local.stickynotes.placeholder"
+    /// The standard UserDefaults domain used for device-local preferences.
+    public static let suiteName: String? = nil
     /// The persistence key (JSON-encoded `FontPreference`).
     public static let key = "local.stickynotes.fontPreference"
 
     public static func load() -> FontPreference? {
-        guard let data = UserDefaults(suiteName: suiteName)?.data(forKey: key) else { return nil }
+        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
         return try? JSONDecoder().decode(FontPreference.self, from: data)
     }
 
     public static func save(_ preference: FontPreference) {
         guard let data = try? JSONEncoder().encode(preference) else { return }
-        UserDefaults(suiteName: suiteName)?.set(data, forKey: key)
+        UserDefaults.standard.set(data, forKey: key)
     }
 
     public static func clear() {
-        UserDefaults(suiteName: suiteName)?.removeObject(forKey: key)
+        UserDefaults.standard.removeObject(forKey: key)
     }
 }
 

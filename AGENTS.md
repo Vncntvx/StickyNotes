@@ -5,7 +5,7 @@ Specs-first repository for "macOS Sticky Notes" — a native, menu-bar-primary s
 ## Workflow (critical)
 
 - Use the speckit commands/skills (`/speckit.specify`, `/speckit.plan`, `/speckit.tasks`, `/speckit.implement`, …) wired in `.opencode/commands/` and `.claude/skills/`. Run them in order: specify → plan → tasks → implement, with review gates.
-- `spec.md`, `plan.md`, and `tasks.md` are authoritative design artifacts. Implement per `tasks.md` — it defines exact repository paths (`App/Sources/…`, `WidgetExtension/`, `Packages/StickyCore/Sources/{Domain,Persistence,EditorCore,AssetStore,SecurityCore,SyncCore,SystemBridge}`) and module boundaries. Do not invent structure that contradicts the plan.
+- `spec.md`, `plan.md`, and `tasks.md` are authoritative design artifacts. Implement per `tasks.md` — it defines exact repository paths (`App/Sources/…`, `Packages/StickyCore/Sources/{Domain,Persistence,EditorCore,AssetStore,SecurityCore,SyncCore,SystemBridge}`) and module boundaries. (The `WidgetExtension/` target was removed 2026-08-13 with the widget surface.) Do not invent structure that contradicts the plan.
 - Keep artifacts in sync: never change behavior in `spec.md`/`plan.md` outside the speckit flow (`speckit-analyze` checks cross-artifact consistency).
 - "macOS Sticky Notes" is a **working title only** — never invent a final product or brand name (spec.md line 9).
 
@@ -28,15 +28,15 @@ feat(app): :hammer_and_wrench: 落地 003 设计系统基础与菜单命令体�
 
 **type**：`feat` 新功能 · `fix` 修复 · `docs` 规格/文档/契约 · `refactor` 重构 · `test` 测试 · `perf` 性能 · `build` 构建/依赖 · `ci` CI/CD · `chore` 工具链/杂项 · `style` 格式 · `revert` 回滚。
 
-**scope（固定集合）**：`core` StickyCore 任一模块 · `app` App/Sources · `widget` WidgetExtension · `specs` specs/ 工件及 .specify/templates · `tools` .specify/.claude/.opencode 工具链 · `scaffold` 跨目标脚手架 · `ci` .github/workflows · `init` 仓库初始化。跨多个取最主要；无合适可省略。
+**scope（固定集合）**：`core` StickyCore 任一模块 · `app` App/Sources · `specs` specs/ 工件及 .specify/templates · `tools` .specify/.claude/.opencode 工具链 · `scaffold` 跨目标脚手架 · `ci` .github/workflows · `init` 仓库初始化。跨多个取最主要；无合适可省略。
 
 ## Documentation lookups (context7 MCP)
 
-Before writing any code that touches a library, framework, or Apple API (GRDB, SwiftUI, WidgetKit, App Intents, OSLog, CryptoKit, …), query context7 for current docs — training data may be stale, and this project targets macOS 26 / Swift 6 APIs.
+Before writing any code that touches a library, framework, or Apple API (GRDB, SwiftUI, OSLog, CryptoKit, …), query context7 for current docs — training data may be stale, and this project targets macOS 26 / Swift 6 APIs.
 
 - Flow: (1) `context7_resolve-library-id` with the library name + what to look up; (2) pick the best match (exact name, benchmark score, source reputation; prefer version-specific IDs when a version matters); (3) `context7_query-docs` scoped to a **single concept** per call — split multi-topic questions into separate `query-docs` calls, max ~3 calls per question.
 - Do not use for: refactoring, debugging business logic, code review, or general Swift language knowledge.
-- Do not invent or guess API signatures for GRDB/macOS frameworks — verify via context7 first (e.g. GRDB migration + `DatabasePool`/WAL usage, FTS5 search, App Intent / WidgetKit entry points).
+- Do not invent or guess API signatures for GRDB/macOS frameworks — verify via context7 first (e.g. GRDB migration + `DatabasePool`/WAL usage, FTS5 search).
 
 ## Constitution constraints (non-negotiable)
 
@@ -63,14 +63,14 @@ Before writing any code that touches a library, framework, or Apple API (GRDB, S
 # StickyCore package (Swift Testing works only under Xcode-beta):
 DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer swift test --package-path Packages/StickyCore
 
-# App / Widget targets (now buildable on this machine via Xcode-beta):
+# App target (now buildable on this machine via Xcode-beta):
 DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild build -project StickyNotes.xcodeproj -scheme StickyNotes -configuration Debug CODE_SIGNING_ALLOWED=NO
 DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild test -project StickyNotes.xcodeproj -scheme StickyNotes -destination 'platform=macOS'
 ```
 
 - `CODE_SIGNING_ALLOWED=NO` for local debug builds.
 - **Manual testing on this Mac**: run `scripts/sign-local.sh` instead of the
-  raw unsigned build + ad-hoc sign recipe. It builds Debug, signs app + widget
+  raw unsigned build + ad-hoc sign recipe. It builds Debug and signs the app
   with the STABLE Apple Development identity
   (`Apple Development: wenjie.xu.sino@foxmail.com (SJFRS6Q8GH)`, override via
   `IDENTITY=...`), and relaunches the app. Ad-hoc signing (`codesign -s -`)
@@ -81,14 +81,14 @@ DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild test -p
 - Test suites: `Packages/StickyCore/Tests/{DomainTests,PersistenceTests,EditorCoreTests,AssetStoreTests,SecurityCoreTests,SyncCoreTests,SystemBridgeTests}` (+ migration fixtures `Fixtures/schema_vN.sqlite`). All run via the `DEVELOPER_DIR=…` prefix above.
 - Credentialed WebDAV/S3 sync tests are opt-in via CI secrets (`STICKY_WEBDAV_TEST_*`, `STICKY_S3_TEST_*`) and must be skipped when absent — never commit real credentials.
 - Naming inconsistency between docs: `tasks.md` T001 says workspace + app target `App`; `quickstart.md` uses `StickyNotes.xcodeproj` / scheme `StickyNotes`. Reconcile before Phase 1 work.
-- Placeholder App Group: `group.local.stickynotes.placeholder` in both app and WidgetExtension entitlements.
+- App Group container + WidgetExtension removed 2026-08-13: the SQLite database and assets live in the app sandbox container (`Library/Application Support`); device-local prefs use standard UserDefaults.
 
 ## Environment gotchas
 
 - **Local toolchain (verified 2026-08-07):** `/Applications/Xcode-beta.app` — Xcode 27.0 (27A5228h), Swift 6.4, macOS 27 beta. `Testing.framework` is available under `…/Platforms/MacOSX.platform/Developer/Library/Frameworks/`. Always invoke build/test with `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer` (system default still points at CLT, which lacks `Testing.framework`).
 - **Intended CI toolchain:** Xcode 26.x, Swift 6.3, Swift 6 language mode, strict concurrency, macOS 26 deployment target. The local Xcode 27 beta is NEWER than CI — code that compiles locally may need to stay within the macOS 26 API surface. Record the actual toolchain in `Documentation/toolchain.md` (task T008); do not silently change the deployment target or language mode.
-- Intended architecture: modular monolith — app target + WidgetExtension + one local Swift package `StickyCore` (7 modules). GRDB SQLite (WAL, FTS5) in the App Group container is the source of truth; Keychain for credentials/secrets; sync is an additive E2E-encrypted layer (WebDAV or S3-compatible, one at a time).
-- Intended architecture: modular monolith — app target + WidgetExtension + one local Swift package `StickyCore` (7 modules). GRDB SQLite (WAL, FTS5) in the App Group container is the source of truth; Keychain for credentials/secrets; sync is an additive E2E-encrypted layer (WebDAV or S3-compatible, one at a time).
+- Intended architecture: modular monolith — app target + one local Swift package `StickyCore` (7 modules). GRDB SQLite (WAL, FTS5) in the app sandbox container is the source of truth; Keychain for credentials/secrets; sync is an additive E2E-encrypted layer (WebDAV or S3-compatible, one at a time).
+- Intended architecture: modular monolith — app target + one local Swift package `StickyCore` (7 modules). GRDB SQLite (WAL, FTS5) in the app sandbox container is the source of truth; Keychain for credentials/secrets; sync is an additive E2E-encrypted layer (WebDAV or S3-compatible, one at a time).
 
 <!-- BEGIN token-budget compact-backups -->
 

@@ -612,10 +612,11 @@ final class NoteToolbarController: NSObject, NSToolbarDelegate {
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 2), in: sender)
     }
 
-    /// Low-frequency actions (FR-011): copy/export/trash + widget
-    /// eligibility — migrated from the former NoteControlsView context menu
-    /// (T022); the content-area context menu remains as a second
-    /// presentation of the SAME actions (001 FR-031).
+    /// Low-frequency actions (FR-011): copy/export/trash — migrated from the
+    /// former NoteControlsView context menu (T022); the content-area context
+    /// menu remains as a second presentation of the SAME actions (001
+    /// FR-031). (Widget menu items were removed 2026-08-13 with the widget
+    /// surface.)
     private func makeMoreMenu() -> NSMenuItem {
         let item = NSMenuItem(title: String(localized: "More"), action: nil, keyEquivalent: "")
         let menu = NSMenu(title: String(localized: "More"))
@@ -637,29 +638,6 @@ final class NoteToolbarController: NSObject, NSToolbarDelegate {
         trash.keyEquivalentModifierMask = [.command]
         trash.target = self
         menu.addItem(trash)
-
-        menu.addItem(NSMenuItem.separator())
-
-        // FR-112 (T280): widget eligibility (note-level).
-        let widgetToggle = NSMenuItem(
-            title: String(localized: "Allow in Widgets"),
-            action: #selector(toggleWidgetEligibility(_:)),
-            keyEquivalent: ""
-        )
-        widgetToggle.target = self
-        widgetToggle.state = (host?.note?.widgetEligible ?? true) ? .on : .off
-        menu.addItem(widgetToggle)
-
-        // FR-110 (T306): the selected-note widget note.
-        if WidgetNoteSelection.selectedNote() == noteId {
-            let remove = NSMenuItem(title: String(localized: "Remove from Widget"), action: #selector(widgetNoteSelectionAction(_:)), keyEquivalent: "")
-            remove.target = self
-            menu.addItem(remove)
-        } else {
-            let set = NSMenuItem(title: String(localized: "Set as Widget Note"), action: #selector(widgetNoteSelectionAction(_:)), keyEquivalent: "")
-            set.target = self
-            menu.addItem(set)
-        }
         return item
     }
 
@@ -677,20 +655,6 @@ final class NoteToolbarController: NSObject, NSToolbarDelegate {
 
     @objc private func trashAction(_ sender: Any?) {
         coordinator?.moveToTrash(noteId: noteId)
-    }
-
-    @objc private func toggleWidgetEligibility(_ sender: NSMenuItem) {
-        guard let host, var note = host.note else { return }
-        note.widgetEligible.toggle()
-        host.updateAppearance(note)
-    }
-
-    @objc private func widgetNoteSelectionAction(_ sender: NSMenuItem) {
-        if WidgetNoteSelection.selectedNote() == noteId {
-            WidgetNoteSelection.setSelectedNote(nil)
-        } else {
-            WidgetNoteSelection.setSelectedNote(noteId)
-        }
     }
 }
 

@@ -138,17 +138,19 @@ import Persistence
     }
 
     @Test
-    func searchNeverRevealsPrivacyExcludedNotes() async throws {
+    func searchNeverRevealsNonActiveNotes() async throws {
         let env = try makeEnvironment()
         let model = LibraryModel(environment: env)
         let repo = env.persistence.noteRepository!
 
-        let visible = Note(title: "public note", widgetEligible: true, lastModifiedDeviceId: Self.deviceId)
+        let visible = Note(title: "public note", lastModifiedDeviceId: Self.deviceId)
         try await repo.create(visible)
         if let svc = env.persistence.searchService {
             try await svc.reindexNote(noteId: visible.id, title: "public note", blocks: [])
         }
-        let excluded = Note(title: "private note", widgetEligible: false, lastModifiedDeviceId: Self.deviceId)
+        // A permanently-deleted note must never surface in active search.
+        var excluded = Note(title: "private note", lastModifiedDeviceId: Self.deviceId)
+        excluded.lifecycleState = .permanentlyDeleted
         try await repo.create(excluded)
         if let svc = env.persistence.searchService {
             try await svc.reindexNote(noteId: excluded.id, title: "private note", blocks: [])
@@ -157,6 +159,6 @@ import Persistence
         model.searchQuery = "note"
         await model.reload()
         #expect(model.cards.contains { $0.noteId == visible.id })
-        #expect(!model.cards.contains { $0.noteId == excluded.id }, "privacy-excluded notes are never revealed (T042)")
+        #expect(!model.cards.contains { $0.noteId == excluded.id }, "non-active notes are never revealed in search")
     }
 }

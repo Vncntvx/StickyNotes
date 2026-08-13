@@ -34,7 +34,6 @@ import SyncCore
             StickyError.s3(.clockSkew).sanitizedCode,
             StickyError.syncConflict(.manifestPreconditionFailed).sanitizedCode,
             StickyError.remoteCorruption(.manifestInvalid).sanitizedCode,
-            StickyError.schemaCompatibility(.widgetSchemaMismatch).sanitizedCode,
         ]
         for code in codes {
             #expect(!code.contains("/"), "no paths in sanitized codes: \(code)")

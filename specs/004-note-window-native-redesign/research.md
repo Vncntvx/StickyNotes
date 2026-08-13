@@ -28,8 +28,8 @@
 
 ### 1.3 模型与命令层
 
-- **NoteWindowHostModel.swift（741 行，@MainActor @Observable）**：`note`（appearance 单一事实源）、`blocks`；`updateAppearance` :78-100（立即持久化 + FTS + sync + widget）；`updateBlocks(_:isStructural:)` :105-119（autosave 500ms 去抖/结构性立即）；`close()` :666（flush + FR-012a 自动删除判定）。全部外观字段经 `repo.update(note, modifyingDeviceId:)` 持久化到 SQLite `note` 表（**无 UserDefaults**）。
-- **Note 模型**（Domain/Models.swift:20-124）：`title: String?`、`colorKey`（7 色 + custom）、`customColor: String?`、`transparency: Double`（0.40–1.00/0.05，语义=透明度）、`textSize: Int`、`alwaysOnTop: Bool`（DB 列）、`widgetEligible` 等。
+- **NoteWindowHostModel.swift（741 行，@MainActor @Observable）**：`note`（appearance 单一事实源）、`blocks`；`updateAppearance` :78-100（立即持久化 + FTS + sync）；`updateBlocks(_:isStructural:)` :105-119（autosave 500ms 去抖/结构性立即）；`close()` :666（flush + FR-012a 自动删除判定）。全部外观字段经 `repo.update(note, modifyingDeviceId:)` 持久化到 SQLite `note` 表（**无 UserDefaults**）。
+- **Note 模型**（Domain/Models.swift:20-124）：`title: String?`、`colorKey`（7 色 + custom）、`customColor: String?`、`transparency: Double`（0.40–1.00/0.05，语义=透明度）、`textSize: Int`、`alwaysOnTop: Bool`（DB 列）等。
 - **MenuCommands.swift（94 行）**：声明式目录（`MenuCommandCatalog`，MenuChecklistTests 校验）；实际 CommandGroup 在 `StickyNotesApp.swift:119-216` 硬编码。现有插入菜单 ⇧⌘T/⇧⌘C 走 NotificationCenter。
 - **⌥C/⌥O/⌥T**（颜色/透明度/字号步进）是 `NoteControlsView.swift:173-184` 的三个隐藏按钮——随控件行移除需迁移。
 

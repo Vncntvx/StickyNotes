@@ -140,10 +140,10 @@ import Domain
         try await store.write { db in
             try db.execute(
                 sql: """
-                    INSERT INTO note (id, colorKey, transparency, textSize, alwaysOnTop, widgetEligible,
+                    INSERT INTO note (id, colorKey, transparency, textSize, alwaysOnTop,
                                       manualSortKey, lifecycleState, versionId, lastModifiedDeviceId,
                                       createdAt, modifiedAt)
-                    VALUES (?, 'yellow', 0.0, 13, 0, 1, 0, 'active', ?, ?, ?, ?)
+                    VALUES (?, 'yellow', 0.0, 13, 0, 0, 'active', ?, ?, ?, ?)
                     """,
                 arguments: [
                     noteId.uuidString,
@@ -173,7 +173,6 @@ import Domain
                     JOIN note ON note.id = note_fts_content.noteId
                     WHERE notes_fts MATCH 'searchable'
                       AND note.lifecycleState = 'active'
-                      AND note.widgetEligible = 1
                     ORDER BY notes_fts.rank
                     LIMIT 10
                     """
@@ -214,6 +213,106 @@ import Domain
         #expect(noteTableExists)
     }
 
+    // MARK: - v3: widget-eligibility column removal (2026-08-13)
+
+    @Test
+    func freshDatabaseHasNoWidgetEligibleColumn() async throws {
+        let store = try await freshDatabase()
+
+        let columns: [String] = try await store.read { db in
+            try Row.fetchAll(db, sql: "PRAGMA table_info(note)").map { row -> String in
+                row["name"] ?? ""
+            }
+        }
+        #expect(!columns.contains("widgetEligible"),
+                "v3 must drop the widgetEligible column on a fresh database; got \(columns)")
+    }
+
+    @Test
+    func v3MigrationDropsWidgetEligibilityAndPreservesRows() async throws {
+        // Build a database at v2 (the pre-removal state), insert a note row
+        // WITH the widgetEligible column, then run the real migrator: v3
+        // must drop the column while preserving every row and value.
+        let store = try DatabaseStore.inMemory()
+
+        // v1 + v2 only (the pre-removal chain).
+        var legacyMigrator = DatabaseMigrator()
+        legacyMigrator.registerMigration(StickyMigrationId.v1) { db in
+            try InitialSchema.createV1Schema(in: db)
+        }
+        legacyMigrator.registerMigration(StickyMigrationId.v2) { db in
+            try ConflictRecordSchema.migrateV2(db)
+        }
+        try legacyMigrator.migrate(store.dbPool)
+
+        let noteId = UUID()
+        let deviceId = UUID()
+        let createdAt = Date(timeIntervalSince1970: 1_700_000_000)
+        try await store.write { db in
+            try db.execute(
+                sql: """
+                    INSERT INTO note (id, title, colorKey, transparency, textSize, alwaysOnTop, widgetEligible,
+                                      manualSortKey, lifecycleState, versionId, lastModifiedDeviceId,
+                                      createdAt, modifiedAt)
+                    VALUES (?, 'legacy title', 'yellow', 0.5, 16, 1, 0, 2048, 'active', ?, ?, ?, ?)
+                    """,
+                arguments: [noteId.uuidString, UUID().uuidString, deviceId.uuidString,
+                            createdAt.timeIntervalSince1970, createdAt.timeIntervalSince1970]
+            )
+        }
+
+        // Apply v3 through the real migrator.
+        try InitialSchema.migrator().migrate(store.dbPool)
+
+        // The column is gone.
+        let columns: [String] = try await store.read { db in
+            try Row.fetchAll(db, sql: "PRAGMA table_info(note)").map { row -> String in
+                row["name"] ?? ""
+            }
+        }
+        #expect(!columns.contains("widgetEligible"), "v3 must drop widgetEligible; got \(columns)")
+
+        // The row survives with all remaining values intact.
+        struct SurvivingRow: Sendable {
+            var title: String?
+            var transparency: Double
+            var textSize: Int
+            var alwaysOnTop: Bool
+            var manualSortKey: Int
+            var lifecycle: String
+        }
+        let survivor = try await store.read { db -> SurvivingRow in
+            let row = try Row.fetchOne(
+                db,
+                sql: "SELECT title, transparency, textSize, alwaysOnTop, manualSortKey, lifecycleState FROM note WHERE id = ?",
+                arguments: [noteId.uuidString]
+            )
+            guard let row else {
+                return SurvivingRow(title: nil, transparency: 0, textSize: 0, alwaysOnTop: false, manualSortKey: 0, lifecycle: "")
+            }
+            return SurvivingRow(
+                title: row["title"] as String?,
+                transparency: row["transparency"] as Double? ?? 0,
+                textSize: row["textSize"] as Int? ?? 0,
+                alwaysOnTop: row["alwaysOnTop"] as Bool? ?? false,
+                manualSortKey: row["manualSortKey"] as Int? ?? 0,
+                lifecycle: row["lifecycleState"] as String? ?? ""
+            )
+        }
+        #expect(survivor.title == "legacy title", "v3 must preserve existing note rows")
+        #expect(survivor.transparency == 0.5)
+        #expect(survivor.textSize == 16)
+        #expect(survivor.alwaysOnTop)
+        #expect(survivor.manualSortKey == 2048)
+        #expect(survivor.lifecycle == "active")
+
+        // v3 is recorded.
+        let applied: [String] = try await store.read { db in
+            try String.fetchAll(db, sql: "SELECT identifier FROM grdb_migrations")
+        }
+        #expect(applied.contains(StickyMigrationId.v3), "v3 must be recorded in grdb_migrations")
+    }
+
     // MARK: - Schema version tracking
 
     @Test
@@ -242,10 +341,10 @@ import Domain
         try await store.write { db in
             try db.execute(
                 sql: """
-                    INSERT INTO note (id, colorKey, transparency, textSize, alwaysOnTop, widgetEligible,
+                    INSERT INTO note (id, colorKey, transparency, textSize, alwaysOnTop,
                                       manualSortKey, lifecycleState, versionId, lastModifiedDeviceId,
                                       createdAt, modifiedAt)
-                    VALUES (?, 'yellow', 0.0, 13, 0, 1, 0, 'active', ?, ?, ?, ?)
+                    VALUES (?, 'yellow', 0.0, 13, 0, 0, 'active', ?, ?, ?, ?)
                     """,
                 arguments: [noteId.uuidString, UUID().uuidString, deviceId.uuidString,
                             Date().timeIntervalSince1970, Date().timeIntervalSince1970]
@@ -364,10 +463,10 @@ import Domain
         try await store.write { db in
             try db.execute(
                 sql: """
-                    INSERT INTO note (id, colorKey, transparency, textSize, alwaysOnTop, widgetEligible,
+                    INSERT INTO note (id, colorKey, transparency, textSize, alwaysOnTop,
                                       manualSortKey, lifecycleState, versionId, lastModifiedDeviceId,
                                       createdAt, modifiedAt)
-                    VALUES (?, 'yellow', 0.0, 13, 0, 1, 0, 'active', ?, ?, ?, ?)
+                    VALUES (?, 'yellow', 0.0, 13, 0, 0, 'active', ?, ?, ?, ?)
                     """,
                 arguments: [noteId.uuidString, UUID().uuidString, deviceId.uuidString,
                             Date().timeIntervalSince1970, Date().timeIntervalSince1970]
@@ -438,10 +537,10 @@ import Domain
         try pool.write { db in
             try db.execute(
                 sql: """
-                    INSERT INTO note (id, colorKey, transparency, textSize, alwaysOnTop, widgetEligible,
+                    INSERT INTO note (id, colorKey, transparency, textSize, alwaysOnTop,
                                       manualSortKey, lifecycleState, versionId, lastModifiedDeviceId,
                                       createdAt, modifiedAt)
-                    VALUES (?, 'yellow', 0.0, 13, 0, 1, 0, 'active', ?, ?, ?, ?)
+                    VALUES (?, 'yellow', 0.0, 13, 0, 0, 'active', ?, ?, ?, ?)
                     """,
                 arguments: [
                     noteId.uuidString,
@@ -672,7 +771,7 @@ import Domain
             backupPath: dbPath + ".backup"
         )
         let version = await migrator.currentSchemaVersion(pool)
-        #expect(version == StickyMigrationId.v2, "expected \(StickyMigrationId.v2), got \(String(describing: version))")
+        #expect(version == StickyMigrationId.v3, "expected \(StickyMigrationId.v3), got \(String(describing: version))")
         try pool.close()
     }
 
@@ -682,9 +781,7 @@ import Domain
         defer { try? FileManager.default.removeItem(atPath: dir) }
         let dbPath = dir + "/db.sqlite"
 
-        // A fresh, empty database — no migrations applied, and the widget
-        // must not crash: it gets nil and falls back to privacy-safe
-        // placeholders.
+        // A fresh, empty database — no migrations applied: reports nil.
         let pool = try DatabasePool(path: dbPath)
         let migrator = StickyMigrator(
             migrator: InitialSchema.migrator(),

@@ -16,7 +16,7 @@ import Domain
 struct FontPreferenceApplicationTests {
 
     private static var suite: UserDefaults {
-        UserDefaults(suiteName: "group.local.stickynotes.placeholder")!
+        UserDefaults.standard
     }
 
     private func resetPreference() {

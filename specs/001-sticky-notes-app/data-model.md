@@ -47,7 +47,6 @@ The unit a user creates, edits, and retrieves.
 | transparency | REAL | yes | background opacity, 0.40–1.00 inclusive, 0.05 steps, default 1.00 (FR-041a; below 1.00 the FR-042 contrast logic validates against the composited background); field name retained from v1 — semantic is opacity (FR-041a), not transparency |
 | textSize | INTEGER | yes | per-note text size in points, 9–24 inclusive, 1-pt steps, default 13 (FR-043a); text ≥18 pt is large text for the FR-042 contrast thresholds |
 | alwaysOnTop | INT (bool) | yes | per-note floating |
-| widgetEligible | INT (bool) | yes | per-note widget privacy gate |
 | coverScreenshotBlockId | UUID (nullable) | yes | at most one cover; FK Block |
 | manualSortKey | INT | yes | manual-order sort key |
 | lifecycleState | enum | yes | active/trashed/permanentlyDeleted/conflictCopy |
@@ -108,7 +107,7 @@ parent does not orphan children (children reparented to grandparent or flagged).
 
 ### Asset
 
-A binary asset stored outside SQLite in the App Group container (originals,
+A binary asset stored outside SQLite in the app sandbox container (originals,
 thumbnails, app icons). Referenced by blocks.
 
 | Field | Type | Synced? | Notes |
@@ -118,7 +117,7 @@ thumbnails, app icons). Referenced by blocks.
 | contentHash | TEXT (SHA-256) | yes | dedup + corruption detection |
 | byteSize | INT | yes | |
 | contentType | TEXT | yes | UTType identifier |
-| storagePath | TEXT (opaque) | local | relative path under App Group (device-local filename; not a user path) |
+| storagePath | TEXT (opaque) | local | relative path under the sandbox Application Support directory (device-local filename; not a user path) |
 | isSynced | INT (bool) | local | whether asset bytes are confirmed remote |
 | syncFailureState | enum (nullable) | local | partial-asset-sync-failure marker |
 | createdAt | TEXT | yes | |
@@ -134,7 +133,7 @@ metadata; the asset's `syncFailureState` is set to
 `contentHash` enables dedup (two notes pasting the same image share one asset
 object remotely and can share bytes locally via reference counting).
 Thumbnails use a 256px longest edge (FR-094a) — the single canonical
-thumbnail size for card-grid and widget display.
+thumbnail size for card-grid display.
 
 ### ScreenshotAssociation
 
@@ -255,9 +254,9 @@ the exported bundle.
 
 ### LocalPreferences (device-local, never synchronized)
 
-Non-sensitive local preferences. Not a database table — stored in App Group
-UserDefaults, never in SQLite, never in canonical JSON, never synchronized
-(FR-014a, FR-191 boundary).
+Non-sensitive local preferences. Not a database table — stored in the
+standard UserDefaults domain of the app sandbox, never in SQLite, never in
+canonical JSON, never synchronized (FR-014a, FR-191 boundary).
 
 | Key | Type | Notes |
 |-----|------|-------|
@@ -265,8 +264,8 @@ UserDefaults, never in SQLite, never in canonical JSON, never synchronized
 | `onboardingHintDismissed` | bool | user dismissed the hint (FR-014a) |
 | `hasCreatedFirstNote` | bool | set when the first note is created; once true the hint is never shown again (FR-014a) |
 
-These keys are app-side UI state; the Widget Extension does not read them.
-They MUST NOT appear in exported diagnostics (FR-191).
+These keys are app-side UI state. They MUST NOT appear in exported
+diagnostics (FR-191).
 
 ### VaultConfiguration (device-local reference)
 
@@ -482,11 +481,6 @@ unsynchronizedLocalModification ──push──▶ synchronizedVersion
   walks each fixture forward to current, asserting row integrity.
 - High-risk migrations: back up the DB file before running; on failure, restore
   backup and report `SchemaCompatibility` error; never leave a half-migrated DB.
-- Widget: on open, read schema version; if unsupported, fall back to
-  privacy-safe read-only placeholders (no migration, no crash). Widget read
-  transactions MUST be short enough to complete within the 5s bounded busy
-  timeout (FR-140a); on timeout, report a sanitized "temporarily unavailable"
-  status.
 - Interrupted migration recovery: a `schema_migrations` table records applied
   migrations atomically; an incomplete migration is rolled back via the backup
   on next launch.
@@ -610,7 +604,6 @@ sync conflictCopy normally (it is just another note)
   "transparency": 1.0,
   "textSize": 13,
   "alwaysOnTop": false,
-  "widgetEligible": true,
   "coverScreenshotBlockId": null,
   "manualSortKey": 1024,
   "lifecycleState": "active",

@@ -11,7 +11,7 @@ import AssetStore
 // Per tasks.md T191: ThumbnailGenerator.defaultLongestEdge == 256; generated
 // thumbnails have a longest edge of exactly 256 pixels preserving aspect
 // ratio; full-resolution screenshots and embedded images are NOT decoded for
-// card-grid or widget rendering; thumbnail generation is lazy, off the main
+// card-grid rendering; thumbnail generation is lazy, off the main
 // actor, and produces a stable hash for dedup.
 
 @Suite struct Thumbnail256BindingTests {

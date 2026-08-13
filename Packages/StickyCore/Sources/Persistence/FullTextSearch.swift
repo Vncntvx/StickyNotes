@@ -28,7 +28,6 @@ public struct FullTextSearch: Sendable {
     /// Searches active notes (default scope) for the given query. Returns
     /// matching note ids ranked by FTS5 relevance.
     ///
-    /// Privacy: never reveals `widgetEligible = false` notes (FR-112 / R14).
     /// Trashed/permanentlyDeleted/conflictCopy notes are excluded by default;
     /// the Trash scope is a separate query.
     public func searchActiveNotes(query: String, limit: Int = 100) async throws -> [SearchResult] {
@@ -39,8 +38,7 @@ public struct FullTextSearch: Sendable {
         )
     }
 
-    /// Searches trashed notes (Trash scope). Privacy-excluded notes are
-    /// still hidden from search results even in Trash (constitution VI).
+    /// Searches trashed notes (Trash scope).
     public func searchTrashedNotes(query: String, limit: Int = 100) async throws -> [SearchResult] {
         try await search(
             query: query,
@@ -50,7 +48,7 @@ public struct FullTextSearch: Sendable {
     }
 
     /// Common search implementation. Joins `notes_fts` against `note` for
-    /// lifecycle + widgetEligible filtering, and ranks by FTS5 relevance.
+    /// lifecycle filtering, and ranks by FTS5 relevance.
     private func search(query: String, lifecycleFilter: String, limit: Int) async throws -> [SearchResult] {
         // Empty query → no FTS results (the SearchService caller falls back
         // to a plain `SELECT` for "show all" before the user types).
@@ -77,7 +75,7 @@ public struct FullTextSearch: Sendable {
             //
             // JOIN path: notes_fts (FTS5 external content table) →
             // note_fts_content (the content table, provides noteId) →
-            // note (for lifecycle/widgetEligible filtering + display cols).
+            // note (for lifecycle filtering + display cols).
             let sql = """
                 SELECT note.id, note.title, note.modifiedAt, notes_fts.rank
                 FROM notes_fts
@@ -85,7 +83,6 @@ public struct FullTextSearch: Sendable {
                 JOIN note ON note.id = note_fts_content.noteId
                 WHERE notes_fts MATCH ?
                   AND \(lifecycleFilter)
-                  AND note.widgetEligible = 1
                 ORDER BY notes_fts.rank
                 LIMIT ?
                 """ as String

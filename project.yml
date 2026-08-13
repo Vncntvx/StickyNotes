@@ -1,7 +1,8 @@
 # StickyNotes.xcodeproj specification (XcodeGen format)
 #
-# T001 (tasks.md): "Create Xcode workspace with macOS app target `App` and
-# Widget Extension target `WidgetExtension` per plan.md §Project Structure."
+# T001 (tasks.md): "Create Xcode workspace with macOS app target `App` per
+# plan.md §Project Structure." (The Widget Extension target was REMOVED
+# 2026-08-13 with the widget surface — see spec.md US8 note.)
 #
 # Reconciliation (T249): the binary `StickyNotes.xcodeproj` IS committed to
 # the repository, and `project.yml` is the source of truth. CI regenerates
@@ -16,9 +17,8 @@
 #
 # Reconciliation with quickstart.md: the project file is `StickyNotes.xcodeproj`
 # with scheme `StickyNotes` (the app target). The `App/` directory holds the
-# app target's sources; `WidgetExtension/` holds the widget target's sources.
-# This matches both T001 (target-role name `App`) and quickstart.md (project/
-# scheme name `StickyNotes`).
+# app target's sources. This matches both T001 (target-role name `App`) and
+# quickstart.md (project/scheme name `StickyNotes`).
 
 name: StickyNotes
 options:
@@ -42,8 +42,6 @@ settings:
     CODE_SIGNING_ALLOWED: "NO"
     DEVELOPMENT_TEAM: ""
     ENABLE_HARDENED_RUNTIME: "YES"
-    # App Group placeholder (quickstart.md §Placeholder App Group + entitlements)
-    APP_GROUP_ID: group.local.stickynotes.placeholder
 
 packages:
   StickyCore:
@@ -91,35 +89,6 @@ targets:
         product: SyncCore
       - package: StickyCore
         product: SystemBridge
-      - target: WidgetExtension
-
-  # --------------------------------------------------------------------------
-  # Widget Extension target — WidgetKit + AppIntents.
-  # Depends only on minimal Domain + Persistence surface (constitution VI/XI);
-  # NEVER links SyncCore/SecurityCore.
-  # --------------------------------------------------------------------------
-  WidgetExtension:
-    type: app-extension
-    platform: macOS
-    deploymentTarget: "26.0"
-    sources:
-      - path: WidgetExtension
-        excludes:
-          - "*.entitlements"
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: local.stickynotes.app.widget
-        PRODUCT_NAME: StickyNotesWidget
-        INFOPLIST_KEY_CFBundleDisplayName: Sticky Notes Widget
-        CODE_SIGN_ENTITLEMENTS: WidgetExtension/WidgetExtension.entitlements
-        SKIP_INSTALL: "YES"
-    dependencies:
-      - package: StickyCore
-        product: Domain
-      - package: StickyCore
-        product: Persistence
-      - package: GRDB.swift
-        product: GRDB
 
   # --------------------------------------------------------------------------
   # Test targets (constitution XII — tests mandatory).
@@ -136,8 +105,7 @@ targets:
         BUNDLE_LOADER: "$(TEST_HOST)"
         # T305: test bundles need a generated Info.plist so the scheme can
         # also run signed (ad-hoc) — the full XCUITest journeys require a
-        # signed app whose app-groups entitlement grants the App Group
-        # container.
+        # signed app.
         GENERATE_INFOPLIST_FILE: "YES"
     dependencies:
       - target: StickyNotes
@@ -182,7 +150,6 @@ schemes:
     build:
       targets:
         StickyNotes: all
-        WidgetExtension: all
     run:
       config: Debug
     test:

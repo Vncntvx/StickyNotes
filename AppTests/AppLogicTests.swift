@@ -7,7 +7,7 @@ import Persistence
 // MARK: - App-layer FR tests (T204/T245/T228/T230/T251/T266/T135a)
 //
 // Logic-level App tests: first-launch experience (FR-014a), deletion toast
-// (FR-009a), change-driven widget refresh (FR-110a), FR-020a time rule,
+// (FR-009a), FR-020a time rule,
 // async-feedback policy (FR-141b), P1 independence gate (SC-009).
 
 @MainActor
@@ -60,23 +60,6 @@ import Persistence
         presenter.present(message: "Permanently Deleted")
         try await Task.sleep(for: .seconds(DeletionToastPresenter.autoDismissInterval + 0.5))
         #expect(presenter.currentToast == nil, "the toast auto-dismisses within a short bounded period")
-    }
-
-    // MARK: - FR-110a change-driven widget refresh (T228)
-
-    @Test
-    func widgetRefreshTargetsAffectedKindsOnly() {
-        let noteKinds = WidgetRefreshCoordinator.kindsAffectedByNoteChange()
-        #expect(noteKinds.contains(.smallRecent))
-        #expect(noteKinds.contains(.mediumMulti))
-
-        let todoKinds = WidgetRefreshCoordinator.kindsAffectedByTodoToggle()
-        #expect(todoKinds.contains(.mediumTodo))
-
-        // No fixed-interval polling timer exists in the widget process —
-        // asserted structurally: the coordinator exposes reload entry
-        // points only, no timer scheduling API.
-        #expect(WidgetRefreshCoordinator.Kind.allCases.count == 6)
     }
 
     // MARK: - FR-020a last-modified time rule (T251)
@@ -132,8 +115,8 @@ import Persistence
 
     @Test
     func p1FeaturesWorkWithoutP2P3Configuration() async throws {
-        // With NO VaultConfiguration, NO widgets configured, NO screen-
-        // recording permission: P1 (US1–US6) remains fully demonstrable.
+        // With NO VaultConfiguration and NO screen-recording permission:
+        // P1 (US1–US6) remains fully demonstrable.
         let store = try DatabaseStore.inMemory()
         try InitialSchema.migrator().migrate(store.dbPool)
         let env = AppEnvironment(

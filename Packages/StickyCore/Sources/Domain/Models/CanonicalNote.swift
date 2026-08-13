@@ -202,7 +202,6 @@ public struct CanonicalNote: Sendable, Codable, Equatable, Hashable {
     /// default 13.
     public var textSize: Int
     public var alwaysOnTop: Bool
-    public var widgetEligible: Bool
     public var coverScreenshotBlockId: UUID?
     public var manualSortKey: Int
     public var lifecycleState: NoteLifecycleState
@@ -225,7 +224,6 @@ public struct CanonicalNote: Sendable, Codable, Equatable, Hashable {
         transparency: Double,
         textSize: Int,
         alwaysOnTop: Bool,
-        widgetEligible: Bool,
         coverScreenshotBlockId: UUID? = nil,
         manualSortKey: Int,
         lifecycleState: NoteLifecycleState,
@@ -247,7 +245,6 @@ public struct CanonicalNote: Sendable, Codable, Equatable, Hashable {
         self.transparency = transparency
         self.textSize = textSize
         self.alwaysOnTop = alwaysOnTop
-        self.widgetEligible = widgetEligible
         self.coverScreenshotBlockId = coverScreenshotBlockId
         self.manualSortKey = manualSortKey
         self.lifecycleState = lifecycleState
@@ -273,7 +270,6 @@ public struct CanonicalNote: Sendable, Codable, Equatable, Hashable {
             transparency: note.transparency,
             textSize: note.textSize,
             alwaysOnTop: note.alwaysOnTop,
-            widgetEligible: note.widgetEligible,
             coverScreenshotBlockId: note.coverScreenshotBlockId,
             manualSortKey: note.manualSortKey,
             lifecycleState: note.lifecycleState,
@@ -299,7 +295,6 @@ public struct CanonicalNote: Sendable, Codable, Equatable, Hashable {
             transparency: transparency,
             textSize: textSize,
             alwaysOnTop: alwaysOnTop,
-            widgetEligible: widgetEligible,
             coverScreenshotBlockId: coverScreenshotBlockId,
             manualSortKey: manualSortKey,
             lifecycleState: lifecycleState,

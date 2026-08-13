@@ -46,7 +46,6 @@ public struct NoteCardProjection: Sendable, Identifiable, Equatable {
     public let hasFileReference: Bool
     public let isConflictCopy: Bool
     public let syncWarning: Bool             // partialAssetSyncFailure on any asset
-    public let widgetEligible: Bool
 
     public var id: UUID { noteId }
 
@@ -64,8 +63,7 @@ public struct NoteCardProjection: Sendable, Identifiable, Equatable {
         hasImage: Bool,
         hasFileReference: Bool,
         isConflictCopy: Bool,
-        syncWarning: Bool,
-        widgetEligible: Bool
+        syncWarning: Bool
     ) {
         self.noteId = noteId
         self.title = title
@@ -81,7 +79,6 @@ public struct NoteCardProjection: Sendable, Identifiable, Equatable {
         self.hasFileReference = hasFileReference
         self.isConflictCopy = isConflictCopy
         self.syncWarning = syncWarning
-        self.widgetEligible = widgetEligible
     }
 
     /// Todo progress per FR-072b: "completed/total", or "99+ completed"
@@ -256,8 +253,7 @@ public enum CardProjection {
                     hasImage: ind.1,
                     hasFileReference: ind.2,
                     isConflictCopy: (row["lifecycleState"] ?? "") == NoteLifecycleState.conflictCopy.rawValue,
-                    syncWarning: syncWarnings.contains(noteId),
-                    widgetEligible: row["widgetEligible"] ?? true
+                    syncWarning: syncWarnings.contains(noteId)
                 )
             }
         }

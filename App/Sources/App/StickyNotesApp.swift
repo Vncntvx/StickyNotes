@@ -12,9 +12,8 @@ import SystemBridge
 // MARK: - StickyNotesApp (T032/T159/T160/T169 wiring)
 //
 // The @main entry point: menu-bar library (T159), note windows
-// (NoteWindowCoordinator, T160), Settings (T169), About (T144), deep-link
-// routing (contracts/deep-links.md), and change-driven widget refresh
-// (FR-110a, T237).
+// (NoteWindowCoordinator, T160), Settings (T169), About (T144), and
+// deep-link routing (contracts/deep-links.md).
 //
 // FR-009 sheet rule (T268): the menu-bar-icon toggle path never dismisses an
 // open app-modal sheet — `MenuBarExtra` natively toggles the library
@@ -32,8 +31,6 @@ struct StickyNotesApp: App {
     @State private var libraryModel: LibraryModel?
     @State private var coordinator: NoteWindowCoordinator?
     @State private var toastPresenter = DeletionToastPresenter()
-
-    private let appGroupIdentifier = "group.local.stickynotes.placeholder"
 
     var body: some Scene {
         MenuBarExtra("Sticky Notes", systemImage: "note.text") {
@@ -355,15 +352,15 @@ struct StickyNotesApp: App {
         // Re-entrancy guard: the bootstrap trigger fires on every menu open;
         // once bootstrapped (or failed), never re-run.
         guard libraryModel == nil, bootstrapError == nil else { return }
-        guard let container = AppGroupContainer.url(for: appGroupIdentifier) else {
-            // FR-011a: never fail silently — surface a non-blocking,
-            // localized status instead of "setup in progress" forever.
-            bootstrapError = BootstrapErrorState.from(StickyError.persistence(.containerUnavailable))
-            return
-        }
+        // The sandbox Application Support directory hosts the SQLite
+        // database and assets (the App Group container was removed
+        // 2026-08-13 with the widget surface).
+        let applicationSupportURL = FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)
+            .first ?? FileManager.default.temporaryDirectory
         Task {
             do {
-                let env = try await AppEnvironment.bootstrap(appGroupContainerURL: container)
+                let env = try await AppEnvironment.bootstrap(applicationSupportURL: applicationSupportURL)
                 await MainActor.run {
                     environment = env
                     let model = LibraryModel(environment: env)
@@ -700,16 +697,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if showDockIcon {
             try? DockActivationBridge.setDockEnabled(true)
         }
-        // Launch-time container diagnostics (FR-011a): verify the App Group
-        // container is resolvable + writable BEFORE the menu bootstrap runs,
-        // so sandbox/entitlement issues surface in logs immediately.
+        // Launch-time container diagnostics (FR-011a): verify the sandbox
+        // Application Support directory is resolvable + writable BEFORE the
+        // menu bootstrap runs, so sandbox issues surface in logs immediately.
         Task {
-            let group = "group.local.stickynotes.placeholder"
-            guard let container = AppGroupContainer.url(for: group) else {
+            guard let base = FileManager.default
+                .urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
                 StickyLogger(category: .app).error("container-url", code: "unresolved")
                 return
             }
-            let base = container.appendingPathComponent("Library/Application Support")
             do {
                 try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
                 let probe = base.appendingPathComponent("launch-probe.tmp")

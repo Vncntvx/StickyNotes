@@ -62,9 +62,6 @@ public enum PersistenceError: Error, Sendable {
     case recoveryFailed
     case recordNotFound
     case invalidPayload
-    /// The App Group container could not be resolved at launch (sandbox/
-    /// entitlement mismatch). Surfaced non-blockingly (FR-011a).
-    case containerUnavailable
     /// FR-090b: note structured content exceeds `ScaleLimits.maxNoteContentBytes`
     /// (5 MB). The write was refused; the last valid saved state is preserved.
     case contentTooLarge
@@ -79,7 +76,6 @@ public enum PersistenceError: Error, Sendable {
         case .recordNotFound: return "recordNotFound"
         case .invalidPayload: return "invalidPayload"
         case .contentTooLarge: return "contentTooLarge"
-        case .containerUnavailable: return "containerUnavailable"
         }
     }
 }
@@ -362,16 +358,14 @@ public enum RemoteCorruptionError: Error, Sendable {
     }
 }
 
-/// Schema compatibility errors. The widget falls back to privacy-safe
-/// placeholders on schema mismatch (research.md R6).
+/// Schema compatibility errors. Callers (app bootstrap, migration recovery)
+/// fail closed on an unsupported schema version.
 public enum SchemaCompatibilityError: Error, Sendable {
     case unsupportedSchemaVersion
-    case widgetSchemaMismatch
 
     public var sanitizedCode: String {
         switch self {
         case .unsupportedSchemaVersion: return "unsupportedSchemaVersion"
-        case .widgetSchemaMismatch: return "widgetSchemaMismatch"
         }
     }
 }

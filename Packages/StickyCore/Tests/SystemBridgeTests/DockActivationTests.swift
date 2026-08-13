@@ -8,7 +8,7 @@ import SystemBridge
 // MARK: - Dock activation tests (T097)
 //
 // Per tasks.md T097: "Dock activation-policy switch runtime; Settings/Help/
-// About/sync/Quit remain reachable; widget deep-link does NOT flip Dock
+// About/sync/Quit remain reachable; a deep link does NOT flip Dock
 // policy".
 
 @Suite struct DockActivationTests {
@@ -29,16 +29,6 @@ import SystemBridge
 
         // Restore whatever the environment had before the test.
         try DockActivationBridge.setDockEnabled(original == .regular)
-    }
-
-    @Test
-    @MainActor
-    func widgetDeepLinkNeverFlippedDockPolicy() {
-        // FR-008/FR-009: a widget deep link must NOT flip the Dock policy.
-        // The bridge exposes no path for widget-originated routes to change
-        // the policy.
-        #expect(!DockActivationBridge.deepLinkMayChangeDockPolicy(originIsWidget: true))
-        #expect(DockActivationBridge.deepLinkMayChangeDockPolicy(originIsWidget: false))
     }
 
     @Test

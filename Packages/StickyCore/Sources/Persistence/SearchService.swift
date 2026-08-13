@@ -10,8 +10,7 @@ import Domain
 //   source, normal text, todo text, code text, file display names,
 //   screenshot captions, future OCR text.
 // - Indexed transactionally with note changes.
-// - Active notes by default; results never reveal privacy-excluded notes
-//   (`widgetEligible = false`).
+// - Active notes by default; results never reveal non-active notes.
 // - Performance tests at 10,000 notes (SC-005: ≤200 ms).
 //
 // The FTS5 virtual table `notes_fts` and its content table `note_fts_content`
@@ -34,14 +33,12 @@ public final class SearchService: Sendable {
     // MARK: - Query
 
     /// Searches active notes for the given query. Returns matching note ids
-    /// ranked by FTS5 relevance. Privacy-excluded notes
-    /// (`widgetEligible = false`) are never returned.
+    /// ranked by FTS5 relevance.
     public func searchActiveNotes(query: String, limit: Int = 100) async throws -> [SearchResult] {
         try await fullTextSearch.searchActiveNotes(query: query, limit: limit)
     }
 
-    /// Searches trashed notes (Trash scope). Privacy-excluded notes are
-    /// still hidden (constitution VI).
+    /// Searches trashed notes (Trash scope).
     public func searchTrashedNotes(query: String, limit: Int = 100) async throws -> [SearchResult] {
         try await fullTextSearch.searchTrashedNotes(query: query, limit: limit)
     }

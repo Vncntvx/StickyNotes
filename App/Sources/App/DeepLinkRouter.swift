@@ -35,7 +35,7 @@ public enum DeepLinkRouter {
         }
     }
 
-    /// The canonical URL for a note (used by widgets).
+    /// The canonical URL for a note.
     public static func noteURL(_ id: UUID) -> URL {
         URL(string: "stickynotes://note/\(id.uuidString)")!
     }

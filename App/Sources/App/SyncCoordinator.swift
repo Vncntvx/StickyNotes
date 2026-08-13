@@ -698,11 +698,6 @@ public final class SyncCoordinator {
             if summary.historyAgedOutDetected {
                 lastErrorCode = "sync.historyAgedOut"
             }
-            // T302 (FR-110a): new conflict copies affect the widget surface —
-            // reload exactly the conflict-copy kinds.
-            if summary.conflictCopiesCreated > 0 {
-                WidgetRefreshCoordinator.reload(for: .conflictCopyCreated)
-            }
         } catch {
             // FR-165: sanitized codes only. Map every error family — a
             // non-StickyError (e.g. ProviderError or a raw URLSession error

@@ -10,23 +10,25 @@ import Domain
 // database under `Tests/PersistenceTests/Fixtures/schema_vN.sqlite`.
 //
 // The `schema_migrations` tracking table is owned by GRDB
-// (`grdb_migrations`); we do not create our own. The widget queries the
-// latest applied migration name to detect unsupported schemas (research.md
-// R6).
+// (`grdb_migrations`); we do not create our own.
+//
+// Historical migration bodies are IMMUTABLE (constitution IV). The
+// `widgetEligible` column created below in v1 is dropped by the v3
+// migration (2026-08-13 widget surface removal) — a fresh database creates
+// it in v1 and drops it in v3; the chain is never rewritten.
 
 // MARK: - Migration identifiers
 
 public enum StickyMigrationId {
     public static let v1 = "v1_initial_schema"
     public static let v2 = "v2_conflict_records"
+    public static let v3 = "v3_drop_widget_eligibility"
 }
 
-// MARK: - The v1 migrator
+// MARK: - The migrator
 
-/// Builds the v1 `DatabaseMigrator` with the initial schema. The main app
-/// calls `.migrate(dbPool)` at startup; the widget calls
-/// `StickyMigrator.currentSchemaVersion` and falls back to privacy-safe
-/// placeholders on mismatch.
+/// Builds the `DatabaseMigrator` with the full ordered schema chain
+/// (v1 → v2 → v3). The main app calls `.migrate(dbPool)` at startup.
 public enum InitialSchema {
     public static func migrator() -> DatabaseMigrator {
         var migrator = DatabaseMigrator()
@@ -42,6 +44,9 @@ public enum InitialSchema {
         }
         migrator.registerMigration(StickyMigrationId.v2) { db in
             try ConflictRecordSchema.migrateV2(db)
+        }
+        migrator.registerMigration(StickyMigrationId.v3) { db in
+            try WidgetEligibilityRemovalSchema.migrateV3(db)
         }
 
         return migrator

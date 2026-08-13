@@ -177,7 +177,7 @@ close（红绿灯/⌘W/菜单）
 | **Pin** | 置顶开关（FR-007/026） | NSToolbarItem（view = NSButton bezelStyle `.toolbar`（无边界，T067），momentaryPushIn，图标 pin/pin.fill 随 state 切换——符号表达状态，不染色表面） | 常驻高优先级（属性组） | `.high`（头注释背书：>Standard 且 <User 建议常显，最后进溢出） | `menuFormRepresentation` = NSMenuItem（toggle，state 随动） | `host.note.alwaysOnTop`（DB） | `coordinator.updateAlwaysOnTop`（既有唯一入口） | 新 View 菜单 "Always on Top"（toggle，无快捷键）；`accessibilityValue` 开/关 + tooltip | `.glass` 需 macOS 26 guard |
 | **Appearance** | 颜色+透明度整合（FR-008/009） | NSToolbarItem（view = NSButton `.toolbar`（无边界），paintpalette 图标 13pt（光学 -1pt，T067））→ 点击弹出无边框子窗口面板（T071 替换 NSPopover 锚定） | 常驻中优先级 | `.standard` | `menuFormRepresentation` = 外观子菜单（颜色 7 项 + 透明度 21 步（0–100%，Q8）+ 重置） | `host.note`（colorKey/customColor/transparency） | 面板改动→`host.updateAppearance`+`coordinator.updateNotePaper`（即时预览，FR-008） | 既有 ⌥C/⌥O 步进保留；外观子菜单（从 NoteControlsView 上下文菜单迁移） | NSWindow child 10.10+ |
 | **Insert** | 统一插入入口（FR-010/Q4） | NSToolbarItem（view = NSButton `.toolbar`（无边界），plus 图标 14pt，pullsDown）→ NSMenu：截图子菜单（区域/窗口）、插入文件引用…、插入图片…（新）、待办（⇧⌘T）、代码块（⇧⌘C） | 常驻高优先级（操作组，T065：窄窗口保持可见） | `.high` | 同上 menuFormRepresentation 菜单 | 无（动作型） | 菜单项→协调器→`host` 既有插入方法（目标解析见 §4.3） | 既有 ⇧⌘T/⇧⌘C + 既有 File/Edit 菜单 Insert 组 | — |
-| **More** | 低频动作（FR-011） | NSToolbarItem（view = NSButton `.toolbar`（无边界），ellipsis 图标 14pt（T067：弃 ellipsis.circle——少一层圆形））→ NSMenu：复制笔记、复制为 Markdown、导出 JSON…、移入废纸篓（⌘⌫）、分隔线、允许小组件（toggle）、设为小组件笔记/移除 | 常驻 | `.standard` | 同上（窄宽度时可自身溢出进 chevron） | 动作型 + `widgetEligible` | 既有闭包：duplicate/copy/export/moveToTrash/widget 选择（从 NoteControlsView 上下文菜单迁移） | 既有菜单：⌘⌫、上下文菜单（内容区 .contextMenu 保留） | — |
+| **More** | 低频动作（FR-011） | NSToolbarItem（view = NSButton `.toolbar`（无边界），ellipsis 图标 14pt（T067：弃 ellipsis.circle——少一层圆形））→ NSMenu：复制笔记、复制为 Markdown、导出 JSON…、移入废纸篓（⌘⌫） | 常驻 | `.standard` | 同上（窄宽度时可自身溢出进 chevron） | 动作型 | 既有闭包：duplicate/copy/export/moveToTrash（从 NoteControlsView 上下文菜单迁移） | 既有菜单：⌘⌫、上下文菜单（内容区 .contextMenu 保留） | — |
 | **标题** | 窗口身份（FR-003/Q7，Apple Notes 模式） | 内容首行标题框（唯一可见呈现）+ 原生 `window.title`（隐藏派生，Mission Control/窗口菜单/VoiceOver） | 内容层（标题栏不渲染标题文本） | 标题行内尾截断（不参与工具栏溢出体系） | 内容标题行尾截断 | `Note.title` 或内容首行 | 协调器 `updateWindowTitle(noteId:)`（host→window.title，隐藏） | 无 | 10.10 titleVisibility（= .hidden） |
 
 **禁止项**：无 title 工具栏项、无数字/文本项、无自定义间距项（弹性空间由系统工具栏布局提供）。
@@ -382,7 +382,7 @@ close（红绿灯/⌘W/菜单）
 
 ### 9.3 回归清单（spec 成功标准 15 + 用户输入全项）
 
-打开独立窗口 / 多笔记并存 / 帧恢复（位置+尺寸）/ 关闭行为（红绿灯、⌘W、自动删除语义）/ 内容持久化 / 富文本编辑 / 焦点 / 选区 / undo-redo / 复制粘贴 / 键盘导航 / 拖放（Finder 拖文件）/ 颜色 / 透明度 / 置顶 / 截图 / 图片插入（新）/ 附件 / 块插入 / Todo / Code / Screenshot 块 / 滚动 / 编辑中缩放 / popover 打开时缩放 / 激活失活。既有套件：NoteWindowLifecycleTests、WindowFramePersistenceTests、AppearanceIntegrationTests、NoteCaptureIntegrationTests、MenuChecklistTests、EditorBlockEditingTests、EditorPersistenceTests、ScreenshotCoverAndCaptureTests、FileReferenceAvailabilityTests、WidgetRefreshTests、DeletionToastIntegrationTests、LibraryExceptionGuaranteeTests、NoteContextualActionsTests。
+打开独立窗口 / 多笔记并存 / 帧恢复（位置+尺寸）/ 关闭行为（红绿灯、⌘W、自动删除语义）/ 内容持久化 / 富文本编辑 / 焦点 / 选区 / undo-redo / 复制粘贴 / 键盘导航 / 拖放（Finder 拖文件）/ 颜色 / 透明度 / 置顶 / 截图 / 图片插入（新）/ 附件 / 块插入 / Todo / Code / Screenshot 块 / 滚动 / 编辑中缩放 / popover 打开时缩放 / 激活失活。既有套件：NoteWindowLifecycleTests、WindowFramePersistenceTests、AppearanceIntegrationTests、NoteCaptureIntegrationTests、MenuChecklistTests、EditorBlockEditingTests、EditorPersistenceTests、ScreenshotCoverAndCaptureTests、FileReferenceAvailabilityTests、DeletionToastIntegrationTests、LibraryExceptionGuaranteeTests、NoteContextualActionsTests。
 
 ### 9.4 视觉验证（对原始问题态截图对比）
 

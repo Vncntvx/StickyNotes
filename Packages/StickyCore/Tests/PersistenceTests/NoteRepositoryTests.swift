@@ -56,7 +56,6 @@ import Domain
             transparency: 0.25,
             textSize: 18,
             alwaysOnTop: true,
-            widgetEligible: true,
             manualSortKey: 1024,
             lastModifiedDeviceId: Self.deviceId,
             createdAt: now,

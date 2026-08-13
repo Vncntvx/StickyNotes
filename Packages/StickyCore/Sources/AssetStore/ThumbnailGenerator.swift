@@ -9,7 +9,7 @@ import Domain
 // Per tasks.md T088 and plan §Asset storage:
 //
 // - Thumbnails are generated async, sized by longest edge for the card
-//   grid / widgets (SC-008: the card grid NEVER decodes a full-resolution
+//   grid (SC-008: the card grid NEVER decodes a full-resolution
 //   original).
 // - Lossless is preferred for text-heavy window captures (screenshots of
 //   text must stay crisp): PNG sources stay PNG; photographic content is
@@ -22,9 +22,9 @@ public enum ThumbnailGenerator {
     /// Default longest-edge size for card-grid thumbnails (points).
     ///
     /// Per FR-094a (clarified 2026-08-07): the single canonical thumbnail
-    /// size for card-grid and widget display is 256px on the longest edge.
+    /// size for card-grid display is 256px on the longest edge.
     /// Full-resolution screenshots and embedded images are NEVER decoded
-    /// for card-grid or widget rendering (SC-008).
+    /// for card-grid rendering (SC-008).
     public static let defaultLongestEdge = 256
 
     /// Whether a content type is "text-heavy" and should keep a lossless

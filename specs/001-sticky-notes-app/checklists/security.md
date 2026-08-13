@@ -44,7 +44,7 @@ complete, clear, consistent, measurable, and traceable.
 - [X] CHK021 - Does the "delete-vs-edit → recovered conflict copy" requirement (FR-173) align with the conflict-copy lifecycle and tombstone lifecycle in data-model (no silent loss, no resurrection)? [Consistency, Spec §FR-173 / data-model §Conflict-copy lifecycle / Tombstone lifecycle]
 - [X] CHK022 - Does FR-174 (30-day tombstone) align across spec, plan (tombstone retention + sync-safety), and contracts (encrypted-manifest tombstones + tombstone.schema.json deletedAt)? [Consistency, Spec §FR-174 / Contracts §tombstone.schema.json]
 - [X] CHK023 - Do the privacy-exclusion lists in FR-161 (remote cannot read) and FR-191 (logs/diagnostics cannot contain) use a consistent item set, or do they diverge in a way that implies a gap? [Consistency, Spec §FR-161 vs §FR-191]
-- [X] CHK024 - Does FR-009's widget deep-link rule (must not flip Dock policy) align with the deep-links contract (window uniqueness, no sync init) and FR-008 (Dock default-on, disable-able)? [Consistency, Spec §FR-008/FR-009 / Contracts §deep-links.md]
+- [X] CHK024 - Does the deep-link rule (must not flip Dock policy) align with the deep-links contract (window uniqueness, no sync init) and FR-008 (Dock default-on, disable-able)? [Consistency, Spec §FR-008/FR-009 / Contracts §deep-links.md]
 - [X] CHK025 - Does the file-reference requirement (only generic metadata syncs, FR-104/FR-105) align with data-model FileReference (no bookmark) vs FileLocator (device-local) and the block-payloads contract (fileRef payload has no path/bookmark)? [Consistency, Spec §FR-104 / data-model §FileReference / Contracts §block-payloads.schema.json]
 - [X] CHK026 - Does FR-153 (local editing must not wait for sync) align with FR-142 (network failures never block local editing) and SC-007 (offline work continues)? [Consistency, Spec §FR-142/FR-153/SC-007]
 
@@ -65,7 +65,7 @@ complete, clear, consistent, measurable, and traceable.
 - [X] CHK036 - Are Recovery scenario requirements defined for: interrupted manifest commit, interrupted upload/download, partial asset sync failure, and a device returning after remote object cleanup? [Coverage, Gap, Plan §Synchronization tests / data-model §Asset syncFailureState]
 - [X] CHK037 - Are Non-Functional scenario requirements defined for synchronization under network loss + restoration, and for bounded termination (sync must not block app quit indefinitely)? [Coverage, Spec §FR-152 / Plan §Sync engine]
 - [X] CHK038 - Are requirements defined for the conflict-copy deduplication case so retrying the same reconciliation does not create unbounded duplicates? [Coverage, Plan §Conflict model / data-model §Conflict-copy lifecycle]
-- [X] CHK039 - Are requirements defined for widget privacy when a note is widget-ineligible (no title/body/todo/screenshot/summary in timelines/previews/placeholders/snapshots/logs)? [Coverage, Spec §FR-112 / Contracts §deep-links.md]
+- [X] ~~CHK039~~ REMOVED 2026-08-13 (widget surface removal). [Coverage, Spec §FR-112 / Contracts §deep-links.md]
 - [X] CHK040 - Are requirements defined for permission denial graceful degradation (screen-recording denied → notes usable + screenshot explanation + open settings; accessibility denied → only advanced window-id unavailable)? [Coverage, Spec §FR-132/FR-133]
 
 ## Edge Case Coverage
@@ -76,7 +76,7 @@ complete, clear, consistent, measurable, and traceable.
 - [X] CHK044 - Is the "corrupt ciphertext / invalid tag / unexpected object context" edge case specified to fail closed without deleting local data or accepting the remote object? [Edge Case, Spec §FR-160 / Contracts §provider-errors.md]
 - [X] CHK045 - Is the "file-reference original moved or missing" edge case specified to preserve the card + offer relink, never auto-scan the filesystem or silently delete the card? [Edge Case, Spec §FR-103]
 - [X] CHK046 - Is the "multi-card referencing the same file after an explicit move" edge case specified (only the initiating card's bookmark updates; others report missing + relink)? [Edge Case, research.md R8]
-- [X] CHK047 - Is the "todo toggled from a widget while the note is open and being edited on another Mac" edge case specified to preserve stable todo identity and reconcile without loss? [Edge Case, Spec §FR-071 / data-model §TodoItem]
+- [X] CHK047 - Is the "todo toggled on one Mac while the note is open and being edited on another Mac" edge case specified to preserve stable todo identity and reconcile without loss? [Edge Case, Spec §FR-071 / data-model §TodoItem]
 - [X] CHK048 - Is the "self-signed certificate changes after pinning" edge case specified to reject with a clear warning and require re-confirmation? [Edge Case, Plan §WebDAV adapter / research.md R13]
 - [X] CHK049 - Is the "Keychain unavailable / corrupt bootstrap" edge case specified for both local secret retrieval and vault opening? [Edge Case, Plan §Security tests]
 - [X] CHK050 - Is the "S3-compatible ETag/conditional-write variance across providers" edge case specified so the manifest-as-serialization-point design holds (AWS S3, R2, MinIO, B2)? [Edge Case, Plan §S3-compatible adapter / research.md R11]

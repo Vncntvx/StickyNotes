@@ -24,7 +24,6 @@ public enum ContentDivergence {
         guard local.transparency == remote.transparency else { return false }
         guard local.textSize == remote.textSize else { return false }
         guard local.alwaysOnTop == remote.alwaysOnTop else { return false }
-        guard local.widgetEligible == remote.widgetEligible else { return false }
         guard local.coverScreenshotBlockId == remote.coverScreenshotBlockId else { return false }
         guard local.lifecycleState == remote.lifecycleState else { return false }
         guard local.trashedAt == remote.trashedAt else { return false }

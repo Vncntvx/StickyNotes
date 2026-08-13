@@ -11,7 +11,7 @@ main package.
 | Prototype | Research | Verifies | Headless? | Status |
 |-----------|----------|----------|-----------|--------|
 | `MarkdownUndoPrototype` | R1/R5 | Markdown conversion with single-Undo via production `EditorCore` | ✅ yes | ✅ PASS (9 checks) |
-| `AppGroupGRDBPrototype` | R6 | GRDB `DatabasePool` WAL across two processes in the App Group container; widget-role never migrates | ✅ yes | ✅ PASS |
+| ~~`AppGroupGRDBPrototype`~~ | ~~R6~~ | ~~GRDB `DatabasePool` WAL across two processes in the App Group container; widget-role never migrates~~ | ✅ yes | ✅ REMOVED 2026-08-13 (widget + App Group removal) |
 | `GlobalShortcutPrototype` | R5 | Carbon `RegisterEventHotKey`: no Accessibility required, conflict detected, unregister/re-register | ✅ criteria 1–3 | ✅ PASS (criteria 1–3); fire test interactive (`--wait`) |
 | `Argon2idPrototype` | R9 | SwiftArgon2 v1.0.4: RFC 9106 vector, determinism, wrong-password, 64 MiB KEK bounds | ✅ yes | ✅ PASS (5 checks) |
 | `RichTextIMEPrototype` | R1/R16 | SwiftUI `TextEditor` + `AttributedString` with Chinese IME; canonical NFC round-trip | ❌ GUI | ✅ compiles; interactive run required (IME typing + round-trip button) |
@@ -52,9 +52,8 @@ happens in US9 (T111) with the selection above.
 ## How to run
 
 ```bash
-swift build                                      # builds all 7 prototypes
+swift build                                      # builds all 6 prototypes
 swift run MarkdownUndoPrototype                  # headless, exit 0 = PASS
-swift run AppGroupGRDBPrototype                  # headless, spawns reader child
 swift run GlobalShortcutPrototype                # headless criteria 1–3
 swift run GlobalShortcutPrototype --wait 10      # interactive fire test
 swift run Argon2idPrototype                      # headless, exit 0 = PASS
@@ -117,10 +116,6 @@ launched via `open`).
   first capture invocation per FR-131; region drag-capture succeeds). They
   must be launched as `.app` bundles (see "How to run") — `swift run` cannot
   activate windows/IME on macOS 27 beta.
-- `AppGroupGRDBPrototype` uses a temp directory (the literal App Group
-  container path `~/Library/Group Containers/…` is entitlement-gated — an
-  unsandboxed CLI cannot create it under macOS TCC; the entitlement path is
-  covered by the app target, T005). It leaves a `stickynotes.sqlite` behind
-  in its temp dir (OS-cleaned).
-- `swift run AppGroupGRDBPrototype` cannot be executed in a TCC-protected
-  context twice concurrently — each run uses a unique temp path.
+- ~~`AppGroupGRDBPrototype`~~ removed 2026-08-13 with the widget surface and
+  the App Group container (R6 is superseded — the SQLite database now lives
+  in the app sandbox container).

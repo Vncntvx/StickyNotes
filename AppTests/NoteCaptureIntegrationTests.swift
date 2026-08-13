@@ -12,7 +12,7 @@ import AppKit
 // preserved; one window per note, focus not duplicate; FR-007a new-note-
 // window focus.
 //
-// The NoteWindowCoordinator requires a live App Group container for full
+// The NoteWindowCoordinator requires a live sandbox container for full
 // window integration; the repository-level flow (create → fetch → reopen →
 // content preserved) is verified here against an in-memory store, and the
 // one-window-per-note registry logic is verified via the SystemBridge

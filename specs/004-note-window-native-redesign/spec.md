@@ -180,7 +180,7 @@
 - 不重设计笔记数据模型、不替换 NSTextView/富文本存储、不重设计全部块类型、不引入仅用于外观的自定义 NSWindow 子类、不做跨平台工具栏、不模仿 iOS 导航栏、不把整条笔记变成透明玻璃、不引入自定义窗口关闭按钮、不添加与交互无关的装饰动画、不要求既有笔记动作全部常驻可见（描述 Non-Goals 原样采用）。
 - 不重设计 Library / 设置 / Trash / 菜单栏窗口（003 已交付范围）。
 - 不改变同步引擎、加密、契约 schema（003 FR-090 语义）。
-- 不改变 WidgetExtension 呈现（003 Assumptions 语义）。
+- ~~不改变 WidgetExtension 呈现（003 Assumptions 语义）。~~（WidgetExtension 已移除 2026-08-13；本特性的 More 菜单不再含 widget 项，T022 已同步。）
 
 ## Requirements *(mandatory)*
 

@@ -132,7 +132,7 @@ import AssetStore
     @Test
     func conflictCopiesCreatedIsCountedInSummary() async throws {
         // T302 (FR-110a): the sync summary counts new conflict copies so the
-        // app can refresh the affected widget kinds.
+
         let vault = try await fastVault()
         let provider = LocalProvider()
         let (_, storeB, _) = try await createDivergence(provider: provider, vault: vault)

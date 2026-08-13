@@ -12,7 +12,7 @@ belong in `tasks.md` (generated later by `/speckit-tasks`).
 - **macOS**: 26 or later (the minimum deployment target; preserved regardless of
   the dev machine's own OS version).
 - **Xcode**: 26.x (preferred 26.6). A full Xcode install is required — the
-  Command Line Tools alone cannot build the app/Widget targets or host XCUITest.
+  Command Line Tools alone cannot build the app target or host XCUITest.
   See [research.md](./research.md) R0 for the toolchain note recorded during
   planning.
 - **Swift**: 6.3, Swift 6 language mode, strict concurrency.
@@ -47,18 +47,17 @@ xcodebuild build \
   CODE_SIGNING_ALLOWED=NO
 ```
 
-## Placeholder App Group + entitlements setup
+## Entitlements and local storage
 
-The app and Widget Extension share an App Group container. Until a final bundle
-identifier is chosen, use a placeholder App Group identifier (e.g.
-`group.local.stickynotes.placeholder`) configured identically in both targets'
-entitlements:
+> **REMOVED 2026-08-13**: the App Group container and the WidgetExtension target
+> were removed with the widget surface (see spec.md US8 note). The SQLite
+> database and assets now live in the app's own sandbox container
+> (`Library/Application Support` inside `~/Library/Containers/<bundle-id>/`),
+> and device-local preferences use the standard UserDefaults domain.
 
-- `App/Resources/StickyNotes.entitlements`: `com.apple.security.application-groups`
-  entry + sandbox + `com.apple.security.files.user-selected.read-write` (+ write
-  for screenshot Save As).
-- `WidgetExtension/WidgetExtension.entitlements`: same App Group entry (read +
-  limited write) so widgets can read the shared SQLite DB.
+- `App/Resources/StickyNotes.entitlements`: sandbox +
+  `com.apple.security.files.user-selected.read-write` (+ write for screenshot
+  Save As) + network client. No `application-groups` entry.
 
 `PrivacyInfo.xcprivacy` lives under `App/Resources/` and documents screen-
 recording usage (capture) only.
@@ -70,8 +69,8 @@ Open `StickyNotes.xcodeproj` in Xcode, select the `StickyNotes` scheme, and run
 
 ## Validating the first-launch experience (FR-014a)
 
-On a fresh install (delete the App Group container first — see *Resetting local
-development data*):
+On a fresh install (delete the app sandbox container first — see *Resetting
+local development data*):
 
 1. Launch the app and open the menu-bar library: the card grid is empty with a
    clear call-to-action to create the first note (button and keyboard
@@ -123,9 +122,6 @@ These scenarios validate the behavior fixed by the latest spec clarifications:
 - **Scale limits (FR-090b)**: pasting an image over 50 MB or 16,384 px longest
   edge is rejected with a localized explanation and no partial asset;
   oversized note content is refused while the last valid state is preserved.
-- **Widget change-driven refresh (FR-110a)**: with a widget configured, edit
-  or todo-toggle the displayed note in the main app and confirm the widget
-  updates shortly after without any fixed polling interval of its own.
 - **Empty-block behavior (FR-050a)**: clear a paragraph mid-note — it stays
   while the cursor remains, is removed when the cursor exits, and a single
   Undo restores it; the final paragraph of a note is never removed.
@@ -133,12 +129,6 @@ These scenarios validate the behavior fixed by the latest spec clarifications:
   canonical hex; opacity steps are 5% in 40%–100%; at any custom
   color + opacity step the text meets WCAG 2.2 AA (auto foreground
   adjustment applies below 100%).
-
-## Running the Widget Extension
-
-Select the `WidgetExtension` scheme and run (⌘R) onto the desktop to add a
-widget. Configure a widget via its App Intent (select a note) to validate deep
-links and todo-toggle-by-UUID.
 
 ## Running tests
 
@@ -171,8 +161,7 @@ xcodebuild test \
 
 `StickyCore/Tests/PersistenceTests` walks every historical schema fixture
 (`Fixtures/schema_vN.sqlite`) forward to current and asserts row integrity, plus
-an interrupted-migration recovery case (backup restore) and a widget schema-
-mismatch fallback case.
+an interrupted-migration recovery case (backup restore).
 
 ### Editor tests
 
@@ -224,9 +213,10 @@ CI secrets (never committed):
 
 ## Resetting local development data
 
-Remove the App Group container + Keychain entries to start clean:
+Remove the app sandbox container + Keychain entries to start clean:
 
-- Delete the App Group container directory for the placeholder group.
+- Delete the app's sandbox container directory
+  (`~/Library/Containers/local.stickynotes.app/`).
 - Remove the app's Keychain items (WebDAV/S3 credentials, remembered vault key,
   cert trust records).
 - Relaunch the app to recreate a fresh database (Milestone 1 behavior).
@@ -242,9 +232,7 @@ recent sanitized logs — no note content, file names, paths, or secrets.
 
 ## Building without code signing (local tests)
 
-Pass `CODE_SIGNING_ALLOWED=NO` for local debug builds (see above). The Widget
-Extension requires the App Group entitlement to be resolvable locally; for
-widget testing on your own machine, a self-signed development identity suffices.
+Pass `CODE_SIGNING_ALLOWED=NO` for local debug builds (see above).
 
 ## Running the AppUITests launch smoke test
 
@@ -272,7 +260,7 @@ sign with a STABLE identity once and reuse it:
 scripts/sign-local.sh
 ```
 
-`sign-local.sh` builds Debug, signs app + widget with the local Apple
+`sign-local.sh` builds Debug, signs the app with the local Apple
 Development certificate (override via `IDENTITY=...`), and launches the app —
 Keychain only asks the first time. CI keeps using ad-hoc signing (no
 keychain on runners; the UI smoke journeys do not touch Keychain).
@@ -283,7 +271,7 @@ keychain on runners; the UI smoke journeys do not touch Keychain).
   tests.
 - Do not paste real provider credentials into Settings files, fixtures, or
   documentation.
-- `.gitignore` must exclude the App Group container, derived data, and any local
-  `.env`-style credential files.
+- `.gitignore` must exclude the app sandbox container, derived data, and any
+  local `.env`-style credential files.
 - The `sync-profile-export` contract carries NO secrets (see
   [contracts/sync-profile-export.schema.json](./contracts/sync-profile-export.schema.json)).

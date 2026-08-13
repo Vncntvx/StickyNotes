@@ -18,7 +18,7 @@ CI 目标工具链为 Xcode 26.x / Swift 6.3 / macOS 26.0 部署目标（见 `Do
 # StickyCore 全部测试（8 目标 92 套件）
 DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer swift test --package-path Packages/StickyCore
 
-# App/Widget 构建（无签名）
+# App 构建（无签名）
 DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild build -project StickyNotes.xcodeproj -scheme StickyNotes -configuration Debug CODE_SIGNING_ALLOWED=NO
 
 # AppTests + AppUITests（44 + 5 套件；UI 测试需交互桌面会话）

@@ -77,7 +77,7 @@ description: "Task list for feature 004: 独立笔记窗口原生镀铬与自适
 - [X] T019 [US1] 上下文菜单迁移：内容区 `.contextMenu` 承载复制笔记/复制为 Markdown/导出 JSON…/移入废纸篓/外观子菜单/小组件项（原 NoteControlsView 上下文菜单语义，001 FR-031）
 - [X] T020 [US1] Pin 工具栏项：`NoteToolbarController` 中置顶项——NSButton（`bezelStyle = .toolbar`，macOS 26 guard 内 `.glass`，`setButtonType(.toggle)`）、图标 pin/pin.fill 随 state、`visibilityPriority = .high`（FR-015a）、`menuFormRepresentation` = 带 state 的 toggle NSMenuItem、tooltip + `accessibilityValue` 开/关；动作 → `coordinator.updateAlwaysOnTop`（唯一入口）；`observe` host `alwaysOnTop` 刷新状态；切换零几何位移
 - [X] T021 [US1] View 菜单置顶项：`App/Sources/App/StickyNotesApp.swift` 增加 "Always on Top"（toggle，作用于 key 笔记窗口）+ `App/Sources/App/MenuCommands.swift` 目录条目（003 FR-072 语义）
-- [X] T022 [US1] More 工具栏项：ellipsis.circle 按钮 + NSMenu（复制笔记/复制为 Markdown/导出 JSON…/移入废纸篓 ⌘⌫/分隔/允许小组件 toggle/设为小组件笔记·移除），复用 `NoteWindowContent` 既有闭包（duplicate/copy/export/moveToTrash/widget 选择），`menuFormRepresentation` 同源
+- [X] T022 [US1] More 工具栏项：ellipsis.circle 按钮 + NSMenu（复制笔记/复制为 Markdown/导出 JSON…/移入废纸篓 ⌘⌫），复用 `NoteWindowContent` 既有闭包（duplicate/copy/export/moveToTrash），`menuFormRepresentation` 同源
 - [X] T023 [US1] 窗口管理修复：`StickyNotesApp.swift` `toggleNoteWindows` 改用 `NoteWindowBridge.allRegistrations()` 过滤（不再按 title，R2）
 - [X] T024 [US1] 删除 `App/Sources/Features/NoteWindow/NoteControlsView.swift`（T017–T019 迁移完成后，确认无引用）
 - [X] T025 [US1] 验证：全量 `xcodebuild test`（生命周期/帧持久化/外观/上下文/捕获/MenuChecklist 套件）+ quickstart §3.1 手动走查（标题/关闭重开/置顶/接缝）+ 置顶切换前后截图对比（几何零位移，FR-007）

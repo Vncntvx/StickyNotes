@@ -6,7 +6,7 @@ import Persistence
 
 // MARK: - P1 independence gate tests (T135a, SC-009)
 //
-// Run all P1 acceptance scenarios (US1–US6) with sync disabled, no widgets
+// Run all P1 acceptance scenarios (US1–US6) with sync disabled
 // configured, no screenshots captured, no screen-recording permission
 // granted; assert each P1 story is independently demonstrable. Covered by
 // AppLogicTests.p1FeaturesWorkWithoutP2P3Configuration (US1–US6 lifecycle

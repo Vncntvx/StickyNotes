@@ -192,7 +192,7 @@ tmbootpicker.efi
 
 # ----------------------------------------------------------------------------
 # StickyNotes project-specific (T010 / quickstart.md §Avoiding committing
-# secrets). Constitution VI/VIII: never commit App Group container data,
+# secrets). Constitution VI/VIII: never commit app sandbox container data,
 # derived data, local credential/env files, or anything containing note
 # content / file paths / secrets.
 # ----------------------------------------------------------------------------
@@ -216,11 +216,10 @@ Packages/*/Package.resolved
 #  above exception preserves the StickyCore one if it lives at the package
 #  root. The xcodeproj-level Package.resolved is also committed.)
 
-# App Group container (NEVER commit — may contain real note content/DB/assets)
-# The placeholder group id is `group.local.stickynotes.placeholder`.
-# This path is typically under ~/Library/Group Containers/<group-id>/.
-# The pattern below is a defensive catch for accidental copies.
-group.local.stickynotes.placeholder/
+# App sandbox container (NEVER commit — may contain real note content/DB/
+# assets). Lives under ~/Library/Containers/<bundle-id>/; the pattern below
+# is a defensive catch for accidental copies.
+local.stickynotes.app/
 
 # Local credential / env files (NEVER commit real credentials)
 .env

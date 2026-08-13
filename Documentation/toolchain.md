@@ -18,8 +18,8 @@ are preserved regardless of the dev machine's own OS version.
 | SwiftPM             | pinned via `Package.resolved`                |
 | Test frameworks     | Swift Testing (primary), XCTest (where Apple APIs require), XCUITest (critical UI) |
 
-A full Xcode install is **required** to build the app and WidgetExtension
-targets, host XCUITest, and run XCTest-based suites.
+A full Xcode install is **required** to build the app target, host
+XCUITest, and run XCTest-based suites.
 
 ## Detected on this dev machine (verified 2026-08-07)
 
@@ -55,7 +55,7 @@ tools). Verified: with that prefix, `swift test` runs all suites green.
 # StickyCore package:
 DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer swift test --package-path Packages/StickyCore
 
-# App / Widget targets:
+# App target:
 DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild build -project StickyNotes.xcodeproj -scheme StickyNotes -configuration Debug CODE_SIGNING_ALLOWED=NO
 DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild test  -project StickyNotes.xcodeproj -scheme StickyNotes -destination 'platform=macOS'
 ```
@@ -63,7 +63,7 @@ DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild test  -
 ### What this machine CAN do (with the DEVELOPER_DIR prefix)
 
 - Build and unit-test the entire StickyCore Swift package (all 7 modules + 7 test targets) — Swift Testing suites run green.
-- Build the App and WidgetExtension targets via `xcodebuild` (once `StickyNotes.xcodeproj` exists — T001).
+- Build the App target via `xcodebuild` (once `StickyNotes.xcodeproj` exists — T001).
 - Run XCUITest and XCTest-based suites.
 - Build and run all Milestone 0 prototypes (`Prototypes/`).
 - Verify that GRDB.swift and SwiftArgon2 resolve and link.
@@ -79,9 +79,10 @@ DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild test  -
 The M0 hard gate is **partially** satisfied. `Prototypes/README.md` carries
 the full per-prototype report; the status is mirrored here:
 
-- **Headless prototypes** (MarkdownUndo, AppGroupGRDB, GlobalShortcut
-  criteria 1–3, Argon2id) — **PASS** on this machine (verified via
-  `DEVELOPER_DIR=… swift run …`).
+- **Headless prototypes** (MarkdownUndo, GlobalShortcut criteria 1–3,
+  Argon2id) — **PASS** on this machine (verified via
+  `DEVELOPER_DIR=… swift run …`). (AppGroupGRDB prototype removed
+  2026-08-13 with the widget surface.)
 - **GUI prototypes** (RichTextIME, WindowCoordinator, ScreenCapture) —
   **compile** against the macOS 27 SDK; their interactive criteria (real
   IME typing, window focus/floating, region-drag capture, permission
@@ -145,13 +146,12 @@ property, available since macOS 10.5 — no guard), and the SwiftUI
 
 ## Reconciliation with `tasks.md` T001 / `quickstart.md`
 
-- `tasks.md` T001 says: "Create Xcode workspace with macOS app target `App` and Widget Extension target `WidgetExtension`".
+- `tasks.md` T001 says: "Create Xcode workspace with macOS app target `App`" (the Widget Extension target was removed 2026-08-13).
 - `quickstart.md` uses `StickyNotes.xcodeproj` / scheme `StickyNotes`.
 
 Reconciliation: the project file is named `StickyNotes.xcodeproj` (matches
-`quickstart.md`); it contains an app target named `StickyNotes` (scheme
-`StickyNotes`) and a Widget Extension target named `WidgetExtension`.
-The `App/` directory holds the app target's sources; the `WidgetExtension/`
-directory holds the widget target's sources. This naming is consistent with
-both documents: T001's `App` refers to the directory/target-role,
-`quickstart.md`'s `StickyNotes` refers to the project/scheme/app-target name.
+`quickstart.md`); it contains one app target named `StickyNotes` (scheme
+`StickyNotes`). The `App/` directory holds the app target's sources. This
+naming is consistent with both documents: T001's `App` refers to the
+directory/target-role, `quickstart.md`'s `StickyNotes` refers to the
+project/scheme/app-target name.

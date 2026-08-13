@@ -305,7 +305,6 @@ public final class SQLiteNoteRepository: NoteRepository, BlockRepository, Sendab
             transparency: row["transparency"] ?? 1.0,
             textSize: row["textSize"] ?? 13,
             alwaysOnTop: row["alwaysOnTop"] ?? false,
-            widgetEligible: row["widgetEligible"] ?? true,
             coverScreenshotBlockId: (row["coverScreenshotBlockId"] as String?).flatMap { UUID(uuidString: $0) },
             manualSortKey: row["manualSortKey"] ?? 0,
             lifecycleState: NoteLifecycleState(rawValue: row["lifecycleState"] ?? "") ?? .active,
@@ -442,10 +441,10 @@ public final class SQLiteNoteRepository: NoteRepository, BlockRepository, Sendab
             sql: """
                 INSERT INTO note (
                     id, title, colorKey, customColor, transparency, textSize,
-                    alwaysOnTop, widgetEligible, coverScreenshotBlockId, manualSortKey,
+                    alwaysOnTop, coverScreenshotBlockId, manualSortKey,
                     lifecycleState, trashedAt, conflictOriginNoteId, conflictLabel,
                     versionId, parentVersionId, lastModifiedDeviceId, createdAt, modifiedAt
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
             arguments: [
                 note.id.uuidString,
@@ -455,7 +454,6 @@ public final class SQLiteNoteRepository: NoteRepository, BlockRepository, Sendab
                 note.transparency,
                 note.textSize,
                 note.alwaysOnTop,
-                note.widgetEligible,
                 note.coverScreenshotBlockId?.uuidString,
                 note.manualSortKey,
                 note.lifecycleState.rawValue,
@@ -481,7 +479,6 @@ public final class SQLiteNoteRepository: NoteRepository, BlockRepository, Sendab
                     transparency = ?,
                     textSize = ?,
                     alwaysOnTop = ?,
-                    widgetEligible = ?,
                     coverScreenshotBlockId = ?,
                     manualSortKey = ?,
                     lifecycleState = ?,
@@ -501,7 +498,6 @@ public final class SQLiteNoteRepository: NoteRepository, BlockRepository, Sendab
                 note.transparency,
                 note.textSize,
                 note.alwaysOnTop,
-                note.widgetEligible,
                 note.coverScreenshotBlockId?.uuidString,
                 note.manualSortKey,
                 note.lifecycleState.rawValue,
@@ -537,7 +533,6 @@ public final class SQLiteNoteRepository: NoteRepository, BlockRepository, Sendab
             transparency: row["transparency"] ?? 0.0,
             textSize: row["textSize"] ?? 13,
             alwaysOnTop: row["alwaysOnTop"] ?? false,
-            widgetEligible: row["widgetEligible"] ?? true,
             coverScreenshotBlockId: (row["coverScreenshotBlockId"] as String?).flatMap { UUID(uuidString: $0) },
             manualSortKey: row["manualSortKey"] ?? 0,
             lifecycleState: NoteLifecycleState(rawValue: row["lifecycleState"] ?? "") ?? .active,

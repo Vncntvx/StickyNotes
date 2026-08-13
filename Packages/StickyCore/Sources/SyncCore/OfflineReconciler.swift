@@ -141,7 +141,6 @@ public enum OfflineReconciler {
                     transparency: row["transparency"] ?? 1.0,
                     textSize: row["textSize"] ?? 13,
                     alwaysOnTop: row["alwaysOnTop"] ?? false,
-                    widgetEligible: row["widgetEligible"] ?? true,
                     coverScreenshotBlockId: (row["coverScreenshotBlockId"] as String?).flatMap { UUID(uuidString: $0) },
                     manualSortKey: row["manualSortKey"] ?? 0,
                     lifecycleState: NoteLifecycleState(rawValue: row["lifecycleState"] ?? "") ?? .active,

@@ -10,7 +10,7 @@ contributors.
 A modular monolith, macOS 26+, Swift 6 language mode, strict concurrency:
 
 ```text
-App (SwiftUI) + WidgetExtension
+App (SwiftUI)
         │
         ├── SystemBridge   (AppKit/Carbon/ScreenCaptureKit/Security bookmarks)
         ├── EditorCore     (Markdown FSM, block ops, canonical conversion)
@@ -20,14 +20,15 @@ App (SwiftUI) + WidgetExtension
                 └── Domain ◄── Persistence (GRDB: WAL, FTS5, migrations)
 ```
 
-Dependencies point downward only; Domain is Foundation-only. The App and
-Widget targets depend on the package; the Widget links only Domain +
-Persistence + GRDB (never SyncCore/SecurityCore).
+Dependencies point downward only; Domain is Foundation-only. The App
+target depends on the package. (The WidgetExtension target was removed
+2026-08-13 with the widget surface.)
 
 ## Local storage
 
-- App Group container: SQLite (WAL, FTS5 external-content), asset bytes
-  (originals/thumbnails/appIcons), first-launch prefs (UserDefaults).
+- App sandbox container (`Library/Application Support`): SQLite (WAL, FTS5
+  external-content), asset bytes (originals/thumbnails/appIcons),
+  first-launch prefs (standard UserDefaults).
 - Keychain: sync credentials + remembered unlocked key material.
 - One SQLite schema version per release; ordered named migrations
   (m0001…), pre-migration backup + interrupted-migration recovery.

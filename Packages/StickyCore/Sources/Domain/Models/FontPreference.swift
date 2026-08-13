@@ -4,7 +4,7 @@ import Foundation
 //
 // Per tasks.md T142 and spec FR-043: a global font preference with Chinese +
 // English fallback selection for unsupported glyphs. Persisted device-locally
-// (App Group UserDefaults via the App layer); never synchronized, never in
+// (standard UserDefaults via the App layer); never synchronized, never in
 // canonical JSON (it is a device-level preference, not note content).
 //
 // The model is Foundation-only and language-neutral: it stores font family

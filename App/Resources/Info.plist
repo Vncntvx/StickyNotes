@@ -42,7 +42,7 @@
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
     <!--
-        URL scheme for deep links (plan §Widgets): note open, new, search.
+        URL scheme for deep links: note open, new, search.
         Placeholder scheme until final bundle id chosen.
     -->
     <key>CFBundleURLTypes</key>

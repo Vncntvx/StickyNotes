@@ -10,10 +10,10 @@ generated separately by `/speckit-tasks`.
 
 Build a native, menu-bar-primary sticky-notes application for macOS 26 and
 later. The product is a modular monolith: one Xcode workspace with a macOS app
-target, a Widget Extension target, and one local Swift package (`StickyCore`)
+target and one local Swift package (`StickyCore`)
 holding seven library modules (Domain, Persistence, EditorCore,
-AssetStore, SecurityCore, SyncCore, SystemBridge, plus the App/Widget UI
-targets). The local SQLite database (via GRDB, WAL, FTS5) is the source of
+AssetStore, SecurityCore, SyncCore, SystemBridge, plus the App UI
+target). The local SQLite database (via GRDB, WAL, FTS5) is the source of
 truth; optional end-to-end-encrypted synchronization to exactly one WebDAV or
 S3-compatible repository is an additive layer that never blocks local editing.
 Delivery is split into five milestones (M0 prototypes → M1 local core → M2
@@ -31,10 +31,10 @@ see Toolchain note). All
 other capabilities use Apple frameworks and project-owned code (no AWS SDK, no
 third-party UI/editor/state/DI/networking frameworks, no analytics SDK).
 
-**Storage**: App Group container holding the SQLite database and binary assets
-(originals, thumbnails, app icons, sync staging) outside SQLite; Keychain for
-credentials and remembered unlocked key material. GRDB `DatabasePool` with WAL
-mode for main-app + widget concurrent access.
+**Storage**: the app sandbox `Application Support` directory holding the
+SQLite database and binary assets (originals, thumbnails, app icons, sync
+staging) outside SQLite; Keychain for credentials and remembered unlocked
+key material. GRDB `DatabasePool` with WAL mode.
 
 **Testing**: Swift Testing for most unit/integration tests; XCTest where Apple
 APIs/performance measurement require it; XCUITest for critical UI journeys.
@@ -43,8 +43,8 @@ and performance test suites.
 
 **Target Platform**: macOS 26 and later (see Toolchain note).
 
-**Project Type**: Native macOS desktop application with a Widget Extension and a
-local Swift package for shared domain/infrastructure code. Modular monolith; no
+**Project Type**: Native macOS desktop application with a local Swift package
+for shared domain/infrastructure code. Modular monolith; no
 server-side application.
 
 **Performance Goals**: Warm menu-bar presentation ≤150 ms; initial card content
@@ -87,7 +87,7 @@ preserved regardless.
 | III | Local-first & offline-complete | SQLite local DB is source of truth; all core features work offline; auto-save; sync never blocks local writes; no developer backend. | PASS |
 | IV | Explicit, durable, versioned data | GRDB SQLite; UUID IDs; ordered migrations; versioned canonical JSON; project-owned rich-text format; no platform archives; atomic asset writes with SHA-256. | PASS |
 | V | Structured editor integrity | Seamless block model (6 categories); stable todo UUIDs; Markdown as input convenience with single-Undo; title optional; no syntax highlighting/execution. | PASS |
-| VI | Privacy & least privilege | No analytics/telemetry; OSLog with privacy annotations; permissions on-demand only; per-note widget privacy; privacy document in M4. | PASS |
+| VI | Privacy & least privilege | No analytics/telemetry; OSLog with privacy annotations; permissions on-demand only; privacy document in M4. | PASS |
 | VII | E2E encryption by design | Argon2id KEK + random master key + HKDF object keys + AES-GCM + Keychain; no custom crypto; password re-wrap; contextual AAD; fail-closed; documented vectors. | PASS |
 | VIII | Correct, non-destructive sync | One repo at a time; per-object encryption; idempotent/retry-safe/cancelable; conflict copies not overwrite; tombstones 30 days; HTTPS only; Keychain creds. | PASS |
 | IX | File references not cloud attachments | References not copies; security-scoped bookmarks device-local; only generic metadata syncs; file content never syncs; explicit move with confirmation. | PASS |
@@ -103,7 +103,7 @@ encryption, data integrity, conflict preservation, or destructive-action safety.
 > **2026-08-07 clarification propagation**: The 26 product clarifications from
 > six `/speckit-clarify` sessions (FR-001a/FR-012a/FR-014a/FR-014b/FR-020a/
 > FR-022a/FR-022b/FR-031a/FR-040a/FR-041a/FR-043a/FR-050a/FR-054/FR-090a/
-> FR-090b/FR-094a/FR-094b/FR-095a/FR-110a/FR-140a/FR-141a/FR-152a/FR-160a–e/
+> FR-090b/FR-094a/FR-094b/FR-095a/FR-140a/FR-141a/FR-152a/FR-160a–e/
 > FR-162a/FR-174/FR-180a/FR-191 + wrong-vault edge case) are encoded in
 > spec.md and reflected in the corresponding sections below. None alter the
 > architecture; all add testable acceptance criteria. The full propagation
@@ -155,7 +155,6 @@ ProjectRoot/
 │   │   │                        #   Search, Settings, SyncStatus, Permissions
 │   │   └── Resources/           # Assets, String Catalogs (en, zh-Hans),
 │   │                            #   PrivacyInfo.xcprivacy, entitlements
-├── WidgetExtension/             # WidgetKit + AppIntents target
 ├── Packages/
 │   └── StickyCore/              # Local Swift package: 7 library modules + tests
 │       ├── Package.swift
@@ -190,9 +189,7 @@ persistence, editor, asset, security, sync, system bridge, UI) and enforce the
 dependency direction below at the compiler level. This avoids excessive
 micro-modules (each module has a clear, broad responsibility) while keeping
 AppKit, GRDB, URLSession, and Keychain out of Domain and out of each other's
-internals. The App and WidgetExtension targets depend on the package; the Widget
-target imports only the minimal Domain + Persistence surface and never links
-SyncCore/SecurityCore.
+internals. The App target depends on the package.
 
 ## Architecture
 
@@ -201,7 +198,6 @@ SyncCore/SecurityCore.
 ```text
                         ┌───────────────┐
                         │   App (UI)    │
-                        │ WidgetExt(UI) │
                         └───────┬───────┘
                                 │
    ┌────────────┬───────────────┼────────────────┬──────────────┐
@@ -236,7 +232,7 @@ Enforced rules:
 - **SystemBridge** depends on Domain + AppKit/Carbon/ScreenCaptureKit/Security
   (bookmarks). All AppKit/lower-level APIs are isolated here.
 - **App UI** depends on package protocols, not concrete DB/provider types where
-  practical. **WidgetExtension** depends only on minimal Domain + Persistence.
+  practical.
 - No circular dependencies (enforced by SwiftPM target graph).
 
 Dependency injection is via explicit initializers and a small `AppEnvironment`
@@ -269,7 +265,7 @@ Dependency injection is via explicit initializers and a small `AppEnvironment`
   the sync-status area shows "not configured" (never an error). A brief,
   dismissible onboarding hint explains auto-save and the menu-bar-primary
   model;   the hint is   never shown again after the first note is created. The
-  dismissed/seen state is a device-local preference (App Group UserDefaults),
+  dismissed/seen state is a device-local preference (standard UserDefaults),
   never synchronized and never in canonical JSON.
 - **Unified empty-state (FR-014c, clarified 2026-08-07)**: search
   no-results and empty-Trash MUST both render a single reusable empty-state
@@ -312,9 +308,9 @@ decoder actor. All cross-actor handoffs pass `Sendable` value types or
 
 ### Local storage
 
-- **App Group container**: SQLite DB, asset originals, thumbnails, app-icon
-  snapshots, sync staging, non-sensitive shared widget settings.
-- **App Group UserDefaults (device-local, never synced)**: non-sensitive local
+- **Sandbox Application Support**: SQLite DB, asset originals, thumbnails,
+  app-icon snapshots, sync staging.
+- **Standard UserDefaults (device-local, never synced)**: non-sensitive local
   preferences such as the first-launch onboarding-hint dismissed/seen state
   (FR-014a) and Dock-icon preference mirror. No credentials, note content, or
   secrets ever live here.
@@ -325,11 +321,7 @@ decoder actor. All cross-actor handoffs pass `Sendable` value types or
 - GRDB `DatabasePool`, WAL mode, bounded busy timeout of 5 seconds (FR-140a),
   short write transactions. Manual-order sort keys use a 1024 gap with
   renormalization of a contiguous run when any adjacent gap falls below 64,
-  executed within a single transaction (FR-022a). Main app owns migrations;
-  widgets detect unsupported schema and fall back to privacy-safe placeholders
-  read-only. Widget read transactions MUST be short enough to complete well
-  within the 5s timeout; on timeout the widget reports a sanitized
-  "temporarily unavailable" status (never a raw error or note content).
+  executed within a single transaction (FR-022a). Main app owns migrations.
   Integrity checking, pre-migration backup, interrupted-migration recovery. A
   test fixture for every historical schema version.
 
@@ -413,12 +405,12 @@ decoder actor. All cross-actor handoffs pass `Sendable` value types or
   whitespace-inferred. Maximum nesting depth of 6 levels (FR-072a); indent
   disabled at depth 6; validation rejects deeper hierarchies.
 - Completion/incompletion, reorder, indent/outdent, child relationships, stable
-  widget updates, sync conflict preservation. Completing a parent does NOT
+  sync conflict preservation. Completing a parent does NOT
   silently change children (spec does not require it).
 - Validation prevents: cycles, invalid parent refs, nesting deeper than 6
   (FR-072a), unnormalizable sort-key collisions, orphaned children after
   deletion.
-- Pointer + keyboard operations. Widget todo actions address items by UUID.
+- Pointer + keyboard operations. Todo actions address items by UUID.
 
 ### Code blocks
 
@@ -482,15 +474,16 @@ decoder actor. All cross-actor handoffs pass `Sendable` value types or
 
 ### Asset storage
 
-- Binary assets outside SQLite in App Group container; opaque UUID filenames;
+- Binary assets outside SQLite in the sandbox Application Support directory;
+  opaque UUID filenames;
   separate originals/thumbnails/app-icons/temp-imports/sync-staging.
 - Atomic temp-write + rename; SHA-256 hashes (FR-090a, Constitution IV);
   metadata transactions; cleanup queues; verify before deleting source/temp.
 - Pasted images: embedded original, privacy-normalized metadata, async
   thumbnail, no original decode in card grid.
 - Screenshots: static original, thumbnail at **256px longest edge**
-  (FR-094a) — the single canonical thumbnail size for card-grid and widget
-  display, lossless preferred for text-heavy window captures, independent
+  (FR-094a) — the single canonical thumbnail size for card-grid display,
+  lossless preferred for text-heavy window captures, independent
   thumbnail storage, multiple per note, at most one cover enforced
   transactionally. No OCR in first release; model extensible for later OCR
   text.
@@ -562,26 +555,19 @@ decoder actor. All cross-actor handoffs pass `Sendable` value types or
   replace-bookmark). Relink failure preserves the card. No filesystem-wide scan.
   Multi-card-same-file-after-move behavior documented in research.md.
 
-### Widgets
+### Widgets — REMOVED 2026-08-13
 
-- One WidgetKit + SwiftUI extension; AppIntent configuration for user-selectable
-  notes; AppIntents for toggle-todo/create-note/other lightweight actions; deep
-  links to open a specific note. Widget families per spec.
-- Data access: read App Group SQLite in short transactions; todo updates in small
-  atomic writes; reload only relevant timelines; NEVER initialize the sync
-  engine; never expose widget-ineligible notes; privacy-safe placeholders/
-  snapshots; graceful handling of deleted/trashed/conflicted/unavailable
-  configured notes; no crash on schema mismatch.
-- **Change-driven refresh (FR-110a, clarified 2026-08-07)**: the main
-  application proactively triggers a WidgetKit timeline reload for affected
-  widget forms whenever local data affecting a widget changes (note created/
-  edited/deleted/trashed/restored, todo toggled, widget-eligibility changed,
-  conflict copy created). Widgets never poll the database on a fixed
-  high-frequency schedule (SC-006); widget interactions (todo toggle,
-  quick-create) also trigger refresh of the affected widgets. If the app is
-  not running, widgets may show last-known content until the app next runs or
-  the system refreshes the timeline; read failure reports the FR-140a
-  "temporarily unavailable" status.
+- ~~One WidgetKit + SwiftUI extension; AppIntent configuration; AppIntents for
+  toggle-todo/create-note; deep links to open a specific note.~~
+- ~~Data access via shared App Group SQLite in short transactions; todo updates
+  in small atomic writes; change-driven timeline refresh (FR-110a).~~
+
+All withdrawn with FR-110/FR-110a/FR-111/FR-112 (user decision — the
+placeholder App Group cannot be registered without a paid developer account,
+so widget data access could never work in production). No WidgetKit extension
+ships; the per-note widget-eligibility field and the widget-selection store
+are removed. URL routing below remains for external deep links.
+
 - URL routing: `stickynotes://note/<uuid>`, `stickynotes://new`,
   `stickynotes://search` (placeholder scheme until final bundle id chosen).
 
@@ -869,7 +855,8 @@ Validate highest-risk assumptions BEFORE broad feature work depends on them:
 - Markdown conversion with single-step Undo.
 - One-window-per-note behavior (NoteWindowCoordinator).
 - Per-window floating level.
-- App Group GRDB access from Widget Extension.
+- ~~App Group GRDB access from Widget Extension~~ (removed 2026-08-13 with the
+  widget surface).
 - ScreenCaptureKit single-frame capture + region overlay.
 - Confirm Xcode 26.x / Swift 6.3 baseline + select + integrate Argon2id package.
   (Global-shortcut prototype removed from the milestone 2026-08-10 — the
@@ -890,8 +877,7 @@ SecurityCore present but inert.)
 
 ### Milestone 2 — System integration
 
-Screenshot capture; embedded clipboard images; screenshot viewer; widgets
-(including FR-110a change-driven timeline refresh); App Intents;
+Screenshot capture; embedded clipboard images; screenshot viewer;
 permission UI; display restoration; accessibility polish; zh-Hans
 + en localization completion per FR-180a. (Global shortcuts removed from this
 milestone 2026-08-10 — feature withdrawn.)
@@ -932,11 +918,10 @@ spec.md and research.md R entries):
 - Conflict + tombstone design is non-destructive with deterministic dedup
   (VIII). Sort-key-only divergence reconciles per-note by LWW, no conflict
   copies (FR-022b).
-- Widget access is minimal, privacy-safe, never initializes sync (VI, XI);
-  database concurrency uses a 5s bounded busy timeout (FR-140a).
+- Database concurrency uses a 5s bounded busy timeout (FR-140a).
 - Assets sync as independent encrypted objects with SHA-256 + partial-failure
-  retry (FR-090a); thumbnails pinned at 256px longest edge (FR-094a) so card
-  grid and widget never decode full-resolution images (XI, SC-008).
+  retry (FR-090a); thumbnails pinned at 256px longest edge (FR-094a) so the
+  card grid never decodes full-resolution images (XI, SC-008).
 - Search uses an external-content FTS5 table with rowid-to-Note.id mapping
   (FR-023a), guaranteeing the index cannot drift from canonical data (IV).
 - Sync debounce window pinned at 2-4 seconds (FR-152a) (VIII, XI).
@@ -947,7 +932,7 @@ spec.md and research.md R entries):
 - FR-012a (meaningful-text boundary), FR-160e (no lockout), FR-022a
   Trash-restore, FR-162a app-launch + toggle-off, FR-031a export/import,
   FR-090b scale limits, FR-141a autosave, FR-022b, FR-040a/FR-041a,
-  FR-050a, FR-110a, FR-014b, FR-180a, FR-001a, FR-020a, FR-043a, FR-095a,
+  FR-050a, FR-014b, FR-180a, FR-001a, FR-020a, FR-043a, FR-095a,
   FR-054, and SC-004a are all reflected in the corresponding sections above,
   in data-model.md, and in the relevant contracts; each is traceable to its
   spec FR via the propagation summary near the top of this file (XIV).

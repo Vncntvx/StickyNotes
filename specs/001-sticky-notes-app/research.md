@@ -23,7 +23,7 @@ resolves every `NEEDS CLARIFICATION` from the plan's Technical Context.
   minimum (Principle II); Swift 6 strict concurrency enforces the data-race
   safety the architecture relies on (Principles XI, XIII).
 - **Alternatives considered**: Building against the local CLT-only Swift 6.4 /
-  macOS 27 SDK. Rejected as the project baseline because there is no GUI/Widget
+  macOS 27 SDK. Rejected as the project baseline because there is no GUI
   toolchain, no XCTest GUI host, and the deployment target must stay macOS 26.
 - **Rejected alternatives**: Adopting Swift 6.4 as the language baseline solely
   because the generating machine has it — would couple the project to a machine
@@ -117,10 +117,10 @@ resolves every `NEEDS CLARIFICATION` from the plan's Technical Context.
   runtime switch is reliable (better UX).
 - **Risks**: Some window/activation quirks when switching policy with open
   note windows. Mitigation: coordinator re-evaluates window levels after a
-  policy change. A widget opening a note MUST NOT temporarily flip to `regular`
-  (FR-008/plan).
+  policy change. A deep link opening a note MUST NOT temporarily flip to
+  `regular` (FR-008/plan).
 - **Validation**: M0 toggles the policy with 0 and 2 note windows open and
-  confirms menu-bar access + no Dock flicker from widget deep links.
+  confirms menu-bar access + no Dock flicker from deep links.
 - **Constitution impact**: Principle X (Dock enabled by default, disable-able,
   menu-bar access preserved).
 
@@ -151,28 +151,16 @@ resolves every `NEEDS CLARIFICATION` from the plan's Technical Context.
 - **Constitution impact**: Principle VI (no preemptive Accessibility request),
   XIII (no shortcut package unless justified).
 
-## R6. App Group GRDB multi-process access (app + widget)
+## R6. App Group GRDB multi-process access (app + widget) — REMOVED 2026-08-13
 
-- **Decision**: GRDB `DatabasePool` with WAL mode in the App Group container.
-  Main app owns migrations; widget performs only short reads and small atomic
-  todo-toggle writes. Widget detects an unsupported schema version and falls
-  back to privacy-safe read-only placeholders.
-- **Rationale**: WAL allows concurrent readers + one writer across processes;
-  widgets must not run migrations or initialize sync (Principles VI, XI).
-- **Alternatives considered**: `DatabaseQueue` (serial) for the widget only.
-  Rejected: WAL pool is needed for app+widget concurrency and app
-  read-during-write responsiveness.
-- **Risks**: Cross-process write contention; a widget write during an app
-  migration. Mitigation: bounded busy timeout of 5 seconds (FR-140a); widget
-  schema-version gate; widget writes are tiny and retried on `SQLITE_BUSY`; on
-  timeout the widget reports a sanitized "temporarily unavailable" status
-  (never a raw error or note content).
-- **Validation**: Persistence test suite runs app + widget processes
-  concurrently (reads during writes, widget toggle during app migration) under
-  WAL with the 5s busy timeout (FR-140a). Schema-mismatch fallback tested with
-  a fixture.
-- **Constitution impact**: Principle IV (migrations owned by app), VI/XI
-  (widget never initializes sync, privacy-safe fallback).
+- ~~Decision: GRDB `DatabasePool` with WAL mode in the App Group container;
+  the widget performs only short reads and small atomic todo-toggle writes.~~
+
+Withdrawn together with the widget surface and the App Group container (user
+decision — the placeholder group cannot be registered without a paid
+developer account). The SQLite database now lives in the app sandbox's
+Application Support directory; the 5s bounded busy timeout (FR-140a) remains
+for concurrent connections within the app process (see R26).
 
 ## R7. ScreenCaptureKit region capture
 
@@ -350,22 +338,15 @@ resolves every `NEEDS CLARIFICATION` from the plan's Technical Context.
 - **Constitution impact**: Principle VIII (HTTPS only; explicit self-signed
   trust).
 
-## R14. Widget privacy behavior
+## R14. Widget privacy behavior — REMOVED 2026-08-13
 
-- **Decision**: Widget eligibility is per-note. Widget-ineligible notes expose
-  nothing (no title/body/todo/screenshot/summary) in timelines, previews,
-  placeholders, or snapshots. Widgets read only the App Group DB in short
-  transactions, never initialize sync, and show privacy-safe placeholders for
-  deleted/trashed/conflicted/unavailable or schema-mismatched notes.
-- **Rationale**: Principle VI (per-note widget privacy; no content exposure).
-- **Alternatives considered**: A separate widget-specific projection table.
-  Adopted as an implementation detail (a read-only card/todo projection) to
-  keep widget reads short and to avoid exposing full rows.
-- **Validation**: Widget tests confirm an ineligible note's content is absent
-  from the timeline/snapshot, and that schema mismatch yields a placeholder
-  without crashing.
-- **Constitution impact**: Principle VI (widget privacy), XI (no full-res
-  decode / bounded reads).
+- ~~Per-note widget eligibility (FR-112) hid ineligible notes from widget
+  timelines, previews, placeholders, and snapshots.~~
+
+Withdrawn with the widget surface. The `Note.widgetEligible` field, its schema
+column (dropped by migration v3), and the `WidgetVisibility` rules are all
+removed; the privacy guarantee for ordinary surfaces (library, search, sync)
+is unchanged.
 
 ## R15. Long-offline deletion safety
 
@@ -611,7 +592,7 @@ resolves every `NEEDS CLARIFICATION` from the plan's Technical Context.
   (b) semantic object types; (c) structural metadata (block ordering, todo
   nesting/completion, note-to-block composition, cover selection, sort-key
   position); (d) note appearance/behavior choices (color, transparency, text
-  size, Always-on-Top, widget-eligibility); (e) version-lineage fields revealing
+  size, Always-on-Top); (e) version-lineage fields revealing
   editing patterns. The accepted observable-leakage bound (opaque IDs, sizes,
   mod times, network addresses, access timing) is explicitly stated as a
   non-violation in FR-160b.
@@ -649,7 +630,7 @@ resolves every `NEEDS CLARIFICATION` from the plan's Technical Context.
 ## R25. Thumbnail size, FTS5 mode, sort-key gap, todo depth
 
 - **Decision**: Four previously-illustrative values are now binding spec
-  requirements: (1) Thumbnail longest edge = 256px for card and widget display
+  requirements: (1) Thumbnail longest edge = 256px for card display
   (FR-094a); (2) FTS5 search index is an external-content table backed by
   canonical note/block rows with an explicit rowid-to-Note.id mapping
   (FR-023a); (3) Manual-order sort keys use a 1024 gap, renormalizing a
@@ -675,20 +656,17 @@ resolves every `NEEDS CLARIFICATION` from the plan's Technical Context.
 ## R26. Bounded busy timeout
 
 - **Decision**: Database access (SQLite via GRDB, WAL mode) uses a bounded busy
-  timeout of 5 seconds (FR-140a). Widget read transactions MUST be short
-  enough to complete within the timeout; on timeout the widget reports a
-  sanitized "temporarily unavailable" status and retries on next refresh.
-- **Rationale**: The app and widget share the SQLite DB in the App Group
-  container; without a concrete timeout concurrent WAL access could block
-  indefinitely or report spurious errors (data.md CHK015/CHK016/CHK035); 5 s
-  gives the widget's short reads headroom to wait out an app write while still
-  failing fast enough to surface real contention.
-- **Validation**: Persistence test suite runs app + widget concurrently under
-  WAL with the 5s timeout; asserts widget reads complete within the timeout
-  under normal load and report "temporarily unavailable" (not a crash or raw
-  error) under artificial contention.
-- **Constitution impact**: Principle XI (performance; concurrency), VI (privacy
-  — sanitized status). No violation.
+  timeout of 5 seconds (FR-140a).
+- **Rationale**: Without a concrete timeout, concurrent WAL access within the
+  app process could block indefinitely or report spurious errors (data.md
+  CHK015/CHK016); 5 s gives concurrent reads headroom to wait out a write
+  while still failing fast enough to surface real contention.
+- **Validation**: Persistence test suite exercises concurrent WAL access under
+  the 5s timeout; asserts reads complete within the timeout under normal load
+  and report a bounded "database busy" condition (not a crash or raw error)
+  under artificial contention.
+- **Constitution impact**: Principle XI (performance; concurrency). No
+  violation.
 
 ## R27. Independent encrypted asset synchronization
 
@@ -724,15 +702,13 @@ resolves every `NEEDS CLARIFICATION` from the plan's Technical Context.
   A brief, dismissible onboarding hint explains auto-save and the
   menu-bar-primary model; it is never shown again after the first note is
   created. The hint's seen/dismissed state and the first-note-created flag are
-  stored as device-local preferences in App Group UserDefaults — never in
-  SQLite, never synchronized, never in canonical JSON.
+  stored as device-local preferences in the standard UserDefaults domain —
+  never in SQLite, never synchronized, never in canonical JSON.
 - **Rationale**: FR-014a, Principle VI (permissions only on feature
   invocation), Principle III (local-first; sync absence is a normal state, not
   an error), Principle X (clear, reversible onboarding). UserDefaults is
-  appropriate here because the state is a single non-sensitive boolean pair,
-  is not needed by the widget, and must never appear in synced data; the
-  Widget Extension does not read it (widgets show privacy-safe placeholders
-  regardless).
+  appropriate here because the state is a single non-sensitive boolean pair
+  and must never appear in synced data.
 - **Alternatives considered**: A `LocalPreferences` table in SQLite. Rejected
   as overkill for two booleans, though it remains an option if the preference
   surface grows; the data model documents the boundary (device-local
@@ -987,35 +963,13 @@ resolves every `NEEDS CLARIFICATION` from the plan's Technical Context.
   preservation unchanged), IV (deterministic reconciliation), XII
   (crossed-reorder test). No weakening.
 
-## R36. Widget change-driven refresh (FR-110a)
+## R36. Widget change-driven refresh (FR-110a) — REMOVED 2026-08-13
 
-- **Decision**: Widget content is refreshed change-driven: the main
-  application proactively triggers a WidgetKit timeline reload for the
-  affected widget forms whenever local data affecting a widget changes
-  (note created/edited/deleted/trashed/restored, todo toggled,
-  widget-eligibility changed, conflict copy created). Widgets never poll
-  the database on a fixed high-frequency schedule; widget interactions
-  (todo toggle, quick-create) also trigger refresh of affected widgets
-  (clarified 2026-08-07).
-- **Rationale**: SC-006 forbids high-frequency polling while idle; change
-  notification is the standard macOS pattern (WidgetCenter
-  `reloadTimelines(ofKind:)`). When the app is not running, widgets show
-  last-known content until the app next runs or the system refreshes its
-  timeline — acceptable for a menu-bar-primary app and consistent with
-  FR-140a's "temporarily unavailable" read-failure status.
-- **Implementation direction**: after any persistence write touching widget
-  surface, call `WidgetCenter.shared.reloadTimelines(ofKind:)` for the
-  affected kinds (cheap, no polling). Widget read transactions remain short
-  (FR-140a 5 s bounded busy timeout).
-- **Alternatives considered**: Fixed-interval timeline polling (rejected —
-  violates SC-006 and wastes battery); system-default only (rejected —
-  unbounded staleness for todo toggles).
-- **Validation**: widget integration test: edit/toggle in the app → timeline
-  reload observed for the affected kind; no periodic polling timers exist
-  in the widget process.
-- **Constitution impact**: XI (no idle polling; performance measured), VI
-  (widget privacy unaffected), X (fresh data, graceful fallback). No
-  weakening.
+- ~~Change-driven WidgetKit timeline reload (WidgetCenter
+  `reloadTimelines(ofKind:)`) after every widget-affecting write.~~
+
+Withdrawn with the widget surface (FR-110a removed). SC-006's no-polling
+guarantee remains in force for the app itself.
 
 ## R37. Canonical color hexes and opacity range (FR-040a / FR-041a)
 
@@ -1244,11 +1198,12 @@ item requires another `/speckit.clarify` run.
 > **2026-08-07 clarification propagation**: The 26 product clarifications from
 > six `/speckit-clarify` sessions (FR-001a/FR-012a/FR-014a/FR-014b/FR-020a/
 > FR-022a/FR-022b/FR-031a/FR-040a/FR-041a/FR-043a/FR-050a/FR-054/FR-090a/
-> FR-090b/FR-094a/FR-094b/FR-095a/FR-110a/FR-140a/FR-141a/FR-152a/FR-160a–e/
+> FR-090b/FR-094a/FR-094b/FR-095a/FR-140a/FR-141a/FR-152a/FR-160a–e/
 > FR-162a/FR-174/FR-180a/FR-191 + wrong-vault edge case) are encoded in
 > spec.md and captured in the R entries above (R15-refined, R19–R43). None
 > alter the architecture; all add testable acceptance criteria. No item
-> requires another `/speckit-clarify` run. The full propagation history is
+> requires another `/speckit-clarify` run. (FR-110a was REMOVED 2026-08-13
+> with the widget surface — see R36.) The full propagation history is
 > archived in `history/research-superseded.md`.
 
 ## Remaining risks (summary)
@@ -1263,6 +1218,6 @@ item requires another `/speckit.clarify` run.
 5. Region-capture coordinate conversion on mixed-DPI/rotated displays → M0
    prototype (R7).
 6. Build environment: this plan was generated without a full Xcode install; all
-   UI/Widget/capture assumptions are M0-validated (R0).
+   UI/capture assumptions are M0-validated (R0).
 
 <!-- token-budget: compacted (level=medium) on 2026-08-07T08:51:10Z; original at research.full.md -->

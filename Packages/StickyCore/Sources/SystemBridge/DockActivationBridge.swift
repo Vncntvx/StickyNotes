@@ -10,10 +10,10 @@ import Domain
 // - Default `regular` (Dock icon on). The user may switch to `accessory` at
 //   runtime without restart where reliable; Settings/Help/About/sync
 //   status/Quit remain reachable from the menu-bar library (FR-008).
-// - A widget opening a note MUST NOT flip the Dock policy (FR-008, FR-009):
-//   deep links must not call `setActivationPolicy`. This bridge exposes the
-//   policy as read-only state plus an explicit user-requested switch, so
-//   deep-link routing has no path to flip the Dock.
+// - A deep link opening a note MUST NOT flip the Dock policy (FR-008,
+//   FR-009): deep links must not call `setActivationPolicy`. This bridge
+//   exposes the policy as read-only state plus an explicit user-requested
+//   switch, so deep-link routing has no path to flip the Dock.
 // - Command-Tab: `regular` appears in the app switcher; `accessory` does
 //   not. Documented OS-level behavior, not worked around.
 
@@ -30,8 +30,8 @@ public enum DockActivationBridge {
     }
 
     /// The activation policy requested by the user's Dock preference
-    /// (true = Dock icon visible). Read-only — widget deep links must NOT
-    /// switch the Dock (FR-008).
+    /// (true = Dock icon visible). Read-only — deep links must NOT switch
+    /// the Dock (FR-008).
     public static func isDockEnabled() -> Bool {
         currentPolicy() == .regular
     }
@@ -54,13 +54,6 @@ public enum DockActivationBridge {
         guard ok else {
             throw DockActivationError.policySwitchFailed
         }
-    }
-
-    /// Whether a deep-link route is allowed to touch the Dock policy.
-    /// Always false for widget-originated routes (FR-008: a widget opening
-    /// a note must not flip Dock policy).
-    public static func deepLinkMayChangeDockPolicy(originIsWidget: Bool) -> Bool {
-        !originIsWidget
     }
 }
 

@@ -5,9 +5,9 @@ is part of the M4 documentation set (T136).
 
 ## Data model
 
-- **Local-first**: all note data lives in the App Group container (SQLite +
-  asset bytes). No developer-operated backend; no analytics; no telemetry;
-  no account system.
+- **Local-first**: all note data lives in the app sandbox container
+  (SQLite + asset bytes). No developer-operated backend; no analytics; no
+  telemetry; no account system.
 - **Synchronized data** (when sync is configured) is end-to-end encrypted:
   the provider can only observe the accepted observable-leakage bound
   (opaque IDs, sizes, mod times, network addresses, access timing — FR-160b).
@@ -35,12 +35,6 @@ is part of the M4 documentation set (T136).
   (last 30 days), sync run counts/durations, aggregate object counts, vault
   state, permission statuses. Any field not in the list is excluded by
   default.
-
-## Widgets
-
-- Widget-eligible notes only (per-note privacy gate, FR-112). Widget
-  snapshots/placeholders carry no content; the "temporarily unavailable"
-  placeholder never implies an excluded note exists.
 
 ## Data deletion
 

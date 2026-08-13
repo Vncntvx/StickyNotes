@@ -52,9 +52,8 @@ public struct SyncSummary: Sendable, Equatable {
     /// remote deletion history that had aged out. The user MUST be informed
     /// that some synchronization history has aged out (T184-d).
     public var historyAgedOutDetected: Bool
-    /// T302 (FR-110a): new conflict copies created in this pass (content
-    /// divergence + delete-vs-edit recovery). The app refreshes the
-    /// affected widget kinds when non-zero.
+    /// New conflict copies created in this pass (content divergence +
+    /// delete-vs-edit recovery).
     public var conflictCopiesCreated: Int
 
     public init(
@@ -823,10 +822,10 @@ public actor SyncEngine {
         try db.execute(
             sql: """
                 INSERT INTO note (id, title, colorKey, customColor, transparency, textSize, alwaysOnTop,
-                                  widgetEligible, coverScreenshotBlockId, manualSortKey, lifecycleState,
+                                  coverScreenshotBlockId, manualSortKey, lifecycleState,
                                   trashedAt, conflictOriginNoteId, conflictLabel, versionId, parentVersionId,
                                   lastModifiedDeviceId, createdAt, modifiedAt)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     title = excluded.title,
                     colorKey = excluded.colorKey,
@@ -834,7 +833,6 @@ public actor SyncEngine {
                     transparency = excluded.transparency,
                     textSize = excluded.textSize,
                     alwaysOnTop = excluded.alwaysOnTop,
-                    widgetEligible = excluded.widgetEligible,
                     coverScreenshotBlockId = excluded.coverScreenshotBlockId,
                     manualSortKey = excluded.manualSortKey,
                     lifecycleState = excluded.lifecycleState,
@@ -850,7 +848,7 @@ public actor SyncEngine {
             arguments: [
                 note.id.uuidString, note.title, note.colorKey.rawValue, note.customColor,
                 note.transparency, note.textSize, note.alwaysOnTop ? 1 : 0,
-                note.widgetEligible ? 1 : 0, note.coverScreenshotBlockId?.uuidString,
+                note.coverScreenshotBlockId?.uuidString,
                 note.manualSortKey, note.lifecycleState.rawValue,
                 note.trashedAt, note.conflictOriginNoteId?.uuidString,
                 note.conflictLabel, note.versionId.uuidString, note.parentVersionId?.uuidString,
@@ -875,7 +873,6 @@ public actor SyncEngine {
             transparency: row["transparency"] as Double? ?? 1.0,
             textSize: row["textSize"] as Int? ?? 13,
             alwaysOnTop: (row["alwaysOnTop"] as Bool?) ?? false,
-            widgetEligible: (row["widgetEligible"] as Bool?) ?? false,
             coverScreenshotBlockId: Self.uuid(row, "coverScreenshotBlockId"),
             manualSortKey: row["manualSortKey"] as Int? ?? 0,
             lifecycleState: lifecycle,

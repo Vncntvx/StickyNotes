@@ -81,7 +81,6 @@ import SyncCore
             transparency: 1.0,
             textSize: 13,
             alwaysOnTop: false,
-            widgetEligible: true,
             manualSortKey: 0,
             lifecycleState: .active,
             versionId: UUID(),

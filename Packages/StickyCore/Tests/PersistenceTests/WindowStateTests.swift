@@ -25,10 +25,10 @@ import Domain
         try await store.write { db in
             try db.execute(
                 sql: """
-                    INSERT INTO note (id, colorKey, transparency, textSize, alwaysOnTop, widgetEligible,
+                    INSERT INTO note (id, colorKey, transparency, textSize, alwaysOnTop,
                                       manualSortKey, lifecycleState, versionId, lastModifiedDeviceId,
                                       createdAt, modifiedAt)
-                    VALUES (?, 'yellow', 0.0, 13, 0, 1, 0, 'active', ?, ?, ?, ?)
+                    VALUES (?, 'yellow', 0.0, 13, 0, 0, 'active', ?, ?, ?, ?)
                     """,
                 arguments: [noteId.uuidString, UUID().uuidString, Self.deviceId.uuidString,
                             Date().timeIntervalSince1970, Date().timeIntervalSince1970]

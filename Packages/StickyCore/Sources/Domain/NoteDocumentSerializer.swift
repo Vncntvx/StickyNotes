@@ -42,9 +42,12 @@ public enum NoteDocumentError: Error, Sendable, Equatable {
 }
 
 /// The required envelope keys of contracts/note-document.schema.json.
+/// (`widgetEligible` removed from the contract 2026-08-13 with the widget
+/// surface; pre-removal documents carrying the extra key still decode — the
+/// key is simply not required.)
 private let requiredDocumentKeys: Set<String> = [
     "schemaVersion", "id", "colorKey", "transparency", "textSize",
-    "alwaysOnTop", "widgetEligible", "manualSortKey", "lifecycleState",
+    "alwaysOnTop", "manualSortKey", "lifecycleState",
     "versionId", "lastModifiedDeviceId", "createdAt", "modifiedAt", "blocks",
 ]
 
@@ -312,7 +315,6 @@ public enum NoteDuplicator {
             transparency: note.transparency,
             textSize: note.textSize,
             alwaysOnTop: note.alwaysOnTop,
-            widgetEligible: note.widgetEligible,
             coverScreenshotBlockId: nil,   // cover references old block ids; cleared
             manualSortKey: ManualSortKeys.initialSortKey,
             lifecycleState: .active,

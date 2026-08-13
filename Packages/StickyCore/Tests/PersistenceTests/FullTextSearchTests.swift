@@ -15,7 +15,7 @@ import Domain
 // - reindexNote writes the projection so a MATCH query finds the note.
 // - Searching for a word appearing only in: title / body / todo / code /
 //   file name / caption each return the matching note.
-// - Privacy-excluded notes (widgetEligible = false) are NEVER returned.
+// - Notes outside the active lifecycle are NEVER returned.
 // - Trashed notes are excluded from the active scope but appear in the
 //   Trash scope.
 // - Removing a note's search document makes it unfindable.
@@ -151,15 +151,15 @@ import Domain
     // MARK: - Privacy + lifecycle scope
 
     @Test
-    func privacyExcludedNotesAreNeverReturned() async throws {
+    func nonActiveLifecycleNotesAreNeverReturned() async throws {
         let (repo, search, _) = try await freshServices()
         let noteId = UUID()
-        var note = Note(id: noteId, title: "SecretPlanner", lastModifiedDeviceId: Self.deviceId)
-        note.widgetEligible = false
+        var note = Note(id: noteId, title: "HiddenPlanner", lastModifiedDeviceId: Self.deviceId)
+        note.lifecycleState = .permanentlyDeleted
         try await repo.create(note)
 
-        let hits = try await search.searchActiveNotes(query: "SecretPlanner")
-        #expect(!hits.contains(where: { $0.id == noteId }), "widgetEligible=false notes must never appear in search")
+        let hits = try await search.searchActiveNotes(query: "HiddenPlanner")
+        #expect(!hits.contains(where: { $0.id == noteId }), "non-active lifecycle notes must never appear in active search")
     }
 
     @Test

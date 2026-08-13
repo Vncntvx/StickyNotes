@@ -5,7 +5,7 @@ import Domain
 
 // MARK: - First-launch experience integration tests (T204, FR-014a)
 //
-// The full end-to-end flow (fresh App Group container, no Keychain
+// The full end-to-end flow (fresh sandbox container, no Keychain
 // credentials) is covered by AppLogicTests.firstLaunchStateNeverShowsHintAfterFirstNote
 // + dismissingHintHidesItPermanently + the no-permission-prompt startup
 // guard (T210: the bootstrap path calls no CGRequest*/AXIsProcessTrustedWithOptions

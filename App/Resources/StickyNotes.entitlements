@@ -3,20 +3,14 @@
 <plist version="1.0">
 <dict>
     <!--
-        App Sandbox + App Group + user-selected file access for the macOS app.
+        App Sandbox + user-selected file access for the macOS app.
 
-        The App Group identifier is a PLACEHOLDER until a final bundle id is
-        chosen (plan.md §Project Structure; quickstart.md §Placeholder App
-        Group + entitlements setup). It MUST be identical in both the app and
-        the WidgetExtension entitlements.
+        The App Group container and the WidgetExtension were removed
+        2026-08-13 (widget surface removal, user decision); the SQLite
+        database and assets live in this app's own sandbox container.
     -->
     <key>com.apple.security.app-sandbox</key>
     <true/>
-
-    <key>com.apple.security.application-groups</key>
-    <array>
-        <string>group.local.stickynotes.placeholder</string>
-    </array>
 
     <!--
         User-selected read/write: required for file-reference security-scoped

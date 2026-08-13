@@ -7,7 +7,6 @@
 // high-risk assumption from research.md R0–R18:
 //
 //   MarkdownUndoPrototype     R1  — Markdown conversion with single-Undo (CLI, headless)
-//   AppGroupGRDBPrototype     R6  — App Group GRDB WAL multi-process access (CLI, headless)
 //   GlobalShortcutPrototype   R5  — Carbon RegisterEventHotKey, no Accessibility (CLI)
 //   Argon2idPrototype         R9  — Argon2id KEK derivation + RFC 9106 vectors (CLI, headless)
 //   RichTextIMEPrototype      R1  — SwiftUI TextEditor + AttributedString + Chinese IME (GUI)

@@ -69,7 +69,7 @@ import Domain
     @Test
     func stateIsPureValueTypeNoUserDefaultsDependency() {
         // The FirstLaunchState is a pure Foundation value type — no
-        // UserDefaults, no App Group, no sync/canonical-JSON exposure.
+        // UserDefaults, no sync/canonical-JSON exposure.
         // Verify it's Codable (for potential App-layer persistence) and
         // Sendable.
         let state = FirstLaunchState(seen: true, dismissed: false, hasCreatedFirstNote: true)
