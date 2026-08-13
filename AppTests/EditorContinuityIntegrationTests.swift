@@ -479,4 +479,106 @@ import SystemBridge
         window.close()
         NoteWindowBridge.unregister(noteId: note.id)
     }
+
+    // MARK: - Document tail continuation (Goal continuation, 004 修复
+    // 2026-08-14, P0 残留)
+    //
+    // The tail below a trailing todo/code must be ONE clickable region
+    // covering the whole remaining paper — not a 44pt strip plus a dead
+    // Spacer zone. Geometry + synthetic-click evidence below.
+
+    /// Builds the real window pipeline with a [richText("body"), todo]
+    /// document short enough that the tail fills most of the viewport.
+    /// Returns the window, hosting, host, scroll view, and the todo
+    /// editor's frame in hosting coordinates.
+    private func makeTailPipeline() async throws -> (
+        window: NSWindow,
+        hosting: NSHostingView<NoteWindowContent>,
+        host: NoteWindowHostModel,
+        noteId: UUID,
+        todoEditor: NSTextView
+    ) {
+        let env = try makeEnvironment()
+        let coordinator = NoteWindowCoordinator(environment: env)
+        let repo = try #require(env.persistence.noteRepository)
+        let note = Note(lastModifiedDeviceId: Self.deviceId)
+        try await repo.create(note)
+        try await repo.insert(Block(
+            noteId: note.id, kind: .richText, sortKey: 0,
+            payload: .richText(.plain("body")), lastModifiedDeviceId: Self.deviceId
+        ))
+        let todoBlockId = UUID()
+        try await repo.insert(Block(
+            id: todoBlockId, noteId: note.id, kind: .todo, sortKey: 1024,
+            payload: .todo(TodoPayload(todoId: UUID(), richText: .plain("task"))),
+            lastModifiedDeviceId: Self.deviceId
+        ))
+
+        let host = NoteWindowHostModel(noteId: note.id, environment: env)
+        await host.load()
+        let content = NoteWindowContent(noteId: note.id, host: host, environment: env, coordinator: coordinator)
+        let hosting = NSHostingView(rootView: content)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 700),
+            styleMask: [.titled], backing: .buffered, defer: false
+        )
+        window.isReleasedWhenClosed = false
+        window.contentView = hosting
+        window.makeKeyAndOrderFront(nil)
+        hosting.layoutSubtreeIfNeeded()
+        hosting.displayIfNeeded()
+        try await waitUntil {
+            !allTextViews(in: hosting).isEmpty
+        }
+        // Let the bridge's .task and the layout settle.
+        try await Task.sleep(nanoseconds: 200_000_000)
+        let todoEditor = try #require(
+            allTextViews(in: hosting).first { $0.string == "task" },
+            "the todo editor must be realized"
+        )
+        return (window, hosting, host, note.id, todoEditor)
+    }
+
+    private func findScrollView(in view: NSView) -> NSScrollView? {
+        if let scroll = view as? NSScrollView { return scroll }
+        for sub in view.subviews {
+            if let scroll = findScrollView(in: sub) { return scroll }
+        }
+        return nil
+    }
+
+    /// The tail must fill the whole remaining paper: the scroll content
+    /// reaches the viewport's paper height, and both probe points below
+    /// the last block (lastBlock.maxY + 20, viewport.maxY − 40 in
+    /// top-down terms) lie INSIDE the scroll content — never in a dead
+    /// region outside the paper.
+    @Test
+    func documentTailRegionFillsViewport() async throws {
+        let (window, hosting, _, noteId, todoEditor) = try await makeTailPipeline()
+
+        let scroll = try #require(findScrollView(in: hosting), "the scroll view must exist")
+        let paperHeight = scroll.contentSize.height
+            - BlockLayoutMetrics.paperTopInset
+            - BlockLayoutMetrics.paperBottomInset
+        let contentHeight = scroll.documentView?.frame.height ?? 0
+        #expect(contentHeight >= paperHeight - 2,
+                "the document content must fill the paper height (\(contentHeight) ≥ \(paperHeight))")
+
+        // Points below the last block, in hosting coordinates (y-up: the
+        // tail is BELOW the todo visually → smaller y).
+        let todoFrame = todoEditor.convert(todoEditor.bounds, to: hosting)
+        let probeA = NSPoint(x: 200, y: todoFrame.minY - 20)   // lastBlock.maxY + 20 (top-down)
+        let probeB = NSPoint(x: 200, y: 40)                    // viewport.maxY − 40 (top-down)
+        for probe in [probeA, probeB] {
+            let hit = hosting.hitTest(probe)
+            #expect(hit != nil, "probe \(probe) must hit the paper, not dead space")
+            if let hit {
+                #expect(hit.isDescendant(of: scroll),
+                        "probe \(probe) must hit inside the scroll content (got \(type(of: hit)))")
+            }
+        }
+
+        window.close()
+        NoteWindowBridge.unregister(noteId: noteId)
+    }
 }

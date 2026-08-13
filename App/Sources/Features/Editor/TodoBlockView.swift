@@ -2,6 +2,25 @@ import SwiftUI
 import Domain
 import SystemBridge
 
+// MARK: - Todo first-line-center alignment (004 修复 2026-08-14, P1)
+//
+// The todo row compares two CENTERS: the checkbox's visual center and the
+// first text line's typographic center. Borrowing `.firstTextBaseline`
+// would force "baseline == baseline" semantics and push the center math
+// into the guide values; a dedicated alignment makes the contract literal:
+//
+//   marker visual center  ──── same axis ────  first line typographic center
+
+private enum TodoFirstLineCenterAlignment: AlignmentID {
+    static func defaultValue(in context: ViewDimensions) -> CGFloat {
+        context[VerticalAlignment.center]
+    }
+}
+
+private extension VerticalAlignment {
+    static let todoFirstLineCenter = VerticalAlignment(TodoFirstLineCenterAlignment.self)
+}
+
 // MARK: - TodoBlockView (T166/T243/T290, FR-070/FR-071/FR-072a/FR-072b/FR-182)
 //
 // Per tasks.md T290 and spec FR-070/FR-071/FR-072a/FR-072b: complete/
@@ -54,6 +73,12 @@ public struct TodoBlockView: View {
     // 004 修复 (P1-5): the trailing controls collapse into ONE hover-gated
     // ellipsis menu (was five always-visible buttons).
     @State private var isHoveringRow = false
+    // 004 修复 (2026-08-14, P1): the first text line's typographic center
+    // (published by the editor from REAL TextKit geometry) — the
+    // checkbox's visual center aligns to it. Seeded with the nominal
+    // font's metric-derived center so the FIRST frame is already correct;
+    // the published value (≈ the same) lands on the next runloop turn.
+    @State private var firstLineCenterY: CGFloat
 
     public init(
         block: Block,
@@ -89,20 +114,21 @@ public struct TodoBlockView: View {
         self.onFocusRequestHandled = onFocusRequestHandled
         self.onFocusChange = onFocusChange
         self.todoRevision = todoRevision
+        // 004 修复 (2026-08-14, P1): the first-frame seed — the nominal
+        // font's line center (ascender−descender)/2. Not a magic offset:
+        // it is the same metric family the published TextKit value
+        // converges to; the published value refines it on the next turn.
+        let seedFont = NoteFontResolver.load().font(size: textSize, for: "")
+        _firstLineCenterY = State(initialValue: (seedFont.ascender - seedFont.descender) / 2)
     }
 
     public var body: some View {
         let isComplete = todoItem?.isComplete ?? false
-        // Plain values captured by the @Sendable alignmentGuide closures
-        // below (Swift 6: the view's isolated properties cannot be
-        // referenced from them directly).
-        let lineCenter = lineCenterOffset
-        // The todo editor's first-line baseline is DETERMINISTIC (no state
-        // round trip): its text container has zero inset and zero line
-        // fragment padding, so the first line starts at the view's top —
-        // the baseline is exactly the body font's ascender.
-        let baseline = textBaseline
-        HStack(alignment: .firstTextBaseline, spacing: BlockLayoutMetrics.todoMarkerGap) {
+        // Plain value captured by the @Sendable alignmentGuide closure
+        // below (Swift 6: the view's isolated property cannot be
+        // referenced from it directly).
+        let centerY = firstLineCenterY
+        HStack(alignment: .todoFirstLineCenter, spacing: BlockLayoutMetrics.todoMarkerGap) {
             Button {
                 // FR-070/FR-071: persist completion via the repository.
                 if let item = todoItem {
@@ -117,20 +143,25 @@ public struct TodoBlockView: View {
                     .foregroundStyle(isComplete ? Color.accentColor : .secondary)
             }
             .buttonStyle(.plain)
-            // 004 修复 (2026-08-14, P0): THREE separated sizes —
-            // visual marker (the symbol's intrinsic size), the layout
-            // marker COLUMN (fixed gutter width), and the interaction hit
-            // target (the whole column via contentShape). Expanding the
-            // hit target never widens the column, so the todo text
-            // leading (paperInset + column + gap) never drifts.
-            .frame(width: BlockLayoutMetrics.todoMarkerColumnWidth, alignment: .center)
+            // 004 修复 (2026-08-14, P1): THREE separated sizes —
+            // visual marker (the symbol's native ~13pt size),
+            // interaction target (todoMarkerHitSize, an oversized inner
+            // frame), layout column (todoMarkerColumnWidth, the outer
+            // frame). The hit target overflows the column (3pt each side,
+            // landing in the paper margin / inter-block gap — never on
+            // content) WITHOUT widening the HStack child: the todo text
+            // leading = paperInset + column + gap, invariant.
+            .frame(
+                width: BlockLayoutMetrics.todoMarkerHitSize,
+                height: BlockLayoutMetrics.todoMarkerHitSize
+            )
             .contentShape(Rectangle())
-            // The checkbox's visual center sits on the FIRST line's
-            // vertical center (baseline − (ascender−descender)/2), so a
-            // multi-line todo keeps the marker with its first line —
-            // never the whole row's center.
-            .alignmentGuide(.firstTextBaseline) { d in
-                d.height / 2 + lineCenter
+            .frame(width: BlockLayoutMetrics.todoMarkerColumnWidth, alignment: .center)
+            // The marker's visual center sits ON the first line's
+            // typographic center (custom center-to-center alignment —
+            // multi-line todos keep the marker with their FIRST line).
+            .alignmentGuide(.todoFirstLineCenter) { d in
+                d.height / 2
             }
             .accessibilityLabel(isComplete ? "Mark todo incomplete" : "Mark todo complete")
             .accessibilityValue(isComplete ? "Complete" : "Incomplete")
@@ -155,12 +186,27 @@ public struct TodoBlockView: View {
                 verticalInset: 0,
                 isSpecialBlock: true,
                 displayStyling: EditorDisplayStyling(strikethrough: isComplete, secondaryColor: isComplete),
+                onFirstLineTypographicCenter: { center in
+                    // Defer out of the view-update pass — mutating @State
+                    // inside updateNSView's callback is undefined behavior
+                    // (SwiftUI warns); the async hop lands it on the next
+                    // runloop turn, where the alignment settles.
+                    DispatchQueue.main.async {
+                        firstLineCenterY = center
+                    }
+                },
                 requestFocus: requestFocus,
                 caretAtEnd: caretAtEnd,
                 onFocusRequestHandled: onFocusRequestHandled
             )
-            .alignmentGuide(.firstTextBaseline) { _ in
-                baseline
+            // Pin the vertical size to the editor's intrinsic — the row
+            // proposes its full height (marker hit frame + alignment
+            // offset) and a flexible representable would accept it,
+            // growing 3pt of dead space at the frame's bottom. Horizontal
+            // stays proposed (the width reflow depends on it).
+            .fixedSize(horizontal: false, vertical: true)
+            .alignmentGuide(.todoFirstLineCenter) { _ in
+                centerY
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
 
@@ -198,29 +244,6 @@ public struct TodoBlockView: View {
     private var todoDocument: RichTextDocument {
         if case .todo(let payload) = block.payload { return payload.richText }
         return .empty
-    }
-
-    /// The first line's vertical center distance from its baseline —
-    /// derived from the body font's REAL metrics (ascender/descender),
-    /// never a magic offset (004 修复 2026-08-14, P0).
-    private var lineCenterOffset: CGFloat {
-        let font = bodyFont
-        return (font.ascender - font.descender) / 2
-    }
-
-    /// The todo editor's first-line baseline: its text container carries
-    /// zero inset and zero line-fragment padding, so the first line starts
-    /// at the view's top — the baseline is exactly the body font's
-    /// ascender. Deterministic (no layout-manager state round trip through
-    /// a SwiftUI @State, which positioned the row one pass late).
-    private var textBaseline: CGFloat {
-        bodyFont.ascender
-    }
-
-    /// The todo text's body font (the same resolver the RichTextView
-    /// uses for the note text at `textSize`).
-    private var bodyFont: NSFont {
-        NoteFontResolver.load().font(size: textSize, for: "")
     }
 
     private func commitText(_ document: RichTextDocument) {

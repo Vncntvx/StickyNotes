@@ -105,6 +105,11 @@ public struct RichTextView: NSViewRepresentable {
     /// secondary color) — applied visually, excluded from the canonical
     /// round trip.
     let displayStyling: EditorDisplayStyling?
+    /// 004 修复 (2026-08-14, P1): publishes the FIRST LINE's typographic
+    /// center (line-fragment midY in view coordinates — real TextKit
+    /// geometry, not nominal font metrics) — the todo row's marker
+    /// visual center aligns to it.
+    let onFirstLineTypographicCenter: ((CGFloat) -> Void)?
     /// 004 修复: insertion-focus request — this editor becomes first
     /// responder (caret at `caretAtEnd ? end : start`) once it lands in a
     /// window.
@@ -129,6 +134,7 @@ public struct RichTextView: NSViewRepresentable {
         collapsesBottomInset: Bool = false,
         isSpecialBlock: Bool = false,
         displayStyling: EditorDisplayStyling? = nil,
+        onFirstLineTypographicCenter: ((CGFloat) -> Void)? = nil,
         requestFocus: Bool = false,
         caretAtEnd: Bool = false,
         onFocusRequestHandled: @escaping () -> Void = {}
@@ -146,6 +152,7 @@ public struct RichTextView: NSViewRepresentable {
         self.collapsesBottomInset = collapsesBottomInset
         self.isSpecialBlock = isSpecialBlock
         self.displayStyling = displayStyling
+        self.onFirstLineTypographicCenter = onFirstLineTypographicCenter
         self.requestFocus = requestFocus
         self.caretAtEnd = caretAtEnd
         self.onFocusRequestHandled = onFocusRequestHandled
@@ -232,12 +239,16 @@ public struct RichTextView: NSViewRepresentable {
         }
         // 004 T037: keep the bridge attached to the live text view.
         context.coordinator.attach(textView, bridge: selectionBridge, blockId: richTextBlockId)
+        // 004 修复 (2026-08-14, P1): publish the first line's typographic
+        // center for the host's marker alignment (todo checkbox).
+        context.coordinator.publishFirstLineTypographicCenter(textView)
         // 004 修复 (2026-08-14, P0): a width reflow must republish the
         // selection rect — the contextual format row re-anchors to the
         // real post-resize geometry.
         if let paper = textView as? NotePaperTextView {
             paper.onWidthReflow = { [weak coordinator = context.coordinator] in
                 coordinator?.republishSelection()
+                coordinator?.publishFirstLineTypographicCenter(textView)
             }
         }
         // Push model changes only when the document actually differs (the
@@ -292,6 +303,14 @@ public struct RichTextView: NSViewRepresentable {
 
         init(_ parent: RichTextView) {
             self.parent = parent
+        }
+
+        /// 004 修复 (2026-08-14, P1): publishes the editor's first-line
+        /// typographic center (real TextKit geometry) so the host aligns
+        /// its marker (todo checkbox) to it.
+        func publishFirstLineTypographicCenter(_ textView: NSTextView) {
+            guard let paper = textView as? NotePaperTextView else { return }
+            parent.onFirstLineTypographicCenter?(paper.firstLineTypographicCenterFromTop)
         }
 
         /// 004 修复: routes this editor's undo to the window-level shared
@@ -734,6 +753,27 @@ final class NotePaperTextView: IntrinsicSizingTextView {
         }
         let current = font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
         return textContainerInset.height + current.ascender
+    }
+
+    /// The FIRST LINE's typographic center, measured from the text view's
+    /// top (004 修复 2026-08-14, P1): the line fragment's midY in view
+    /// coordinates — REAL TextKit layout geometry (the fragment box
+    /// already accounts for font fallback / mixed runs / line-height
+    /// factors), never nominal font metrics. Measured on a CJK todo:
+    /// fragment = used = 16pt tall, midY 8pt — the stable expression of
+    /// "第一行 typographic center". Empty text falls back to the caret
+    /// line's center from the current font (same value family).
+    var firstLineTypographicCenterFromTop: CGFloat {
+        if let layoutManager, let container = textContainer {
+            layoutManager.ensureLayout(for: container)
+            if let storage = textStorage, storage.length > 0 {
+                let rect = layoutManager.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil)
+                return rect.midY + textContainerInset.height
+            }
+        }
+        let current = font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        // baseline = inset + ascender; center = baseline − (asc+desc)/2.
+        return textContainerInset.height + (current.ascender - current.descender) / 2
     }
 
     override var intrinsicContentSize: NSSize {

@@ -54,14 +54,28 @@ public enum BlockLayoutMetrics {
     /// control row, and the block list (004 修复 2026-08-14 — previously a
     /// bare 8 in the paper VStack).
     public static let documentSpacing: CGFloat = 8
-    /// The todo marker column (gutter) width — the FIXED slot the checkbox
-    /// lives in. The todo text starts at paperInset + column + gap; the
-    /// interaction hit target expands INSIDE the column, so the text
-    /// leading never drifts.
-    public static let todoMarkerColumnWidth: CGFloat = 20
+    /// The paper's top inset inside the ScrollView (004 修复 2026-08-14 —
+    /// previously a bare 8; the tail-fill computation subtracts it from the
+    /// viewport height).
+    public static let paperTopInset: CGFloat = 8
+    /// The paper's bottom inset inside the ScrollView (004 修复 2026-08-14
+    /// — previously a bare 10; the tail-fill computation subtracts it from
+    /// the viewport height).
+    public static let paperBottomInset: CGFloat = 10
+    /// The todo marker column (gutter) width — the FIXED layout slot the
+    /// checkbox lives in. The todo text starts at paperInset + column +
+    /// gap; the interaction hit target expands INSIDE the column (an
+    /// oversized inner frame, laid out centrally — it never widens the
+    /// column), so the text leading never drifts.
+    public static let todoMarkerColumnWidth: CGFloat = 16
     /// The todo row's marker↔text gap (004 修复 2026-08-14 — previously a
-    /// bare 8 in the todo HStack).
-    public static let todoMarkerGap: CGFloat = 8
+    /// bare 8 in the todo HStack; tightened to 6 with the compact column).
+    public static let todoMarkerGap: CGFloat = 6
+    /// The checkbox's interaction hit size (004 修复 2026-08-14, P1):
+    /// 22×22 inside the 16pt column (3pt overflow each side — lands in the
+    /// paper margin / inter-block gap, never on content). The VISUAL
+    /// symbol stays its native ~13pt size.
+    public static let todoMarkerHitSize: CGFloat = 22
     /// The code card's interior padding — the card's OWN inner inset; the
     /// card outer edge stays on the paper's block edge.
     public static let codeCardPadding: CGFloat = 8

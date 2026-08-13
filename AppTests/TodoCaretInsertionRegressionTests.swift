@@ -456,7 +456,7 @@ import SystemBridge
     // overflow into it.
 
     @Test
-    func todoTextReflowsPushingCodeBelowAtNarrowWidth() throws {
+    func todoTextReflowsPushingCodeBelowAtNarrowWidth() async throws {
         let noteId = UUID()
         let todoBlockId = UUID()
         let todoId = UUID()
@@ -519,13 +519,27 @@ import SystemBridge
             textViews.first { $0 is CodeEditorTextView },
             "code editor not realized"
         )
-        let todoFrame = frameInHosting(todoNarrow, hosting)
-        let codeFrame = frameInHosting(codeEditor, hosting)
 
         #expect(todoNarrow.intrinsicContentSize.height > wideIntrinsic + 1,
                 "the todo text must reflow taller at 320 (\(wideIntrinsic) → \(todoNarrow.intrinsicContentSize.height))")
-        #expect(abs(todoFrame.height - todoNarrow.intrinsicContentSize.height) < 3,
-                "SwiftUI must apply the reflowed height to the todo editor frame")
+        // The deferred first-line metric lands on the next runloop turn —
+        // poll until the row settles, then measure the FINAL frames: the
+        // applied frame must match the reflowed intrinsic and the code
+        // block must have moved down below it.
+        var frameDelta: CGFloat = .greatestFiniteMagnitude
+        var todoFrame = frameInHosting(todoNarrow, hosting)
+        var codeFrame = frameInHosting(codeEditor, hosting)
+        for _ in 0..<25 {
+            hosting.layoutSubtreeIfNeeded()
+            hosting.displayIfNeeded()
+            todoFrame = frameInHosting(todoNarrow, hosting)
+            codeFrame = frameInHosting(codeEditor, hosting)
+            frameDelta = abs(todoFrame.height - todoNarrow.intrinsicContentSize.height)
+            if frameDelta < 3 { break }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        #expect(frameDelta < 3,
+                "SwiftUI must apply the reflowed height to the todo editor frame (Δ\(frameDelta))")
         #expect(codeFrame.minY > wideCodeMinY + 1,
                 "the code block must move DOWN when the todo text reflows (\(wideCodeMinY) → \(codeFrame.minY))")
         #expect(codeFrame.minY >= todoFrame.maxY - 0.5,
@@ -582,7 +596,7 @@ import SystemBridge
             + BlockLayoutMetrics.todoMarkerGap
         #expect(abs(todoFrame.minX - expectedLeading) < 2,
                 "todo text leading = paper edge + marker column + gap (fixed gutter), got Δ\(todoFrame.minX - expectedLeading)")
-        #expect(BlockLayoutMetrics.todoMarkerColumnWidth >= 20,
+        #expect(BlockLayoutMetrics.todoMarkerColumnWidth >= 16,
                 "the marker column must be wide enough for a comfortable hit target")
     }
 
@@ -601,6 +615,134 @@ import SystemBridge
         let expected = 12 + (editor.font?.ascender ?? 0)
         #expect(abs(baseline - expected) < 2,
                 "firstBaselineOffsetFromTop = container inset + first-line ascender, got \(baseline) vs \(expected)")
+    }
+
+    /// The checkbox's VISUAL center sits on the FIRST line's typographic
+    /// center (real TextKit geometry — no hardcoded offset). CJK text is
+    /// the discriminator: the fallback font changes the actual line metric
+    /// vs the nominal font the old resolver-based math used. The metric
+    /// bridge lands on the next runloop turn (state writes are deferred
+    /// out of the update pass) — poll until the row converges.
+    @Test
+    func todoMarkerAlignsToFirstLineTypographicCenter() async throws {
+        let noteId = UUID()
+        let todoBlockId = UUID()
+        let todoId = UUID()
+        let item = TodoItem(
+            id: todoId, noteId: noteId, blockId: todoBlockId, sortKey: 1024,
+            depth: 0, lastModifiedDeviceId: deviceId
+        )
+        let blocks = [
+            Block(
+                id: todoBlockId, noteId: noteId, kind: .todo, sortKey: 1024,
+                payload: .todo(TodoPayload(todoId: todoId, richText: .plain("这是 todo 内容"))),
+                lastModifiedDeviceId: deviceId
+            ),
+        ]
+        let view = RichTextBlockView(
+            note: Note(lastModifiedDeviceId: deviceId),
+            blocks: blocks,
+            onBlocksChanged: { _ in },
+            todoProvider: { _ in item }
+        )
+        let hosting = NSHostingView(rootView: view)
+        hosting.frame = NSRect(x: 0, y: 0, width: 420, height: 600)
+        hosting.layoutSubtreeIfNeeded()
+        hosting.displayIfNeeded()
+
+        let todoEditor = try #require(
+            collectTextViews(in: hosting).first { $0.string.hasPrefix("这是") },
+            "todo editor not realized"
+        )
+        let layoutManager = try #require(todoEditor.layoutManager)
+        let container = try #require(todoEditor.textContainer)
+
+        var lastDelta: CGFloat = .greatestFiniteMagnitude
+        var converged = false
+        for _ in 0..<50 {
+            hosting.layoutSubtreeIfNeeded()
+            hosting.displayIfNeeded()
+            layoutManager.ensureLayout(for: container)
+            let todoFrame = frameInHosting(todoEditor, hosting)
+            let fragmentRect = layoutManager.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil)
+            let expectedCenterY = todoFrame.minY
+                + todoEditor.textContainerInset.height
+                + fragmentRect.midY
+
+            // Candidate marker backing views: small views LEFT of the todo
+            // text, vertically overlapping its first line. The row also
+            // carries the insertion-control overlay at the same leading
+            // edge — collect ALL candidates and converge on the closest
+            // center (the checkbox is the one aligned to the line).
+            var candidates: [NSRect] = []
+            func walk(_ v: NSView) {
+                let f = v.convert(v.bounds, to: hosting)
+                if v !== todoEditor, f.width > 4, f.width <= 30,
+                   f.maxX <= todoFrame.minX + 1,
+                   f.minY < todoFrame.maxY, f.maxY > todoFrame.minY {
+                    candidates.append(f)
+                }
+                for sub in v.subviews { walk(sub) }
+            }
+            walk(hosting)
+            let deltas = candidates.map { abs($0.midY - expectedCenterY) }
+            lastDelta = deltas.min() ?? .greatestFiniteMagnitude
+            if lastDelta < 3 {
+                converged = true
+                break
+            }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+
+        #expect(converged,
+                "the marker's visual center must converge onto the first line's typographic center (last Δ\(lastDelta))")
+    }
+
+    /// Single-line and multi-line todos share the EXACT same text leading
+    /// — the marker column is fixed, the hit target overflow never widens
+    /// it.
+    @Test
+    func todoTextLeadingIdenticalForSingleAndMultiLine() throws {
+        let noteId = UUID()
+        let singleBlockId = UUID()
+        let multiBlockId = UUID()
+        let singleTodoId = UUID()
+        let multiTodoId = UUID()
+        let items = [
+            TodoItem(id: singleTodoId, noteId: noteId, blockId: singleBlockId, sortKey: 1024, depth: 0, lastModifiedDeviceId: deviceId),
+            TodoItem(id: multiTodoId, noteId: noteId, blockId: multiBlockId, sortKey: 2048, depth: 0, lastModifiedDeviceId: deviceId),
+        ]
+        let blocks = [
+            Block(
+                id: singleBlockId, noteId: noteId, kind: .todo, sortKey: 1024,
+                payload: .todo(TodoPayload(todoId: singleTodoId, richText: .plain("single line"))),
+                lastModifiedDeviceId: deviceId
+            ),
+            Block(
+                id: multiBlockId, noteId: noteId, kind: .todo, sortKey: 2048,
+                payload: .todo(TodoPayload(todoId: multiTodoId, richText: .plain("line one\nline two\nline three"))),
+                lastModifiedDeviceId: deviceId
+            ),
+        ]
+        let view = RichTextBlockView(
+            note: Note(lastModifiedDeviceId: deviceId),
+            blocks: blocks,
+            onBlocksChanged: { _ in },
+            todoProvider: { blockId in items.first { $0.blockId == blockId } }
+        )
+        let hosting = NSHostingView(rootView: view)
+        hosting.frame = NSRect(x: 0, y: 0, width: 420, height: 600)
+        hosting.layoutSubtreeIfNeeded()
+        hosting.displayIfNeeded()
+
+        let textViews = collectTextViews(in: hosting)
+        let single = try #require(textViews.first { $0.string == "single line" }, "single-line todo not realized")
+        let multi = try #require(textViews.first { $0.string.hasPrefix("line one") }, "multi-line todo not realized")
+        let singleFrame = frameInHosting(single, hosting)
+        let multiFrame = frameInHosting(multi, hosting)
+
+        #expect(abs(singleFrame.minX - multiFrame.minX) < 0.5,
+                "single-line and multi-line todos must share one text leading (Δ\(singleFrame.minX - multiFrame.minX))")
     }
 
     /// A multi-line todo's row stays text-driven: the marker column adds

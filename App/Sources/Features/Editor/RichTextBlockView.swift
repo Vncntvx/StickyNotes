@@ -158,15 +158,23 @@ public struct RichTextBlockView: View {
         ScrollView {
             paper
                 // 004 修复 (2026-08-14, P0): the document content fills at
-                // least the viewport (minus the paper's 8/10 pt top/bottom
-                // padding) so the Spacer pushes the tail continuation
-                // region to the bottom of a short note's visible paper.
+                // least the viewport (minus the paper's top/bottom insets)
+                // so the tail Spacer absorbs the remaining visible paper —
+                // the whole tail is the continuation click target.
                 // A min-height floor, never a pin: longer notes still
                 // scroll naturally.
-                .frame(minHeight: max(0, viewportHeight - 18), alignment: .top)
+                .frame(
+                    minHeight: max(
+                        0,
+                        viewportHeight
+                            - BlockLayoutMetrics.paperTopInset
+                            - BlockLayoutMetrics.paperBottomInset
+                    ),
+                    alignment: .top
+                )
                 .padding(.horizontal, inset)
-                .padding(.bottom, 10)
-                .padding(.top, 8)
+                .padding(.bottom, BlockLayoutMetrics.paperBottomInset)
+                .padding(.top, BlockLayoutMetrics.paperTopInset)
         }
         // 004 T063 (2026-08-13 fix): the width-sensing GeometryReader
         // previously WRAPPED the content — it accepted the ScrollView's
@@ -271,31 +279,22 @@ public struct RichTextBlockView: View {
                 )
             }
 
-            // 004 修复 (2026-08-14, P0): fills the remaining visible paper
-            // when the document is shorter than the viewport — the tail
-            // continuation region lands at the bottom; a long document
-            // collapses this to zero and keeps the region right after the
-            // last block.
-            Spacer(minLength: 0)
-
-            documentContinuationArea
+            // 004 修复 (2026-08-14, P0): the CLICKABLE tail Spacer. The
+            // Spacer absorbs ALL remaining paper height (the document has
+            // the viewport min-height above), and contentShape makes the
+            // WHOLE absorbed region one hit target — clicking anywhere in
+            // the empty paper below the last block continues the document.
+            // A short document's entire tail is clickable; a long document
+            // keeps only the min-height click surface after the last block.
+            // In-flow: it never overlaps or steals clicks from any block.
+            Spacer(minLength: BlockLayoutMetrics.continuationAreaMinHeight)
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    onContinueDocument()
+                }
+                .accessibilityLabel(String(localized: "Continue writing"))
         }
-    }
-
-    /// The document tail (004 修复 2026-08-14, P0): clicking it continues
-    /// the document — the host focuses the existing trailing rich-text
-    /// paragraph (caret at its end) or materializes a new empty paragraph
-    /// after the last special block. In-flow: it never participates in
-    /// block positioning (the Spacer above handles the fill).
-    private var documentContinuationArea: some View {
-        Color.clear
-            .frame(height: BlockLayoutMetrics.continuationAreaMinHeight)
-            .frame(maxWidth: .infinity)
-            .contentShape(Rectangle())
-            .onTapGesture {
-                onContinueDocument()
-            }
-            .accessibilityLabel(String(localized: "Continue writing"))
     }
 
     // MARK: - 004 T058 title field (Q7 Apple Notes pattern, FR-003)
