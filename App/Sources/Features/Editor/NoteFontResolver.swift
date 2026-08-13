@@ -104,8 +104,7 @@ public struct NoteFontResolver {
         traits: NSFontDescriptor.SymbolicTraits
     ) -> NSFont {
         guard !traits.isEmpty else { return NSFont.systemFont(ofSize: size) }
-        let descriptor = NSFont.systemFont(ofSize: size).fontDescriptor.withSymbolicTraits(traits)
-        return NSFont(descriptor: descriptor, size: size) ?? NSFont.systemFont(ofSize: size)
+        return applying(traits, to: NSFont.systemFont(ofSize: size))
     }
 
     private static func font(
@@ -115,7 +114,30 @@ public struct NoteFontResolver {
     ) -> NSFont {
         let base = NSFont(name: family, size: size) ?? NSFont.systemFont(ofSize: size)
         guard !traits.isEmpty else { return base }
+        return applying(traits, to: base)
+    }
+
+    /// Applies symbolic traits, synthesizing when the family lacks the
+    /// face — italic on CJK (PingFang has no italic variant) must render
+    /// oblique instead of silently falling back to the upright base font
+    /// (2026-08-13 user report: ⌘I 失效).
+    private static func applying(
+        _ traits: NSFontDescriptor.SymbolicTraits,
+        to base: NSFont
+    ) -> NSFont {
         let descriptor = base.fontDescriptor.withSymbolicTraits(traits)
-        return NSFont(descriptor: descriptor, size: size) ?? base
+        if descriptor.symbolicTraits.contains(.bold) == traits.contains(.bold),
+           descriptor.symbolicTraits.contains(.italic) == traits.contains(.italic),
+           let font = NSFont(descriptor: descriptor, size: base.pointSize) {
+            return font
+        }
+        var result = base
+        if traits.contains(.bold) {
+            result = RichTextMarkApplier.synthesizedFont(result, adding: .bold)
+        }
+        if traits.contains(.italic) {
+            result = RichTextMarkApplier.synthesizedFont(result, adding: .italic)
+        }
+        return result
     }
 }

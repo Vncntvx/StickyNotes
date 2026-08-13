@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 import AppKit
+import SwiftUI
 import Domain
 import Persistence
 import AssetStore
@@ -183,6 +184,118 @@ import AssetStore
         #expect(!blocks.contains { $0.id == blockId }, "todo block removed")
         let item = await host.todoItem(forBlock: blockId)
         #expect(item == nil, "backing TodoItem removed")
+    }
+
+    // MARK: - 统一编辑上下文（004 修复：尾部块布局 / todo 富文本 / code 可编辑）
+
+    @Test
+    func trailingRichTextEditorIsContentSized() {
+        // 尾部 richText 编辑器（caret split 的第二半）内容自适应——不再
+        // 渲染为第二张 320pt 纸面（插入后的布局断裂修复）。
+        let trailing = NotePaperTextView(frame: NSRect(x: 0, y: 0, width: 400, height: 100))
+        trailing.minimumHeight = 0
+        trailing.string = "short tail"
+        let compact = trailing.intrinsicContentSize.height
+        #expect(compact < 100, "trailing editors must size to content, not the paper minimum (got \(compact))")
+        #expect(compact >= trailing.textContainerInset.height * 2, "the inset still contributes")
+
+        // 主纸面保持 320 最小高度（窗口填充/点击面）。
+        let primary = NotePaperTextView(frame: NSRect(x: 0, y: 0, width: 400, height: 320))
+        #expect(primary.intrinsicContentSize.height >= NotePaperTextView.minimumPaperHeight,
+                "the primary paper keeps the 320 minimum")
+    }
+
+    @Test
+    func todoEditorRoundTripsRunMarks() throws {
+        let note = Note(lastModifiedDeviceId: Self.deviceId)
+        let primary = Block(
+            noteId: note.id, kind: .richText, sortKey: 0,
+            payload: .richText(.plain("head")), lastModifiedDeviceId: Self.deviceId
+        )
+        let todoBlock = Block(
+            noteId: note.id, kind: .todo, sortKey: 1024,
+            payload: .todo(TodoPayload(todoId: UUID(), richText: RichTextDocument(
+                text: "buy milk",
+                paragraphs: [RichTextParagraph(startScalar: 0, endScalar: 8, style: .body, runs: [
+                    RichTextRun(startScalar: 0, endScalar: 3, marks: [.bold])
+                ])]
+            ))),
+            lastModifiedDeviceId: Self.deviceId
+        )
+        var committed: [Block] = []
+        let hosting = NSHostingView(rootView: RichTextBlockView(
+            note: note, blocks: [primary, todoBlock], onBlocksChanged: { committed = $0 }
+        ))
+        hosting.frame = NSRect(x: 0, y: 0, width: 420, height: 800)
+        hosting.layoutSubtreeIfNeeded()
+        hosting.displayIfNeeded()
+
+        let editors = allTextViews(in: hosting)
+        let todoEditor = try #require(editors.first { $0.string == "buy milk" },
+                                      "the todo row must be hosted by a rich-text editor")
+        // 模型 → 视图：bold run 呈现。
+        let font = todoEditor.attributedString().attribute(.font, at: 0, effectiveRange: nil) as? NSFont
+        #expect(font?.fontDescriptor.symbolicTraits.contains(.bold) == true,
+                "todo text must render its run marks (FR-053)")
+
+        // 视图 → 模型：textDidChange 提交保留 marks。
+        todoEditor.delegate?.textDidChange?(Notification(name: NSText.didChangeNotification, object: todoEditor))
+        guard let updated = committed.first(where: { $0.id == todoBlock.id }),
+              case .todo(let payload) = updated.payload else {
+            Issue.record("todo commit must reach onBlocksChanged")
+            return
+        }
+        #expect(payload.richText.text == "buy milk")
+        #expect(payload.richText.paragraphs.flatMap(\.runs).contains { $0.marks.contains(.bold) },
+                "todo text edits must preserve run marks (FR-053)")
+    }
+
+    @Test
+    func codeEditorCommitsPlainTextIntoPayload() throws {
+        let note = Note(lastModifiedDeviceId: Self.deviceId)
+        let primary = Block(
+            noteId: note.id, kind: .richText, sortKey: 0,
+            payload: .richText(.plain("head")), lastModifiedDeviceId: Self.deviceId
+        )
+        let codeBlock = Block(
+            noteId: note.id, kind: .code, sortKey: 1024,
+            payload: .code(CodePayload(text: "", language: nil)),
+            lastModifiedDeviceId: Self.deviceId
+        )
+        var committed: [Block] = []
+        let hosting = NSHostingView(rootView: RichTextBlockView(
+            note: note, blocks: [primary, codeBlock], onBlocksChanged: { committed = $0 }
+        ))
+        hosting.frame = NSRect(x: 0, y: 0, width: 420, height: 800)
+        hosting.layoutSubtreeIfNeeded()
+        hosting.displayIfNeeded()
+
+        let editors = allTextViews(in: hosting)
+        let codeEditor = try #require(editors.first { !$0.isRichText },
+                                      "the code block must be hosted by a plain-text editor")
+        codeEditor.string = "let x = 1\n"
+        // 明确触发 textDidChange（离屏无 first responder 时程序化 string
+        // 赋值不保证派发通知；提交幂等，双重触发无害）。
+        codeEditor.delegate?.textDidChange?(Notification(name: NSText.didChangeNotification, object: codeEditor))
+
+        guard let updated = committed.first(where: { $0.id == codeBlock.id }),
+              case .code(let payload) = updated.payload else {
+            Issue.record("code commit must reach onBlocksChanged")
+            return
+        }
+        #expect(payload.text == "let x = 1\n", "code editing must write CodePayload.text")
+        #expect(payload.language == nil, "the language field must be preserved")
+    }
+
+    // MARK: - Shared helpers
+
+    private func allTextViews(in view: NSView) -> [NSTextView] {
+        var result: [NSTextView] = []
+        if let textView = view as? NSTextView { result.append(textView) }
+        for subview in view.subviews {
+            result.append(contentsOf: allTextViews(in: subview))
+        }
+        return result
     }
 
     @Test

@@ -32,6 +32,17 @@ public final class NoteWindowHostModel {
     public private(set) var blocks: [Block] = []
     public let noteId: UUID
 
+    /// 004 修复: the window-level shared UndoManager — every block editor
+    /// (primary/trailing/todo/code) and every structural change use it, so
+    /// ⌘Z/⌘⇧Z span the whole note document.
+    public let undoManager = UndoManager()
+    /// 004 修复: insertion-focus request — the newly inserted block's id;
+    /// RichTextBlockView makes that editor first responder, then clears it.
+    public private(set) var pendingFocusBlockId: UUID?
+    /// 004 修复: structural undo/redo revision — todo rows re-fetch their
+    /// TodoItem state when it changes (completion/depth/sort undo).
+    public private(set) var undoRevision = 0
+
     let environment: AppEnvironment
     private let autosave: AutoSaveDraftManager
     private var tickTask: Task<Void, Never>?
@@ -40,6 +51,9 @@ public final class NoteWindowHostModel {
     /// (the edit is always recorded before the flush hop to the actor).
     private var pendingEditTask: Task<Void, Never>?
     private var hasEverHadMeaningfulContent = false
+    /// 004 修复: serializes undo/redo restore effects — a rapid ⌘Z/⌘⇧Z
+    /// sequence must apply its persistence effects in submission order.
+    private var pendingUndoTask: Task<Void, Never>?
 
     public init(noteId: UUID, environment: AppEnvironment) {
         self.noteId = noteId
@@ -57,6 +71,11 @@ public final class NoteWindowHostModel {
                 await self.autosave.tick()
             }
         }
+    }
+
+    /// The shared undo manager factory (see `undoManager` above).
+    private static func makeUndoManager() -> UndoManager {
+        UndoManager()
     }
 
     // MARK: - Loading
@@ -116,6 +135,82 @@ public final class NoteWindowHostModel {
                 await autosave.textEdited(blocks: snapshot)
             }
         }
+    }
+
+    // MARK: - Unified undo (004 修复: structural change = ONE undo group)
+    //
+    // Every structural mutation (insert/delete/move/toggle/empty-block
+    // removal) registers a single undo group on the shared window-level
+    // UndoManager. Revision (2026-08-13 用户实测): the stack is NEVER
+    // cleared — the full interleaved history survives, so ⌘Z first undoes
+    // typing, then the structural change itself, and keeps going into the
+    // pre-change typing. Stale actions targeting deallocated text storages
+    // are skipped by NSUndoManager automatically.
+
+    /// Applies an editor-side structural change (e.g. FR-050a empty-block
+    /// removal) as ONE undo group.
+    public func updateBlocksStructural(_ newBlocks: [Block]) {
+        let previous = self.blocks
+        guard previous != newBlocks else { return }
+        updateBlocks(newBlocks, isStructural: true)
+        registerStructuralUndo(
+            restoreOld: { [weak self] in self?.updateBlocks(previous, isStructural: true) },
+            restoreNew: { [weak self] in self?.updateBlocks(newBlocks, isStructural: true) }
+        )
+    }
+
+    /// Registers a structural undo group: `restoreOld` runs on ⌘Z,
+    /// `restoreNew` on ⌘⇧Z — both restore the in-memory block list and
+    /// reconcile persistence (TodoItem rows etc.). The closures swap on
+    /// every round trip so undo/redo alternates indefinitely.
+    private func registerStructuralUndo(
+        restoreOld: @escaping @MainActor () async -> Void,
+        restoreNew: @escaping @MainActor () async -> Void
+    ) {
+        let manager = undoManager
+        // 004 修复: register the group with `groupsByEvent = false` so it is
+        // a STANDALONE top-level group — with the default, `beginUndoGrouping`
+        // NESTS inside the still-open implicit per-event group and adjacent
+        // actions (or two structural changes in one turn) collapse into a
+        // single undo step. Restore the mode immediately: NSTextView's own
+        // typing-coalescing relies on `groupsByEvent == true`.
+        let prior = manager.groupsByEvent
+        manager.groupsByEvent = false
+        manager.beginUndoGrouping()
+        registerRedoPair(restoreOld: restoreOld, restoreNew: restoreNew)
+        manager.endUndoGrouping()
+        manager.groupsByEvent = prior
+    }
+
+    private func registerRedoPair(
+        restoreOld: @escaping @MainActor () async -> Void,
+        restoreNew: @escaping @MainActor () async -> Void
+    ) {
+        // NSUndoManager retains its target until the action is removed —
+        // `close()` clears the stack to break that cycle.
+        undoManager.registerUndo(withTarget: self) { target in
+            MainActor.assumeIsolated {
+                target.enqueueUndoRestore(restoreOld)
+                target.registerRedoPair(restoreOld: restoreNew, restoreNew: restoreOld)
+            }
+        }
+    }
+
+    /// Serializes undo/redo restore effects: memory state and persistence
+    /// effects run in submission order, then the revision bumps (todo rows
+    /// re-fetch their TodoItem state).
+    private func enqueueUndoRestore(_ restore: @escaping @MainActor () async -> Void) {
+        let previous = pendingUndoTask
+        pendingUndoTask = Task { @MainActor in
+            await previous?.value
+            await restore()
+            self.undoRevision += 1
+        }
+    }
+
+    /// Clears the insertion-focus request once the editor handled it.
+    public func clearPendingFocusRequest() {
+        pendingFocusBlockId = nil
     }
 
     /// Flushes any pending debounced write now (focus loss, window close,
@@ -198,6 +293,7 @@ public final class NoteWindowHostModel {
         let deviceId = DeviceIdentity.current.id
         let todoId = UUID()
         let blockId = UUID()
+        let previous = blocks
         let newBlocks = blocksApplyingTarget(target ?? .append) { sortKey in
             Block(
                 id: blockId,
@@ -226,6 +322,25 @@ public final class NoteWindowHostModel {
             // first (FR-141a: structural ops save immediately; await the
             // autosave so the block exists before the item insert).
             updateBlocks(newBlocks, isStructural: true)
+            // 004 修复: ONE undo group — ⌘Z restores the pre-insert blocks
+            // and removes the TodoItem row; ⌘⇧Z re-applies both. The flush
+            // awaits the block-row persistence BEFORE the TodoItem row
+            // write (FK references the block).
+            registerStructuralUndo(
+                restoreOld: { [weak self] in
+                    guard let self else { return }
+                    self.updateBlocks(previous, isStructural: true)
+                    await self.flush()
+                    try? await todoRepo.delete(id: blockId)
+                },
+                restoreNew: { [weak self] in
+                    guard let self else { return }
+                    self.updateBlocks(newBlocks, isStructural: true)
+                    await self.flush()
+                    try? await todoRepo.insert(item)
+                }
+            )
+            pendingFocusBlockId = blockId
             await flush()
             try await todoRepo.insert(item)
             notifyWidgetRefresh(.todoToggled)
@@ -239,6 +354,7 @@ public final class NoteWindowHostModel {
     @discardableResult
     public func insertCodeBlock(target: InsertionTarget? = nil) async -> UUID? {
         let blockId = UUID()
+        let previous = blocks
         let newBlocks = blocksApplyingTarget(target ?? .append) { sortKey in
             Block(
                 id: blockId,
@@ -250,6 +366,12 @@ public final class NoteWindowHostModel {
             )
         }
         updateBlocks(newBlocks, isStructural: true)
+        // 004 修复: ONE undo group.
+        registerStructuralUndo(
+            restoreOld: { [weak self] in self?.updateBlocks(previous, isStructural: true) },
+            restoreNew: { [weak self] in self?.updateBlocks(newBlocks, isStructural: true) }
+        )
+        pendingFocusBlockId = blockId
         await flush()
         notifyWidgetRefresh(.noteCreatedEditedDeletedTrashedRestored)
         return blockId
@@ -269,6 +391,7 @@ public final class NoteWindowHostModel {
         do {
             let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentTypeKey, .contentModificationDateKey])
             let blockId = UUID()
+            let previous = blocks
             let newBlocks = blocksApplyingTarget(target ?? .append) { sortKey in
                 Block(
                     id: blockId,
@@ -286,18 +409,36 @@ public final class NoteWindowHostModel {
                 )
             }
             let bookmark = try (bookmarkCreator ?? Self.defaultBookmarkCreator)(url)
-            // The locator references the block (FK) — persist the block
-            // first.
-            updateBlocks(newBlocks, isStructural: true)
-            await flush()
-            try await locatorRepo.upsert(FileLocator(
+            let locator = FileLocator(
                 blockId: blockId,
                 bookmarkData: bookmark,
                 lastResolvedPath: url.path,
                 availabilityStatus: .available,
                 stale: false,
                 verifiedAt: Date()
-            ))
+            )
+            // The locator references the block (FK) — persist the block
+            // first.
+            updateBlocks(newBlocks, isStructural: true)
+            await flush()
+            try await locatorRepo.upsert(locator)
+            // 004 修复: ONE undo group (block list + device-local locator).
+            registerStructuralUndo(
+                restoreOld: { [weak self] in
+                    guard let self else { return }
+                    self.updateBlocks(previous, isStructural: true)
+                    await self.flush()
+                    try? await locatorRepo.delete(blockId: blockId)
+                },
+                restoreNew: { [weak self] in
+                    guard let self else { return }
+                    self.updateBlocks(newBlocks, isStructural: true)
+                    // The block row must exist before the locator re-insert
+                    // (FK) — flush the structural autosave first.
+                    await self.flush()
+                    try? await locatorRepo.upsert(locator)
+                }
+            )
             notifyWidgetRefresh(.noteCreatedEditedDeletedTrashedRestored)
             return blockId
         } catch {
@@ -312,11 +453,23 @@ public final class NoteWindowHostModel {
     }
 
     /// Removes a block + its cascaded records (todo, locator, association).
-    public func deleteBlock(id: UUID) async {
+    /// `registersUndo` is false when the caller composes its own undo group
+    /// (deleteTodo covers block + TodoItem in ONE group).
+    public func deleteBlock(id: UUID, registersUndo: Bool = true) async {
         guard let repo = environment.persistence.noteRepository else { return }
+        let previous = blocks
         do {
             try await repo.delete(id: id)
             await reloadBlocks()
+            let after = blocks
+            if registersUndo {
+                // 004 修复: ONE undo group — ⌘Z re-inserts the block (the
+                // autosave diff re-persists it).
+                registerStructuralUndo(
+                    restoreOld: { [weak self] in self?.updateBlocks(previous, isStructural: true) },
+                    restoreNew: { [weak self] in self?.updateBlocks(after, isStructural: true) }
+                )
+            }
             notifyWidgetRefresh(.noteCreatedEditedDeletedTrashedRestored)
         } catch {
             // silent (FR-141b: background/structural ops give no toast)
@@ -339,15 +492,57 @@ public final class NoteWindowHostModel {
     public func setTodoComplete(blockId: UUID, isComplete: Bool) async {
         guard let todoRepo = environment.persistence.todoRepository,
               let item = try? await todoRepo.fetchTodo(blockId: blockId) else { return }
+        let previousValue = item.isComplete
         try? await todoRepo.setComplete(todoId: item.id, isComplete: isComplete, deviceId: DeviceIdentity.current.id)
+        // 004 修复: ONE undo group — ⌘Z restores the previous completion
+        // state (the undoRevision bump re-syncs the checkbox UI).
+        registerStructuralUndo(
+            restoreOld: { [weak self] in
+                guard let self else { return }
+                try? await self.environment.persistence.todoRepository?.setComplete(
+                    todoId: item.id, isComplete: previousValue, deviceId: DeviceIdentity.current.id
+                )
+            },
+            restoreNew: { [weak self] in
+                guard let self else { return }
+                try? await self.environment.persistence.todoRepository?.setComplete(
+                    todoId: item.id, isComplete: isComplete, deviceId: DeviceIdentity.current.id
+                )
+            }
+        )
         notifyWidgetRefresh(.todoToggled)
     }
 
     /// Deletes a todo block (children reparent to grandparent — FR-070).
+    /// The block and its TodoItem (+ children reparenting) undo in ONE
+    /// group.
     public func deleteTodo(blockId: UUID) async {
         guard let todoRepo = environment.persistence.todoRepository else { return }
+        let previous = blocks
+        let item = try? await todoRepo.fetchTodo(blockId: blockId)
+        let children = (try? await todoRepo.fetchTodos(noteId: noteId))?.filter { $0.parentTodoId == item?.id } ?? []
         try? await todoRepo.delete(id: blockId)
-        await deleteBlock(id: blockId)
+        await deleteBlock(id: blockId, registersUndo: false)
+        let after = blocks
+        registerStructuralUndo(
+            restoreOld: { [weak self] in
+                guard let self else { return }
+                self.updateBlocks(previous, isStructural: true)
+                // The block row must exist before the TodoItem re-insert
+                // (FK) — flush the structural autosave first.
+                await self.flush()
+                if let item { try? await todoRepo.insert(item) }
+                for child in children {
+                    try? await todoRepo.reparent(todoId: child.id, newParentId: item?.id, deviceId: DeviceIdentity.current.id)
+                }
+            },
+            restoreNew: { [weak self] in
+                guard let self else { return }
+                self.updateBlocks(after, isStructural: true)
+                await self.flush()
+                try? await todoRepo.delete(id: blockId)
+            }
+        )
     }
 
     /// Moves a todo up/down among its siblings (drag-reorder equivalent).
@@ -364,8 +559,23 @@ public final class NoteWindowHostModel {
         let targetIndex = direction < 0 ? index - 1 : index
         guard siblings.indices.contains(targetIndex) else { return }
         let target = siblings[targetIndex]
-        try? await todoRepo.reorder(todoId: item.id, newSortKey: target.sortKey, deviceId: DeviceIdentity.current.id)
-        try? await todoRepo.reorder(todoId: target.id, newSortKey: item.sortKey, deviceId: DeviceIdentity.current.id)
+        let itemSortKey = item.sortKey
+        let targetSortKey = target.sortKey
+        try? await todoRepo.reorder(todoId: item.id, newSortKey: targetSortKey, deviceId: DeviceIdentity.current.id)
+        try? await todoRepo.reorder(todoId: target.id, newSortKey: itemSortKey, deviceId: DeviceIdentity.current.id)
+        // 004 修复: ONE undo group — swapping back is its own inverse.
+        registerStructuralUndo(
+            restoreOld: { [weak self] in
+                guard let self else { return }
+                try? await self.environment.persistence.todoRepository?.reorder(todoId: item.id, newSortKey: itemSortKey, deviceId: DeviceIdentity.current.id)
+                try? await self.environment.persistence.todoRepository?.reorder(todoId: target.id, newSortKey: targetSortKey, deviceId: DeviceIdentity.current.id)
+            },
+            restoreNew: { [weak self] in
+                guard let self else { return }
+                try? await self.environment.persistence.todoRepository?.reorder(todoId: item.id, newSortKey: targetSortKey, deviceId: DeviceIdentity.current.id)
+                try? await self.environment.persistence.todoRepository?.reorder(todoId: target.id, newSortKey: itemSortKey, deviceId: DeviceIdentity.current.id)
+            }
+        )
         notifyWidgetRefresh(.todoToggled)
     }
 
@@ -379,7 +589,18 @@ public final class NoteWindowHostModel {
             .filter { $0.parentTodoId == item.parentTodoId && $0.id != item.id && $0.sortKey < item.sortKey }
             .sorted { $0.sortKey < $1.sortKey }
         guard let parent = siblings.last else { return }
+        let previousParentId = item.parentTodoId
         try? await todoRepo.reparent(todoId: item.id, newParentId: parent.id, deviceId: DeviceIdentity.current.id)
+        registerStructuralUndo(
+            restoreOld: { [weak self] in
+                guard let self else { return }
+                try? await self.environment.persistence.todoRepository?.reparent(todoId: item.id, newParentId: previousParentId, deviceId: DeviceIdentity.current.id)
+            },
+            restoreNew: { [weak self] in
+                guard let self else { return }
+                try? await self.environment.persistence.todoRepository?.reparent(todoId: item.id, newParentId: parent.id, deviceId: DeviceIdentity.current.id)
+            }
+        )
         notifyWidgetRefresh(.todoToggled)
     }
 
@@ -391,6 +612,16 @@ public final class NoteWindowHostModel {
         let all = (try? await todoRepo.fetchTodos(noteId: noteId)) ?? []
         let parent = all.first { $0.id == parentId }
         try? await todoRepo.reparent(todoId: item.id, newParentId: parent?.parentTodoId, deviceId: DeviceIdentity.current.id)
+        registerStructuralUndo(
+            restoreOld: { [weak self] in
+                guard let self else { return }
+                try? await self.environment.persistence.todoRepository?.reparent(todoId: item.id, newParentId: parentId, deviceId: DeviceIdentity.current.id)
+            },
+            restoreNew: { [weak self] in
+                guard let self else { return }
+                try? await self.environment.persistence.todoRepository?.reparent(todoId: item.id, newParentId: parent?.parentTodoId, deviceId: DeviceIdentity.current.id)
+            }
+        )
         notifyWidgetRefresh(.todoToggled)
     }
 
@@ -483,6 +714,7 @@ public final class NoteWindowHostModel {
             let png = try await dataProvider()
             let (original, thumbnail) = try await assetStore.importScreenshot(originalData: png, contentType: "public.png")
             let blockId = UUID()
+            let previous = blocks
             let newBlocks = blocksApplyingTarget(target ?? .append) { sortKey in
                 Block(
                     id: blockId,
@@ -502,6 +734,12 @@ public final class NoteWindowHostModel {
                 )
             }
             updateBlocks(newBlocks, isStructural: true)
+            // 004 修复: ONE undo group (block list; imported assets stay in
+            // the store — invisible orphans, same as the delete path).
+            registerStructuralUndo(
+                restoreOld: { [weak self] in self?.updateBlocks(previous, isStructural: true) },
+                restoreNew: { [weak self] in self?.updateBlocks(newBlocks, isStructural: true) }
+            )
             await flush()
             notifyWidgetRefresh(.noteCreatedEditedDeletedTrashedRestored)
             return true
@@ -524,6 +762,7 @@ public final class NoteWindowHostModel {
             let data = try Data(contentsOf: url)
             let (original, thumbnail) = try await assetStore.importScreenshot(originalData: data, contentType: contentType)
             let blockId = UUID()
+            let previous = blocks
             let newBlocks = blocksApplyingTarget(target ?? .append) { sortKey in
                 Block(
                     id: blockId,
@@ -539,6 +778,11 @@ public final class NoteWindowHostModel {
                 )
             }
             updateBlocks(newBlocks, isStructural: true)
+            // 004 修复: ONE undo group.
+            registerStructuralUndo(
+                restoreOld: { [weak self] in self?.updateBlocks(previous, isStructural: true) },
+                restoreNew: { [weak self] in self?.updateBlocks(newBlocks, isStructural: true) }
+            )
             await flush()
             notifyWidgetRefresh(.noteCreatedEditedDeletedTrashedRestored)
             return blockId
@@ -782,6 +1026,9 @@ public final class NoteWindowHostModel {
         await pendingEditTask?.value
         await autosave.flushNow()
         tickTask?.cancel()
+        // 004 修复: clear the undo stack — NSUndoManager retains its
+        // targets, so a non-empty stack would keep the host alive.
+        undoManager.removeAllActions()
         guard !hasEverHadMeaningfulContent else { return false }
         return !Self.isMeaningful(note, blocks: blocks)
     }

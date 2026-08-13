@@ -2,38 +2,65 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 import Domain
+import SystemBridge
 
 // MARK: - CodeBlockView (T166, FR-080/FR-081)
 //
 // Per tasks.md T166 and spec FR-080/FR-081: monospaced, whitespace
 // preserved (tabs/line breaks exact), copy button copying ONLY the code,
 // optional language label, wrap-or-scroll.
+//
+// 004 修复 (2026-08-13): the code block is EDITABLE — a plain-text
+// monospaced editor (CodeTextView) committing into `CodePayload.text`,
+// inside the same unified editing context (shared UndoManager, selection
+// bridge focus → `.afterBlock` insertion targeting, insertion-focus
+// request). ⌘B/⌘I are a no-op here by contract (plain text).
 
 public struct CodeBlockView: View {
     let block: Block
+    let onChanged: (Block) -> Void
+    /// 004 修复: unified editing context wiring.
+    let selectionBridge: EditorSelectionBridge?
+    let undoManager: UndoManager?
+    let requestFocus: Bool
+    let onFocusRequestHandled: () -> Void
 
-    @State private var code = ""
-    @State private var language: String?
-
-    public init(block: Block) {
+    public init(
+        block: Block,
+        onChanged: @escaping (Block) -> Void = { _ in },
+        selectionBridge: EditorSelectionBridge? = nil,
+        undoManager: UndoManager? = nil,
+        requestFocus: Bool = false,
+        onFocusRequestHandled: @escaping () -> Void = {}
+    ) {
         self.block = block
+        self.onChanged = onChanged
+        self.selectionBridge = selectionBridge
+        self.undoManager = undoManager
+        self.requestFocus = requestFocus
+        self.onFocusRequestHandled = onFocusRequestHandled
     }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if let language, !language.isEmpty {
+            if let language = payloadLanguage, !language.isEmpty {
                 Text(language)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
             HStack(alignment: .top, spacing: 8) {
-                ScrollView(.horizontal) {
-                    Text(code)
-                        .font(.system(.body, design: .monospaced))  // FR-080
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                Spacer(minLength: 0)
+                CodeTextView(
+                    text: payloadText,
+                    onCommit: { newText in
+                        commitCode(newText)
+                    },
+                    selectionBridge: selectionBridge,
+                    blockId: block.id,
+                    undoManager: undoManager,
+                    requestFocus: requestFocus,
+                    onFocusRequestHandled: onFocusRequestHandled
+                )
+                .frame(maxWidth: .infinity, alignment: .leading)
                 Button {
                     copyCode()
                 } label: {
@@ -46,18 +73,40 @@ public struct CodeBlockView: View {
         }
         .padding(8)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
-        .onAppear {
-            if case .code(let payload) = block.payload {
-                code = payload.text
-                language = payload.language
-            }
-        }
+    }
+
+    private var payloadText: String {
+        if case .code(let payload) = block.payload { return payload.text }
+        return ""
+    }
+
+    private var payloadLanguage: String? {
+        if case .code(let payload) = block.payload { return payload.language }
+        return nil
+    }
+
+    /// Commits an edit into `CodePayload.text` (language preserved).
+    private func commitCode(_ text: String) {
+        guard case .code(let payload) = block.payload else { return }
+        let updated = Block(
+            id: block.id,
+            noteId: block.noteId,
+            kind: block.kind,
+            sortKey: block.sortKey,
+            payload: .code(CodePayload(text: text, language: payload.language)),
+            versionId: block.versionId,
+            parentVersionId: block.parentVersionId,
+            lastModifiedDeviceId: DeviceIdentity.current.id,
+            createdAt: block.createdAt,
+            modifiedAt: Date()
+        )
+        onChanged(updated)
     }
 
     /// FR-081: copy copies ONLY the code text.
     private func copyCode() {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(code, forType: .string)
+        NSPasteboard.general.setString(payloadText, forType: .string)
     }
 }
 

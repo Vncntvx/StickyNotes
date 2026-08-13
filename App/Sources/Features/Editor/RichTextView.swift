@@ -3,6 +3,24 @@ import AppKit
 import Domain
 import EditorCore
 
+// MARK: - EditorDisplayStyling (004 修复, 2026-08-13)
+//
+// Display-only styling for a block editor (todo completion): applied over
+// the full text range and EXCLUDED from the canonical round trip — a
+// completed todo's strikethrough/secondary color is presentation, not a
+// model mark (FR-053 marks stay untouched).
+
+/// Display-only styling applied by an editor's host (todo completion state).
+public struct EditorDisplayStyling: Equatable, Sendable {
+    public var strikethrough: Bool
+    public var secondaryColor: Bool
+
+    public init(strikethrough: Bool = false, secondaryColor: Bool = false) {
+        self.strikethrough = strikethrough
+        self.secondaryColor = secondaryColor
+    }
+}
+
 // MARK: - RichTextView (verified 2026-08-07)
 //
 // SwiftUI `TextEditor` fallback — the plan-sanctioned path:
@@ -63,6 +81,24 @@ public struct RichTextView: NSViewRepresentable {
     /// 004 T037: the block id backing this editor (insertion-target
     /// resolution).
     let richTextBlockId: UUID?
+    /// 004 修复: the window-level shared UndoManager — every block editor
+    /// (primary/trailing/todo) uses it so ⌘Z/⌘⇧Z span the whole note.
+    let undoManager: UndoManager?
+    /// 004 修复: the editor's minimum height — the primary paper keeps the
+    /// 320pt minimum; trailing/todo editors pass 0 (content-sized, so an
+    /// inserted block no longer renders a second 320pt paper).
+    let minimumHeight: CGFloat?
+    /// 004 修复: special-block editor (todo text) — publishes its
+    /// focusedSpecialBlockId so insertion targets `.afterBlock` (FR-010).
+    let isSpecialBlock: Bool
+    /// 004 修复: display-only styling (todo completion strikethrough +
+    /// secondary color) — applied visually, excluded from the canonical
+    /// round trip.
+    let displayStyling: EditorDisplayStyling?
+    /// 004 修复: insertion-focus request — this editor becomes first
+    /// responder (caret at start) once it lands in a window.
+    let requestFocus: Bool
+    let onFocusRequestHandled: () -> Void
 
     public init(
         document: RichTextDocument,
@@ -71,7 +107,13 @@ public struct RichTextView: NSViewRepresentable {
         onCommit: @escaping (RichTextDocument) -> Void,
         onFocusChange: @escaping (Bool, Bool) -> Void = { _, _ in },
         selectionBridge: EditorSelectionBridge? = nil,
-        richTextBlockId: UUID? = nil
+        richTextBlockId: UUID? = nil,
+        undoManager: UndoManager? = nil,
+        minimumHeight: CGFloat? = nil,
+        isSpecialBlock: Bool = false,
+        displayStyling: EditorDisplayStyling? = nil,
+        requestFocus: Bool = false,
+        onFocusRequestHandled: @escaping () -> Void = {}
     ) {
         self.document = document
         self.textSize = textSize
@@ -80,6 +122,12 @@ public struct RichTextView: NSViewRepresentable {
         self.onFocusChange = onFocusChange
         self.selectionBridge = selectionBridge
         self.richTextBlockId = richTextBlockId
+        self.undoManager = undoManager
+        self.minimumHeight = minimumHeight
+        self.isSpecialBlock = isSpecialBlock
+        self.displayStyling = displayStyling
+        self.requestFocus = requestFocus
+        self.onFocusRequestHandled = onFocusRequestHandled
     }
 
     public func makeCoordinator() -> Coordinator {
@@ -113,11 +161,31 @@ public struct RichTextView: NSViewRepresentable {
         textView.font = fontResolver.font(size: textSize, for: "")
         textView.delegate = context.coordinator
         textView.autoresizingMask = [.width]
+        // 004 修复: 尾部/todo 编辑器内容自适应（无 320 最小高度）；主纸面
+        // 保持 NotePaperTextView 默认值。
+        if let minimumHeight {
+            textView.minimumHeight = minimumHeight
+        }
         context.coordinator.apply(document: document, textSize: textSize, resolver: fontResolver, to: textView)
         return textView
     }
 
     public func updateNSView(_ textView: NSTextView, context: Context) {
+        // 004 修复 (2026-08-13): the coordinator must track the CURRENT
+        // struct — SwiftUI never refreshes the parent captured by
+        // `makeCoordinator`, so a stale `parent` would commit against
+        // pre-insertion `blocks` snapshots (wiping inserted blocks on the
+        // next keystroke) and read stale focus/style flags.
+        context.coordinator.parent = self
+        // 004 修复 (2026-08-13 用户实测): the minimum height must be
+        // re-applied on EVERY update — makeNSView runs once per identity,
+        // so the primary paper kept its 320pt minimum after blocks were
+        // inserted below it (the "huge gap" persisted).
+        if let paper = textView as? NotePaperTextView, let minimumHeight,
+           paper.minimumHeight != minimumHeight {
+            paper.minimumHeight = minimumHeight
+            paper.invalidateIntrinsicContentSize()
+        }
         // 004 T037: keep the bridge attached to the live text view.
         context.coordinator.attach(textView, bridge: selectionBridge, blockId: richTextBlockId)
         // Push model changes only when the document actually differs (the
@@ -127,13 +195,19 @@ public struct RichTextView: NSViewRepresentable {
         } else if textView.font?.pointSize != textSize {
             textView.font = fontResolver.font(size: textSize, for: textView.string)
         }
+        // 004 修复: 显示专用样式（todo 完成态）每次更新对齐——文本未变也
+        // 要跟随勾选状态切换。
+        context.coordinator.applyDisplayStyling(to: textView)
+        if requestFocus {
+            context.coordinator.requestFocusIfNeeded(textView)
+        }
     }
 
     // MARK: - Coordinator
 
     @MainActor
     public final class Coordinator: NSObject, NSTextViewDelegate {
-        private var parent: RichTextView
+        var parent: RichTextView
         /// Suppresses delegate-driven commits while the model is pushing a
         /// document in (avoid echo loops).
         private var isPushing = false
@@ -142,6 +216,8 @@ public struct RichTextView: NSViewRepresentable {
         private weak var liveTextView: NSTextView?
         private weak var liveBridge: EditorSelectionBridge?
         private var liveBlockId: UUID?
+        /// 004 修复: insertion-focus requests are handled once per editor.
+        private var didHandleFocusRequest = false
 
         /// 004 FR-012 (clarify 2026-08-10): the window whose key-state
         /// notifications republish the selection snapshot, plus the
@@ -158,6 +234,13 @@ public struct RichTextView: NSViewRepresentable {
 
         init(_ parent: RichTextView) {
             self.parent = parent
+        }
+
+        /// 004 修复: routes this editor's undo to the window-level shared
+        /// UndoManager — typing in ANY block lands on the same stack as
+        /// structural changes (⌘Z/⌘⇧Z span the whole note).
+        public func undoManager(for view: NSTextView) -> UndoManager? {
+            parent.undoManager
         }
 
         /// 004 T037: attaches the selection bridge to this editor's text
@@ -200,17 +283,98 @@ public struct RichTextView: NSViewRepresentable {
         func apply(document: RichTextDocument, textSize: CGFloat, resolver: NoteFontResolver, to textView: NSTextView) {
             isPushing = true
             defer { isPushing = false }
+            // 004 修复: model pushes must not register undo actions AND must
+            // not wipe the shared undo stack (clearing is the structural
+            // change's job — NoteWindowHostModel).
+            let undo = textView.undoManager
+            undo?.disableUndoRegistration()
+            defer { undo?.enableUndoRegistration() }
             textView.font = resolver.font(size: textSize, for: document.text)
             textView.string = document.text
             applyRuns(document, textSize: textSize, resolver: resolver, to: textView)
-            textView.undoManager?.removeAllActions()
+            applyDisplayStyling(to: textView)
+        }
+
+        /// 004 修复: applies/removes the display-only styling (todo
+        /// completion strikethrough + secondary color). Only touches the
+        /// attributes on a styling TRANSITION or while completed — an
+        /// uncompleted todo's steady state must never strip user-applied
+        /// marks (⌘U etc.). These attributes never enter the canonical
+        /// round trip (`canonicalDocument(excludesDisplayStyling:)`).
+        private var lastAppliedStyling: EditorDisplayStyling?
+
+        func applyDisplayStyling(to textView: NSTextView) {
+            guard let styling = parent.displayStyling else {
+                lastAppliedStyling = nil
+                return
+            }
+            // 稳态未完成 → 不触碰；完成态每次更新重涂（粘贴/新输入字符
+            // 统一完成态样式）。
+            guard styling != lastAppliedStyling || styling.strikethrough else { return }
+            lastAppliedStyling = styling
+            let undo = textView.undoManager
+            undo?.disableUndoRegistration()
+            defer { undo?.enableUndoRegistration() }
+            guard let storage = textView.textStorage else { return }
+            let full = NSRange(location: 0, length: storage.length)
+            if styling.strikethrough {
+                storage.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: full)
+                textView.typingAttributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
+            } else {
+                storage.removeAttribute(.strikethroughStyle, range: full)
+                textView.typingAttributes[.strikethroughStyle] = nil
+            }
+            if styling.secondaryColor {
+                storage.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: full)
+                textView.typingAttributes[.foregroundColor] = NSColor.secondaryLabelColor
+            } else {
+                storage.removeAttribute(.foregroundColor, range: full)
+                textView.typingAttributes[.foregroundColor] = nil
+            }
+        }
+
+        /// 004 修复: insertion-focus — makes this editor the first
+        /// responder with the caret at the start, then reports handled.
+        /// The representable can update before the window attaches (the
+        /// update pass runs inside layout), so unattached attempts retry
+        /// on the next runloop turn (bounded). The retry captures the
+        /// struct's closure + the view directly — it must not depend on
+        /// the coordinator surviving the async hop.
+        private var focusAttempts = 0
+
+        func requestFocusIfNeeded(_ textView: NSTextView) {
+            guard parent.requestFocus, !didHandleFocusRequest else { return }
+            if let window = textView.window {
+                didHandleFocusRequest = true
+                window.makeFirstResponder(textView)
+                textView.setSelectedRange(NSRange(location: 0, length: 0))
+                parent.onFocusRequestHandled()
+                return
+            }
+            focusAttempts += 1
+            guard focusAttempts < 500 else { return }
+            let handler = parent.onFocusRequestHandled
+            DispatchQueue.main.async { [weak self, weak textView] in
+                guard let textView else { return }
+                if let window = textView.window {
+                    self?.didHandleFocusRequest = true
+                    window.makeFirstResponder(textView)
+                    textView.setSelectedRange(NSRange(location: 0, length: 0))
+                    handler()
+                } else {
+                    self?.requestFocusIfNeeded(textView)
+                }
+            }
         }
 
         public func textDidChange(_ notification: Notification) {
             guard !isPushing, let textView = notification.object as? NSTextView else { return }
             // FR-063: never persist partial IME composition.
             guard !textView.hasMarkedText() else { return }
-            let document = Self.canonicalDocument(from: textView.attributedString())
+            let document = Self.canonicalDocument(
+                from: textView.attributedString(),
+                excludesDisplayStyling: parent.displayStyling?.strikethrough == true
+            )
             parent.onCommit(document)
         }
 
@@ -246,14 +410,20 @@ public struct RichTextView: NSViewRepresentable {
                 let screenRect = textView.firstRect(forCharacterRange: range, actualRange: nil)
                 rect = textView.window?.convertFromScreen(screenRect) ?? textView.bounds
             }
+            // 004 修复: NSTextView 的 range.location 是 UTF-16 码元偏移，
+            // canonical 文档与块拆分使用 scalar 偏移 — 转换后发布，否则
+            // CJK/emoji 光标处拆分落错位。
+            let scalarOffset = NoteWindowDerivations.scalarOffset(fromUTF16: range.location, in: textView.string)
             bridge.publish(
+                from: textView,
                 caretBlockId: liveBlockId,
                 isTextSelected: range.length > 0,
                 hasFocus: hasFocus,
-                caretOffset: range.length > 0 ? range.location : range.location,
+                richTextEditable: true,
+                caretOffset: scalarOffset,
                 selectedRange: range,
                 selectionRectInWindow: rect,
-                focusedSpecialBlockId: nil
+                focusedSpecialBlockId: parent.isSpecialBlock ? liveBlockId : nil
             )
         }
 
@@ -261,7 +431,13 @@ public struct RichTextView: NSViewRepresentable {
 
         /// Builds the canonical document from the text view's attributed
         /// string, keeping only application-supported marks.
-        static func canonicalDocument(from attributed: NSAttributedString) -> RichTextDocument {
+        /// `excludesDisplayStyling` drops the display-only strikethrough
+        /// (todo completion) from the round trip — a completed todo's
+        /// full-range strikethrough must never become a model mark.
+        static func canonicalDocument(
+            from attributed: NSAttributedString,
+            excludesDisplayStyling: Bool = false
+        ) -> RichTextDocument {
             let text = attributed.string
             let scalars = Array(text.unicodeScalars)
             var runs: [RichTextRun] = []
@@ -280,14 +456,19 @@ public struct RichTextView: NSViewRepresentable {
                 if let font = attributes[.font] as? NSFont {
                     let traits = font.fontDescriptor.symbolicTraits
                     if traits.contains(.bold) { marks.insert(.bold) }
-                    if traits.contains(.italic) { marks.insert(.italic) }
+                    // 004 修复: synthesized oblique (matrix) fonts count as
+                    // italic, and CJK italic is synthesized via `.obliqueness`
+                    // (no italic face) — both must survive the round trip.
+                    if RichTextMarkApplier.hasTrait(.italic, in: font) || attributes[.obliqueness] != nil {
+                        marks.insert(.italic)
+                    }
                     let family = font.familyName ?? ""
                     if family.localizedCaseInsensitiveContains("mono") || family.localizedCaseInsensitiveContains("courier") {
                         marks.insert(.inlineCode)
                     }
                 }
                 if attributes[.underlineStyle] != nil { marks.insert(.underline) }
-                if attributes[.strikethroughStyle] != nil { marks.insert(.strikethrough) }
+                if !excludesDisplayStyling, attributes[.strikethroughStyle] != nil { marks.insert(.strikethrough) }
                 if let link = attributes[.link] as? URL {
                     runs.append(RichTextRun(startScalar: start, endScalar: end, marks: marks, link: link.absoluteString))
                 } else if let link = attributes[.link] as? String {
@@ -360,6 +541,15 @@ public struct RichTextView: NSViewRepresentable {
                             value: font,
                             range: NSRange(location: segmentStart, length: segmentEnd - segmentStart)
                         )
+                        // 004 修复: italic on a family without an italic
+                        // face (CJK) renders via synthesized obliqueness.
+                        if run.marks.contains(.italic), !RichTextMarkApplier.hasTrait(.italic, in: font) {
+                            attributed.addAttribute(
+                                .obliqueness,
+                                value: RichTextMarkApplier.synthesizedItalicObliqueness,
+                                range: NSRange(location: segmentStart, length: segmentEnd - segmentStart)
+                            )
+                        }
                         segmentScalarOffset = segmentEnd
                     }
                     let range = NSRange(location: start, length: end - start)
@@ -390,9 +580,15 @@ public struct RichTextView: NSViewRepresentable {
 /// inset) while giving the paper a full-height click target, and grows
 /// naturally for long notes (the enclosing SwiftUI ScrollView scrolls).
 final class NotePaperTextView: NSTextView {
-    /// The minimum paper height: an empty note is a comfortable clickable
-    /// typing surface that still leaves headroom for the ScrollView.
+    /// The default minimum paper height: an empty note is a comfortable
+    /// clickable typing surface that still leaves headroom for the
+    /// ScrollView. The PRIMARY paper keeps this value; trailing/todo
+    /// editors set `minimumHeight = 0` (content-sized — 004 修复).
     static let minimumPaperHeight: CGFloat = 320
+
+    /// 004 修复: per-instance minimum height (primary = 320; trailing/todo
+    /// editors = 0 so an inserted block no longer renders a second paper).
+    var minimumHeight: CGFloat = NotePaperTextView.minimumPaperHeight
 
     override var intrinsicContentSize: NSSize {
         // 004 T063 (2026-08-13): force the layout pass before reading
@@ -406,7 +602,7 @@ final class NotePaperTextView: NSTextView {
         let contentHeight = used + textContainerInset.height * 2
         return NSSize(
             width: NSView.noIntrinsicMetric,
-            height: max(contentHeight, Self.minimumPaperHeight)
+            height: max(contentHeight, minimumHeight)
         )
     }
 

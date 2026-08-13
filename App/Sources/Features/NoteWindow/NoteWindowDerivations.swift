@@ -192,6 +192,19 @@ public enum NoteWindowDerivations {
 
     // MARK: Rich-text block split (004 FR-010/R3, data-model.md §4.3)
 
+    /// Converts an NSTextView caret offset (UTF-16 code units) to a Unicode
+    /// scalar offset — canonical documents and `splitRichTextBlock` use
+    /// scalar offsets. Fixes CJK/emoji caret splits landing on the wrong
+    /// character (004 修复 2026-08-13).
+    public static func scalarOffset(fromUTF16 utf16Offset: Int, in text: String) -> Int {
+        let ns = text as NSString
+        let clamped = min(max(utf16Offset, 0), ns.length)
+        guard let range = Range(NSRange(location: 0, length: clamped), in: text) else {
+            return 0
+        }
+        return text[range].unicodeScalars.count
+    }
+
     /// Splits a canonical rich-text document at a scalar offset. Run marks
     /// and links are preserved on both sides; a run crossing the offset is
     /// split into two runs with identical attributes. Paragraph boundaries
@@ -441,6 +454,12 @@ public enum RichTextMarkApplier {
         return changed
     }
 
+    /// The obliqueness applied as synthesized italic for families without
+    /// an italic face (CJK PingFang has none) — TextKit renders the skew
+    /// natively, unlike NSFont matrix synthesis which NSFont silently
+    /// drops (verified 2026-08-13).
+    static let synthesizedItalicObliqueness: Double = 0.25
+
     @MainActor
     private static func applyToTypingAttributes(_ marks: Set<RichTextMark>, textView: NSTextView) {
         var attributes = textView.typingAttributes
@@ -450,11 +469,15 @@ public enum RichTextMarkApplier {
         for mark in marks {
             switch mark {
             case .bold:
-                let boldDescriptor = base.fontDescriptor.withSymbolicTraits(base.fontDescriptor.symbolicTraits.union(.bold))
-                attributes[.font] = NSFont(descriptor: boldDescriptor, size: base.pointSize)
+                attributes[.font] = synthesizedFont(base, adding: .bold)
             case .italic:
-                let italicDescriptor = base.fontDescriptor.withSymbolicTraits(base.fontDescriptor.symbolicTraits.union(.italic))
-                attributes[.font] = NSFont(descriptor: italicDescriptor, size: base.pointSize)
+                let target = synthesizedFont(base, adding: .italic)
+                attributes[.font] = target
+                if hasTrait(.italic, in: target) {
+                    attributes[.obliqueness] = nil
+                } else {
+                    attributes[.obliqueness] = synthesizedItalicObliqueness
+                }
             case .inlineCode:
                 attributes[.font] = NSFont.monospacedSystemFont(ofSize: base.pointSize, weight: .regular)
             case .underline:
@@ -466,24 +489,52 @@ public enum RichTextMarkApplier {
         textView.typingAttributes = attributes
     }
 
+    /// Adds a symbolic trait via NSFontManager (true faces only). For
+    /// families without the face this returns a font without the trait —
+    /// callers fall back to `.obliqueness` for italic (see
+    /// `synthesizedItalicObliqueness`).
+    static func synthesizedFont(_ font: NSFont, adding trait: NSFontDescriptor.SymbolicTraits) -> NSFont {
+        let mask: NSFontTraitMask = trait == .bold ? .boldFontMask : .italicFontMask
+        return NSFontManager.shared.convert(font, toHaveTrait: mask)
+    }
+
+    /// Removes a symbolic trait (idempotent — unchanged when absent).
+    static func synthesizedFont(_ font: NSFont, removing trait: NSFontDescriptor.SymbolicTraits) -> NSFont {
+        let mask: NSFontTraitMask = trait == .bold ? .boldFontMask : .italicFontMask
+        return NSFontManager.shared.convert(font, toNotHaveTrait: mask)
+    }
+
     @MainActor
     private static func applyFontTrait(_ mark: RichTextMark, range: NSRange, storage: NSTextStorage) -> Bool {
         var changed = false
         let trait: NSFontDescriptor.SymbolicTraits = mark == .bold ? .bold : .italic
         storage.enumerateAttribute(.font, in: range, options: []) { value, subrange, _ in
             let font = (value as? NSFont) ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
-            var traits = font.fontDescriptor.symbolicTraits
-            if traits.contains(trait) {
-                traits.remove(trait)   // toggle off
+            let hasOblique = mark == .italic && storage.attribute(.obliqueness, at: subrange.location, effectiveRange: nil) != nil
+            if hasTrait(trait, in: font) || hasOblique {
+                // Toggle off: revert the font AND clear synthesized obliqueness.
+                storage.addAttribute(.font, value: synthesizedFont(font, removing: trait), range: subrange)
+                if mark == .italic { storage.removeAttribute(.obliqueness, range: subrange) }
             } else {
-                traits.insert(trait)   // toggle on
+                let target = synthesizedFont(font, adding: trait)
+                storage.addAttribute(.font, value: target, range: subrange)
+                // 004 修复: no italic face (CJK) → synthesized obliqueness,
+                // so ⌘I visibly applies instead of silently no-opping.
+                if mark == .italic, !hasTrait(.italic, in: target) {
+                    storage.addAttribute(.obliqueness, value: synthesizedItalicObliqueness, range: subrange)
+                }
             }
-            let descriptor = font.fontDescriptor.withSymbolicTraits(traits)
-            let traitFont = NSFont(descriptor: descriptor, size: font.pointSize) ?? font
-            storage.addAttribute(.font, value: traitFont, range: subrange)
             changed = true
         }
         return changed
+    }
+
+    /// Whether the font carries the trait — italic also counts when the
+    /// font is a synthesized oblique (descriptor matrix non-identity).
+    static func hasTrait(_ trait: NSFontDescriptor.SymbolicTraits, in font: NSFont) -> Bool {
+        if font.fontDescriptor.symbolicTraits.contains(trait) { return true }
+        if trait == .italic, let matrix = font.fontDescriptor.matrix, matrix != .identity { return true }
+        return false
     }
 
     @MainActor

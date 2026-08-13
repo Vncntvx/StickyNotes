@@ -49,6 +49,16 @@ public struct RichTextBlockView: View {
     let onUpdateCaption: (UUID, String?) async -> Void
     let onOpenViewer: () -> Void
     let onEmbeddedImageAction: (UUID, EmbeddedImageAction) async -> Void
+    /// 004 修复: the window-level shared UndoManager (threaded into every
+    /// block editor — primary/trailing/todo/code).
+    let undoManager: UndoManager?
+    /// 004 修复: insertion-focus request — the newly inserted block's id;
+    /// that block's editor becomes first responder (caret at start).
+    let focusRequest: UUID?
+    let onFocusRequestHandled: () -> Void
+    /// 004 修复: host undo/redo revision — todo rows re-fetch their
+    /// TodoItem state when structural undo/redo changes it.
+    let todoRevision: Int
 
     @State private var isIMEComposing = false
     // T300 (FR-050a): cursor-exit detection for empty-block removal. The
@@ -66,6 +76,9 @@ public struct RichTextBlockView: View {
     // wrapping GeometryReader (which would pin content height to the
     // viewport and break vertical scrolling).
     @State private var paperWidth: CGFloat = 480
+    // 004 修复: the pending focus request consumed by the new block's
+    // editor (cleared when handled).
+    @State private var pendingFocus: UUID?
 
     public init(
         note: Note,
@@ -87,7 +100,11 @@ public struct RichTextBlockView: View {
         onSetCover: @escaping (UUID?, Bool) async -> Void = { _, _ in },
         onUpdateCaption: @escaping (UUID, String?) async -> Void = { _, _ in },
         onOpenViewer: @escaping () -> Void = {},
-        onEmbeddedImageAction: @escaping (UUID, EmbeddedImageAction) async -> Void = { _, _ in }
+        onEmbeddedImageAction: @escaping (UUID, EmbeddedImageAction) async -> Void = { _, _ in },
+        undoManager: UndoManager? = nil,
+        focusRequest: UUID? = nil,
+        onFocusRequestHandled: @escaping () -> Void = {},
+        todoRevision: Int = 0
     ) {
         self.note = note
         self.blocks = blocks
@@ -109,6 +126,11 @@ public struct RichTextBlockView: View {
         self.onUpdateCaption = onUpdateCaption
         self.onOpenViewer = onOpenViewer
         self.onEmbeddedImageAction = onEmbeddedImageAction
+        self.undoManager = undoManager
+        self.focusRequest = focusRequest
+        self.onFocusRequestHandled = onFocusRequestHandled
+        self.todoRevision = todoRevision
+        _pendingFocus = State(initialValue: focusRequest)
     }
 
     public var body: some View {
@@ -129,6 +151,11 @@ public struct RichTextBlockView: View {
             proxy.size.width
         } action: { width in
             paperWidth = width
+        }
+        // 004 修复: a fresh insertion-focus request becomes the pending
+        // focus consumed by the new block's editor.
+        .onChange(of: focusRequest) { _, newValue in
+            pendingFocus = newValue
         }
         // 004 T037: the selection bridge (per window, @State — created
         // here so the primary editor can publish into it).
@@ -259,7 +286,11 @@ public struct RichTextBlockView: View {
                 // IME composition is active (FR-063).
                 guard !focused, !hasMarkedText, !didRemoveEmptyBlockOnExit else { return }
                 didRemoveEmptyBlockOnExit = true
-                guard let richIndex = blocks.firstIndex(where: { $0.kind == .richText }),
+                // 004 修复: locate the emptied block BY ID — a caret
+                // split leaves multiple rich-text blocks, so the
+                // first-index lookup would remove the wrong one.
+                guard let richId = primaryRichTextBlock?.id,
+                      let richIndex = blocks.firstIndex(where: { $0.id == richId }),
                       let updated = EditorAppBridge.applyEmptyBlockRemoval(
                           blocks: blocks,
                           emptiedBlockIndex: richIndex,
@@ -271,7 +302,14 @@ public struct RichTextBlockView: View {
                 onStructuralBlocksChanged(updated)
             },
             selectionBridge: selectionBridge,
-            richTextBlockId: primaryRichTextBlock?.id
+            richTextBlockId: primaryRichTextBlock?.id,
+            undoManager: undoManager,
+            // 004 修复: the primary paper keeps its 320pt minimum ONLY while
+            // it is the whole note (empty-note click surface). Once blocks
+            // follow it, it sizes to content — otherwise the minimum keeps
+            // pushing the inserted block ~320pt below the last body line
+            // ("huge gap" feedback).
+            minimumHeight: secondaryBlocks.isEmpty ? nil : 0
         )
         .frame(maxWidth: .infinity, alignment: .topLeading)
         // 004 T034 (FR-010): cursor-line hover triggers the insertion
@@ -295,20 +333,41 @@ public struct RichTextBlockView: View {
         switch block.kind {
         case .richText:
             // 004 FR-010: a trailing rich-text block (the caret split's
-            // second half) is editable like the primary surface.
+            // second half) is editable like the primary surface — and
+            // belongs to the SAME editing context: same bridge, same
+            // undo manager, same focus discipline (004 修复).
             if case .richText(let doc) = block.payload {
                 RichTextView(
                     document: doc,
                     textSize: ReadableTheme.textSize(for: note),
                     onCommit: { document in
                         replaceBlock(document, in: block)
-                    }
+                    },
+                    onFocusChange: { focused, hasMarkedText in
+                        // FR-050a: an emptied trailing block merges away
+                        // when the cursor exits it (FR-063 IME guard).
+                        guard !focused, !hasMarkedText else { return }
+                        guard let idx = blocks.firstIndex(where: { $0.id == block.id }),
+                              let updated = EditorAppBridge.applyEmptyBlockRemoval(
+                                  blocks: blocks,
+                                  emptiedBlockIndex: idx,
+                                  hasIMEComposition: false
+                              ) else { return }
+                        onStructuralBlocksChanged(updated)
+                    },
+                    selectionBridge: selectionBridge,
+                    richTextBlockId: block.id,
+                    undoManager: undoManager,
+                    minimumHeight: 0,
+                    requestFocus: pendingFocus == block.id,
+                    onFocusRequestHandled: handleFocusRequest
                 )
                 .frame(maxWidth: .infinity, alignment: .topLeading)
             }
         case .todo:
             TodoBlockView(
                 block: block,
+                textSize: ReadableTheme.textSize(for: note),
                 onChanged: { updated in
                     // FR-141a: text edits debounce; completion/structural
                     // ops go through the repository directly (T290).
@@ -319,10 +378,24 @@ public struct RichTextBlockView: View {
                 onDelete: onDeleteTodo,
                 onIndent: onIndentTodo,
                 onOutdent: onOutdentTodo,
-                onMove: onMoveTodo
+                onMove: onMoveTodo,
+                selectionBridge: selectionBridge,
+                undoManager: undoManager,
+                requestFocus: pendingFocus == block.id,
+                onFocusRequestHandled: handleFocusRequest,
+                todoRevision: todoRevision
             )
         case .code:
-            CodeBlockView(block: block)
+            CodeBlockView(
+                block: block,
+                onChanged: { updated in
+                    replaceBlock(updated, at: index)
+                },
+                selectionBridge: selectionBridge,
+                undoManager: undoManager,
+                requestFocus: pendingFocus == block.id,
+                onFocusRequestHandled: handleFocusRequest
+            )
         case .fileRef:
             FileReferenceCardView(block: block, onAction: { action in
                 Task { await onFileAction(block.id, action) }
@@ -339,6 +412,16 @@ public struct RichTextBlockView: View {
             EmbeddedImageBlockView(block: block, onAction: { action in
                 Task { await onEmbeddedImageAction(block.id, action) }
             })
+        }
+    }
+
+    /// 004 修复: the new block's editor handled the insertion-focus
+    /// request — clear the pending focus and report up (deferred to avoid
+    /// mutating state during view update).
+    private func handleFocusRequest() {
+        DispatchQueue.main.async {
+            pendingFocus = nil
+            onFocusRequestHandled()
         }
     }
 
@@ -459,7 +542,9 @@ struct ContextualFormatBar: View {
     @Bindable var bridge: EditorSelectionBridge
 
     var body: some View {
-        if bridge.isTextSelected && bridge.hasFocus {
+        // 004 修复: the row appears only for rich-text editors — plain-text
+        // (code) editors accept no marks, so the row must not show there.
+        if bridge.isTextSelected && bridge.hasFocus && bridge.richTextEditable {
             HStack(spacing: 2) {
                 formatButton("bold", mark: .bold, help: String(localized: "Bold"))
                 formatButton("italic", mark: .italic, help: String(localized: "Italic"))

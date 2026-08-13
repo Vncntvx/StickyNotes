@@ -126,4 +126,35 @@ import EditorCore
                 "no format application during IME composition (FR-063)")
         textView.unmarkText()
     }
+
+    // MARK: - Italic synthesis (004 修复, 2026-08-13: ⌘I 在无 italic 字面字体上失效)
+
+    @Test
+    func italicAppliesToFontWithoutItalicFace() {
+        // PingFang 无 italic 变体——`withSymbolicTraits` 会静默回退原字体
+        // （⌘B 生效而 ⌘I 失效的根因）；NSFontManager 合成必须让 ⌘I 生效。
+        let base = NSFont(name: "PingFangSC-Regular", size: 13) ?? NSFont.systemFont(ofSize: 13)
+        let textView = makeTextView(string: "世界")
+        textView.font = base
+        textView.setSelectedRange(NSRange(location: 0, length: 2))
+        textView.textStorage?.addAttribute(.font, value: base, range: NSRange(location: 0, length: 2))
+
+        _ = RichTextMarkApplier.applyMarks([.italic], to: textView)
+        // 无 italic 字面（PingFang）：⌘I 经 .obliqueness 合成倾斜，必须可见生效。
+        let obliqueness = textView.attributedString().attribute(.obliqueness, at: 0, effectiveRange: nil) as? Double
+        #expect(obliqueness != nil, "italic on a family without an italic face must apply synthesized obliqueness")
+    }
+
+    @Test
+    func synthesizedItalicSurvivesCanonicalRoundTrip() {
+        // CJK 斜体以 .obliqueness 表达——canonicalDocument 必须把该属性
+        // 记为 .italic mark（FR-053 往返）。
+        let attributed = NSMutableAttributedString(string: "世界")
+        attributed.addAttribute(.font, value: NSFont.systemFont(ofSize: 13), range: NSRange(location: 0, length: 2))
+        attributed.addAttribute(.obliqueness, value: RichTextMarkApplier.synthesizedItalicObliqueness, range: NSRange(location: 0, length: 2))
+        let doc = RichTextView.Coordinator.canonicalDocument(from: attributed)
+        let marks = doc.paragraphs.flatMap(\.runs).flatMap(\.marks)
+        #expect(marks.contains(.italic),
+                "obliqueness-synthesized italic must round-trip as an .italic mark (FR-053)")
+    }
 }

@@ -575,7 +575,10 @@ public struct NoteWindowContent: View {
                             host.updateBlocks(newBlocks)
                         },
                         onStructuralBlocksChanged: { newBlocks in
-                            host.updateBlocks(newBlocks, isStructural: true)
+                            // 004 修复: editor-side structural changes (e.g.
+                            // FR-050a empty-block removal) register ONE undo
+                            // group through the host.
+                            host.updateBlocksStructural(newBlocks)
                         },
                         onInsertTodo: {
                             Task { await host.insertTodoBlock(target: toolbarInsertionTarget()) }
@@ -638,7 +641,17 @@ public struct NoteWindowContent: View {
                         },
                         onEmbeddedImageAction: { blockId, action in
                             await host.performEmbeddedImageAction(blockId: blockId, action: action)
-                        }
+                        },
+                        // 004 修复: unified editing context — every block
+                        // editor shares the window-level UndoManager; a
+                        // fresh insert focuses the new block; todo rows
+                        // re-fetch their state on structural undo/redo.
+                        undoManager: host.undoManager,
+                        focusRequest: host.pendingFocusBlockId,
+                        onFocusRequestHandled: {
+                            host.clearPendingFocusRequest()
+                        },
+                        todoRevision: host.undoRevision
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -699,7 +712,10 @@ public struct NoteWindowContent: View {
             }
         }
         .task {
-            if let host { await host.load() }
+            // 004 修复 (2026-08-13): only load when the host has no data —
+            // a late re-load re-fetches the DB and clobbers in-memory
+            // blocks (e.g. a just-inserted todo) and the undo context.
+            if let host, host.note == nil { await host.load() }
         }
     }
 

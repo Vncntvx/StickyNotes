@@ -222,6 +222,16 @@
 - **FR-019**: 内容内边距 MUST 自适应：窄宽度减少水平内边距以保留可用文字宽度，宽宽度适度增加呼吸空间；MUST NOT 将笔记文字居中成文档式固定宽度列（除非编辑器设计另有要求）。语义值（唯二状态）：compact = 10 pt 水平内边距（窄宽度）、regular = 14–16 pt（宽宽度），以窗口宽度 480 pt 切换；极宽上限 24 pt（防居中列）——此为本特性唯一允许的宽度感知规则（NSToolbar 无法表达内容内边距）。
 - **FR-020**: 滚动 MUST 使用原生 macOS 滚动行为与系统滚动条外观；MUST NOT 绘制常驻高对比滚动条轨道；窄宽度下滚动条 MUST NOT 消耗过高比例编辑器宽度；滚动、文本选择、插入与富文本行为 MUST 全部正常。
 
+**统一编辑上下文（2026-08-13 修复：Todo/Code Block 插入破坏编辑连续性）**
+
+- **FR-036**: 块插入 MUST 不改变正文编辑表面：Todo/Code Block MUST 作为内容节点内联插入同一纸面流，MUST NOT 把正文拆分为上下两个独立"纸面"区域；caret-split 产生的尾部富文本块 MUST 内容自适应高度（无 320pt 最小纸面高度）；主编辑面的 320pt 最小纸面高度 MUST 仅在其是笔记全部内容（无后续块）时生效——有块跟随即内容自适应，插入后 MUST NOT 出现大段空白或第二套块页面布局。
+- **FR-037**: 统一撤销/重做：每便签窗口 MUST 拥有一个共享 UndoManager，全部块编辑器（正文/todo/code）与全部结构变更共用；⌘Z/⌘⇧Z MUST 覆盖块插入/删除/移动/勾选/缩进与块内文本编辑；结构变更（插入/删除/移动/勾选/空块移除）MUST 注册为单个独立撤销组——⌘Z 恢复变更前文档状态、⌘⇧Z 重放；结构变更 MUST NOT 清空此前累积的逐字输入撤销——保留完整交错历史（2026-08-13 用户实测修订：早前"清空"决策导致 ⌘Z 只剩两三次）；结构组 MUST 以 `groupsByEvent=false` 暂态注册为独立顶层组（避免与相邻动作落入同一隐含事件组合并成一步）；撤销/重做的持久化副作用（TodoItem 行、FileLocator 行）MUST 与块列表同步恢复；模型推送 MUST NOT 产生撤销动作、MUST NOT 清空撤销栈。
+- **FR-038**: 格式命令路由 MUST 作用于当前聚焦的富文本编辑器（非恒为主编辑器）：⌘B/⌘I/⌘U 经每便签选区桥路由到焦点所在块（正文/todo/尾部块）；无选区时作用于 typingAttributes；纯文本块（code）中富文本格式命令 MUST no-op（等宽纯文本契约，FR-080）；斜体 MUST 对无 italic 字面的字体（如 CJK PingFang）生效——经 `.obliqueness` 合成倾斜（NSFont 丢弃 descriptor matrix、NSFontManager 无法为无字面家族合成，2026-08-13 实测 ⌘I 失效根因）；非聚焦编辑器的过期选区/失焦事件 MUST NOT 覆盖聚焦编辑器状态；聚焦编辑器自身失焦时上下文浮动行 MUST 隐藏（选区保留，FR-012 语义）。
+- **FR-039**: 插入完成后 First Responder MUST 移入新插入的文本块（Todo/Code），光标位于内容开头——插入即连续输入（2026-08-13 已确认决策）；截图/图片/文件等非文本块插入 MUST NOT 抢占焦点。
+- **FR-040**（FR-080/FR-081 扩展）: Code Block MUST 可编辑——等宽纯文本编辑器（NSTextView, `isRichText = false`），编辑写入 `CodePayload.text`（language 保留）；与正文/todo 同属统一编辑上下文（共享 UndoManager、选区桥焦点发布 `focusedSpecialBlockId` → 插入目标 `.afterBlock`、插入后焦点请求）；复制按钮 MUST 继续复制纯代码文本。
+- **FR-041**: Todo 文本 MUST 为完整富文本编辑面（替换原纯文本 TextField）：run 标记（bold/italic/underline/strikethrough/inlineCode/link）在编辑往返中保留（FR-053 语义）；完成态删除线/次要色 MUST 为显示专用样式，MUST NOT 写入 canonical 模型 marks；todo 行编辑/勾选/删除/移动全部进入统一 Undo history。
+- **FR-042**: 选区发布的光标偏移 MUST 为 Unicode scalar 偏移：NSTextView 的 UTF-16 码元偏移 MUST 在发布前转换（CJK/emoji 光标处拆分不得错位）；块拆分函数维持 scalar 偏移语义不变（FR-010/R3）。
+
 **Liquid Glass**
 
 - **FR-021**: 窗口 MUST 采用 macOS 27 原生 Liquid Glass 设计语言但遵循 Apple 层级：玻璃表示浮于内容之上的功能控制/导航层；笔记正文 MUST NOT 变为玻璃面板；笔记内容/背景保持内容层并提供笔记颜色身份（003 FR-041/FR-060 语义延续）。

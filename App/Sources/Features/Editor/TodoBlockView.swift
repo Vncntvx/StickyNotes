@@ -1,5 +1,6 @@
 import SwiftUI
 import Domain
+import SystemBridge
 
 // MARK: - TodoBlockView (T166/T243/T290, FR-070/FR-071/FR-072a/FR-072b/FR-182)
 //
@@ -10,10 +11,19 @@ import Domain
 // persists through the TodoRepository (stable identity, FR-071) — the
 // pre-Phase-27 version flipped local `@State` only. Large todo lists (100+)
 // render virtualized (FR-072b).
+//
+// 004 修复 (2026-08-13): the todo TEXT is a full rich-text surface — a
+// RichTextView (not a plain TextField), so run marks survive edits
+// (FR-053), ⌘B/⌘I work, typing undo lands on the window-level shared
+// UndoManager, and focus publishes `focusedSpecialBlockId` (insertion
+// targets `.afterBlock` — FR-010). Completion strikethrough/secondary
+// color is display-only styling (EditorDisplayStyling — never a model
+// mark).
 
 /// A virtualized todo list row (FR-072b: bounded row realization).
 public struct TodoBlockView: View {
     let block: Block
+    let textSize: CGFloat
     let onChanged: (Block) -> Void
     /// Fetches the backing TodoItem (stable identity — FR-071).
     let todoProvider: (UUID) async -> TodoItem?
@@ -23,21 +33,35 @@ public struct TodoBlockView: View {
     let onIndent: (UUID) async -> Void
     let onOutdent: (UUID) async -> Void
     let onMove: (UUID, Int) async -> Void
+    /// 004 修复: unified editing context wiring.
+    let selectionBridge: EditorSelectionBridge?
+    let undoManager: UndoManager?
+    let requestFocus: Bool
+    let onFocusRequestHandled: () -> Void
+    /// 004 修复: host undo/redo revision — re-fetches the TodoItem so the
+    /// checkbox follows structural undo/redo.
+    let todoRevision: Int
 
     @State private var todoItem: TodoItem?
-    @State private var text = ""
 
     public init(
         block: Block,
+        textSize: CGFloat = 13,
         onChanged: @escaping (Block) -> Void,
         todoProvider: @escaping (UUID) async -> TodoItem? = { _ in nil },
         onToggleComplete: @escaping (UUID) async -> Void = { _ in },
         onDelete: @escaping (UUID) async -> Void = { _ in },
         onIndent: @escaping (UUID) async -> Void = { _ in },
         onOutdent: @escaping (UUID) async -> Void = { _ in },
-        onMove: @escaping (UUID, Int) async -> Void = { _, _ in }
+        onMove: @escaping (UUID, Int) async -> Void = { _, _ in },
+        selectionBridge: EditorSelectionBridge? = nil,
+        undoManager: UndoManager? = nil,
+        requestFocus: Bool = false,
+        onFocusRequestHandled: @escaping () -> Void = {},
+        todoRevision: Int = 0
     ) {
         self.block = block
+        self.textSize = textSize
         self.onChanged = onChanged
         self.todoProvider = todoProvider
         self.onToggleComplete = onToggleComplete
@@ -45,9 +69,15 @@ public struct TodoBlockView: View {
         self.onIndent = onIndent
         self.onOutdent = onOutdent
         self.onMove = onMove
+        self.selectionBridge = selectionBridge
+        self.undoManager = undoManager
+        self.requestFocus = requestFocus
+        self.onFocusRequestHandled = onFocusRequestHandled
+        self.todoRevision = todoRevision
     }
 
     public var body: some View {
+        let isComplete = todoItem?.isComplete ?? false
         HStack(alignment: .top, spacing: 8) {
             Button {
                 // FR-070/FR-071: persist completion via the repository.
@@ -59,27 +89,32 @@ public struct TodoBlockView: View {
                     todoItem = updatedTodo
                 }
             } label: {
-                Image(systemName: (todoItem?.isComplete ?? false) ? "checkmark.square.fill" : "square")
-                    .foregroundStyle((todoItem?.isComplete ?? false) ? Color.accentColor : .secondary)
+                Image(systemName: isComplete ? "checkmark.square.fill" : "square")
+                    .foregroundStyle(isComplete ? Color.accentColor : .secondary)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel((todoItem?.isComplete ?? false) ? "Mark todo incomplete" : "Mark todo complete")
-            .accessibilityValue((todoItem?.isComplete ?? false) ? "Complete" : "Incomplete")
+            .accessibilityLabel(isComplete ? "Mark todo incomplete" : "Mark todo complete")
+            .accessibilityValue(isComplete ? "Complete" : "Incomplete")
 
-            TextField("Todo", text: $text)
-                .textFieldStyle(.plain)
-                .strikethrough(todoItem?.isComplete ?? false)   // FR-182: more than color alone
-                .foregroundStyle((todoItem?.isComplete ?? false) ? .secondary : .primary)
-                .onSubmit {
-                    commitText()
-                }
-                .onChange(of: text) { _, newValue in
-                    // Persist text edits through the block payload (structural —
-                    // immediate save, FR-141a).
-                    if newValue != blockText {
-                        commitText()
-                    }
-                }
+            // 004 修复: the todo text is a rich-text editor in the unified
+            // editing context (marks/undo/focus/⌘B/⌘I). Completion styling
+            // is display-only.
+            RichTextView(
+                document: todoDocument,
+                textSize: textSize,
+                onCommit: { document in
+                    commitText(document)
+                },
+                selectionBridge: selectionBridge,
+                richTextBlockId: block.id,
+                undoManager: undoManager,
+                minimumHeight: 0,
+                isSpecialBlock: true,
+                displayStyling: EditorDisplayStyling(strikethrough: isComplete, secondaryColor: isComplete),
+                requestFocus: requestFocus,
+                onFocusRequestHandled: onFocusRequestHandled
+            )
+            .frame(maxWidth: .infinity, alignment: .topLeading)
 
             HStack(spacing: 6) {
                 Button {
@@ -131,32 +166,30 @@ public struct TodoBlockView: View {
             .foregroundStyle(.secondary)
         }
         .padding(.vertical, 2)
-        .onAppear {
-            if case .todo(let payload) = block.payload {
-                text = payload.richText.text
-            }
-            Task {
-                todoItem = await todoProvider(block.id)
-            }
+        .task(id: todoRevision) {
+            // Re-fetches on appear AND after structural undo/redo (the
+            // revision bumps so the checkbox follows ⌘Z/⌘⇧Z).
+            todoItem = await todoProvider(block.id)
         }
     }
 
-    private var blockText: String {
-        if case .todo(let payload) = block.payload { return payload.richText.text }
-        return ""
+    /// The todo's rich-text document (todo text keeps run marks — FR-053).
+    private var todoDocument: RichTextDocument {
+        if case .todo(let payload) = block.payload { return payload.richText }
+        return .empty
     }
 
-    private func commitText() {
+    private func commitText(_ document: RichTextDocument) {
         guard case .todo(let payload) = block.payload else { return }
         let updated = Block(
             id: block.id,
             noteId: block.noteId,
             kind: block.kind,
             sortKey: block.sortKey,
-            payload: .todo(TodoPayload(todoId: payload.todoId, richText: RichTextDocument.plain(text))),
+            payload: .todo(TodoPayload(todoId: payload.todoId, richText: document)),
             versionId: block.versionId,
             parentVersionId: block.parentVersionId,
-            lastModifiedDeviceId: block.lastModifiedDeviceId,
+            lastModifiedDeviceId: DeviceIdentity.current.id,
             createdAt: block.createdAt,
             modifiedAt: Date()
         )

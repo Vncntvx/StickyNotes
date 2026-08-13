@@ -237,6 +237,18 @@ description: "Task list for feature 004: 独立笔记窗口原生镀铬与自适
 
 ---
 
+## Phase 11: 统一编辑上下文修复（Todo/Code Block 插入破坏编辑连续性）
+
+**Purpose**: 2026-08-13 用户问题报告：插入 Todo/Code Block 后正文布局断裂（尾部正文渲染为第二张 320pt 纸面）、焦点/选区/First Responder 割裂、⌘Z/⌘⇧Z 失效、⌘B/⌘I 失效。根因：块插入像插入独立 View/独立编辑器而非同一 Note Document 的内容节点。已确认决策：Code Block 做成可编辑；插入后焦点移入新块；结构变更清空旧逐字输入撤销。spec FR-036–FR-042、plan §4.5、data-model §2/§3/§4。
+
+- [X] T075 测试先行（先红）：新增 `AppTests/UnifiedEditingInfrastructureTests.swift`（同窗口编辑器共享 UndoManager、insertTodoBlock 单撤销组 + undo/redo 往返 + TodoItem 清理、caretSplit undo 恢复单块、结构变更清空旧输入撤销、插入后 first responder 落新块）；新增 `AppTests/FocusedEditorRoutingTests.swift`（applyMarks 作用聚焦编辑器、过时发布忽略、聚焦编辑器失焦清 hasFocus、code 编辑器富文本 no-op、focusedSpecialBlockId → afterBlock）；扩展 `InsertionTargetingTests`（UTF-16→scalar 转换 + CJK 拆分落位）、`EditorBlockEditingTests`（尾部编辑器内容自适应、todo 富文本往返、code 编辑提交写入 payload）
+- [X] T076 实现：`NoteWindowHostModel` 共享 `undoManager` + `registerStructuralUndo`（单组、清旧输入撤销、可往返动作对、串行效果队列 + `undoRevision`、`close()` 清栈断环）接线全部结构路径（insertTodo/insertCode/insertFileReference/captureScreenshot/insertImage/deleteBlock/deleteTodo/setTodoComplete/reorder/indent/outdent + `updateBlocksStructural` 空块移除）；`RichTextView` 统一化（共享 undoManager 经 delegate、`disableUndoRegistration` 推送不清栈、`minimumHeight` 实例化、`isSpecialBlock` 发布 focusedSpecialBlockId、`displayStyling` 完成态样式不进 canonical、scalar 偏移发布、插入后焦点请求）；新增 `CodeTextView`（等宽纯文本可编辑）；`EditorSelectionBridge` 聚焦编辑器跟踪（`publish(from:)` 权威过滤、`richTextEditable` no-op）；`RichTextBlockView` 尾部块全接线 + todo 富文本编辑面 + code 可编辑 + `focusRequest`；`NoteWindowCoordinator` 传共享 undoManager/焦点请求/undoRevision
+- [X] T076b 用户实测回归修复（2026-08-13 下午实测“症状依旧”）：`RichTextView`/`CodeTextView` `updateNSView` 回写 `coordinator.parent`（陈旧 parent 用旧 blocks 快照提交、抹掉插入块——真实管线才暴露）；主编辑面 `minimumHeight: secondaryBlocks.isEmpty ? nil : 0`（后续块存在时主纸面仍 320pt 撑大空白）；`NoteWindowContent` 外层 `.task` 仅 `host.note == nil` 时 load（迟到重载覆盖内存块表/撤销上下文）；新增 `EditorContinuityIntegrationTests` 真实管线回归（打字不丢块 + 焦点落新块 + undo 恢复）
+- [X] T076c 第二轮用户实测修复（2026-08-13 傍晚：仍空白/⌘I 失效/⌘Z 仅两三次）：`RichTextView.updateNSView` 重应用 `minimumHeight`（makeNSView 只跑一次）；斜体改 `.obliqueness` 合成（无 italic 字面字体）+ canonical 往返记 `.italic`；撤销撤销"清空"决策（`registerStructuralUndo` 去 `removeAllActions` + `groupsByEvent=false` 暂态独立组）；回归 `FormattingRoundTripTests`/`structuralChangesPreserveFullUndoHistory`/集成测试主纸面高度收缩
+- [X] T077 回归与工件同步：全量 `xcodebuild test` 绿（StickyCore + App）；spec FR-036–042、plan §4.5、data-model §2/§3/§4、tasks 同步；`scripts/sign-local.sh` 供人工验收（插入 todo/code 后连续编辑、⌘Z/⌘⇧Z、⌘B/⌘I 于焦点块、CJK 光标拆分）
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies

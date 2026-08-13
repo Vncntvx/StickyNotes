@@ -170,6 +170,33 @@ import Domain
         #expect(trailing.text == "")
     }
 
+    // MARK: UTF-16 → scalar caret offsets (004 修复：光标偏移单位)
+
+    @Test
+    func utf16CaretOffsetConvertsToScalarOffset() {
+        // NSTextView 的 selectedRange.location 是 UTF-16 码元偏移；
+        // canonical 文档与 splitRichTextBlock 使用 Unicode scalar 偏移。
+        #expect(NoteWindowDerivations.scalarOffset(fromUTF16: 1, in: "你好") == 1)
+        #expect(NoteWindowDerivations.scalarOffset(fromUTF16: 2, in: "你好") == 2)
+        // "a😀b"：emoji 占 2 个 UTF-16 码元、1 个 scalar。
+        #expect(NoteWindowDerivations.scalarOffset(fromUTF16: 3, in: "a😀b") == 2,
+                "emoji caret offsets must count scalars, not UTF-16 units")
+        #expect(NoteWindowDerivations.scalarOffset(fromUTF16: 4, in: "a😀b") == 3)
+        #expect(NoteWindowDerivations.scalarOffset(fromUTF16: 0, in: "abc") == 0)
+        #expect(NoteWindowDerivations.scalarOffset(fromUTF16: 99, in: "abc") == 3,
+                "out-of-bounds offsets clamp to the document length")
+    }
+
+    @Test
+    func utf16ScalarConversionFeedsCaretSplitCorrectly() {
+        // CJK 光标拆分：UTF-16 偏移必须先转 scalar 才能正确落位。
+        let doc = RichTextDocument.plain("你好世界")
+        let scalar = NoteWindowDerivations.scalarOffset(fromUTF16: 2, in: doc.text)
+        let (leading, trailing) = NoteWindowDerivations.splitRichTextBlock(payload: doc, offset: scalar)
+        #expect(leading.text == "你好")
+        #expect(trailing.text == "世界")
+    }
+
     @Test
     func splitAcrossParagraphBoundariesRebuildsParagraphs() {
         let doc = RichTextDocument(

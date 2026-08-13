@@ -25,8 +25,16 @@ public enum EditorSelectionContext {
         registry[noteId] ?? InsertionContext()
     }
 
-    /// The key note's bridge, or nil.
+    /// The key note's bridge, or nil. Prefers the bridge whose editor is
+    /// actually focused (004 修复: 格式命令作用于聚焦编辑器，而非任意
+    /// key-window 主编辑器).
     public static func bridge(forKeyWindow noteIds: [UUID]) -> EditorSelectionBridge? {
+        for noteId in noteIds {
+            if let bridge = bridges[noteId], bridge.hasFocus,
+               bridge.textView?.window?.isKeyWindow == true {
+                return bridge
+            }
+        }
         for noteId in noteIds where bridges[noteId]?.textView?.window?.isKeyWindow == true {
             return bridges[noteId]
         }
@@ -45,22 +53,30 @@ public enum EditorSelectionContext {
 public final class EditorSelectionBridge {
     /// The note this bridge belongs to.
     public let noteId: UUID
-    /// The live text view (set by RichTextView's Coordinator; weak — never
-    /// outlives the editor). NSTextView is the formatting authority.
+    /// The live focused editor (set when an editor publishes focus; weak —
+    /// never outlives the editor). NSTextView is the formatting authority.
     public weak var textView: NSTextView?
-    /// Whether any text is selected in the primary editor.
+    /// The most recent editor that published `hasFocus == true` — the
+    /// authority filter: stale publishes from non-focused editors are
+    /// ignored (004 修复: 多编辑器共用一个 bridge).
+    private weak var focusedTextView: NSTextView?
+    /// Whether any text is selected in the focused editor.
     public private(set) var isTextSelected = false
-    /// Whether the editor is the first responder (window focused, caret
-    /// active).
+    /// Whether the focused editor is the first responder (window focused,
+    /// caret active).
     public private(set) var hasFocus = false
-    /// The caret position (scalar offset in the rich-text block).
+    /// Whether the focused editor accepts rich-text marks (plain-text code
+    /// editors report false — ⌘B/⌘I no-op there).
+    public private(set) var richTextEditable = true
+    /// The caret position (scalar offset in the block).
     public private(set) var caretOffset: Int?
-    /// The selected range (scalar offsets) — nil when collapsed.
+    /// The selected range (UTF-16 NSRange of the focused editor) — nil when
+    /// collapsed.
     public private(set) var selectedRange: NSRange?
     /// The selection rectangle in window coordinates (contextual row
     /// anchoring).
     public private(set) var selectionRectInWindow: CGRect?
-    /// The currently focused special block id (todo input etc.), if any.
+    /// The currently focused special block id (todo/code editor), if any.
     public private(set) var focusedSpecialBlockId: UUID?
 
     public init(noteId: UUID) {
@@ -72,17 +88,34 @@ public final class EditorSelectionBridge {
     /// Publishes a selection snapshot (called from the editor's
     /// `textDidChangeSelection` and focus callbacks). Updates the
     /// insertion-target registry alongside the UI state.
+    ///
+    /// Authority rule (004 修复): a publish with `hasFocus == true` makes
+    /// `textView` the focused editor; publishes from any OTHER editor are
+    /// ignored (stale focus-loss/selection events must not clobber the
+    /// focused state). A `from: nil` publish (tests/legacy) is authoritative.
     public func publish(
+        from textView: NSTextView? = nil,
         caretBlockId: UUID?,
         isTextSelected: Bool,
         hasFocus: Bool,
+        richTextEditable: Bool = true,
         caretOffset: Int?,
         selectedRange: NSRange?,
         selectionRectInWindow: CGRect?,
         focusedSpecialBlockId: UUID?
     ) {
+        if let textView {
+            if hasFocus {
+                focusedTextView = textView
+                self.textView = textView
+            } else if focusedTextView !== textView {
+                // Stale publish from a non-focused editor — ignore.
+                return
+            }
+        }
         self.isTextSelected = isTextSelected
         self.hasFocus = hasFocus
+        self.richTextEditable = richTextEditable
         self.caretOffset = caretOffset
         self.selectedRange = selectedRange
         self.selectionRectInWindow = selectionRectInWindow
@@ -104,10 +137,12 @@ public final class EditorSelectionBridge {
         )
     }
 
-    /// Applies marks to the live editor (contextual format row — 004
+    /// Applies marks to the focused editor (contextual format row — 004
     /// T038/FR-012). No selection → typingAttributes (subsequent input);
-    /// IME composition suppresses application (FR-063).
+    /// IME composition suppresses application (FR-063); plain-text (code)
+    /// editors are a no-op (004 修复).
     public func applyMarks(_ marks: Set<RichTextMark>) {
+        guard richTextEditable else { return }
         guard let textView else { return }
         RichTextMarkApplier.applyMarks(marks, to: textView)
     }
@@ -115,11 +150,13 @@ public final class EditorSelectionBridge {
     public func invalidate() {
         isTextSelected = false
         hasFocus = false
+        richTextEditable = true
         caretOffset = nil
         selectedRange = nil
         selectionRectInWindow = nil
         focusedSpecialBlockId = nil
         textView = nil
+        focusedTextView = nil
         EditorSelectionContext.bridges[noteId] = nil
         EditorSelectionContext.registry[noteId] = nil
     }

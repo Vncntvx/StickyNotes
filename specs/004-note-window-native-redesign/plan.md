@@ -246,6 +246,19 @@ close（红绿灯/⌘W/菜单）
 - 动作路由：全部直改 NSTextView（textStorage/typingAttributes）——**NSTextView 是格式权威，SwiftUI 无格式状态副本**；标记经既有 canonicalDocument 往返（bold/italic/underline/strikethrough/inlineCode 已支持，FR-053）。混合格式：无选区→作用于 typingAttributes；有选区→按选区首个字符属性显示态。
 - 字号：上下文菜单调整 `note.textSize`（整笔记，001 FR-043a 语义——规范模型无 per-run 字号，research §5 已记录此边界）。
 
+### 4.5 统一编辑上下文（2026-08-13 修复：Todo/Code Block 插入破坏编辑连续性）
+
+问题根因：caret-split 插入把正文切成**两个独立 NSTextView**（尾部块渲染为第二张 320pt 纸面），todo 是纯 SwiftUI TextField、code 只读展示；各编辑器各自 undo 栈、只有主编辑器接选区桥、格式菜单恒作用于主编辑器。修复目标：保留块数组数据模型不变，重建其上的编辑基础设施，使一个便签窗口对外表现为一个统一文档。
+
+- **统一编辑器面**（FR-036/040/041）：全部含文本块各承载一个 NSTextView——正文/todo 复用 `RichTextView`（todo 传 `minimumHeight: 0` + `isSpecialBlock: true` + `displayStyling` 完成态样式，run 标记往返保留）、code 新增 `CodeTextView`（`isRichText = false` 等宽，提交写 `CodePayload.text`）。`NotePaperTextView` 的 320pt 最小纸面高度改为实例属性——仅主编辑面保持，尾部/todo 编辑器内容自适应（空块近塌缩）。`CodeBlockView` 语言标签 + 复制按钮保留。
+- **统一 UndoManager**（FR-037）：`NoteWindowHostModel.undoManager`（每窗口一个）；各编辑器 Coordinator 实现 `NSTextViewDelegate.undoManager(for:)` 返回共享栈；模型推送 `disableUndoRegistration` 包裹且不再 `removeAllActions`（清栈职责移至结构变更）；结构变更经 `registerStructuralUndo`（`beginUndoGrouping` → `removeAllActions` 清旧逐字撤销（已确认决策）→ `registerUndo` 注册可往返动作对 → `endUndoGrouping`）——插入/删除/移动/勾选/缩进/空块移除全部覆盖；撤销闭包同步恢复内存 blocks、串行队列回写 TodoItem/FileLocator 行并 bump `undoRevision`（todo 行据此重拉状态）。`close()` 清栈断开 NSUndoManager 对 host 的持有。
+- **聚焦编辑器路由**（FR-038）：`EditorSelectionBridge` 增加聚焦编辑器跟踪（`focusedTextView` + `publish(from:)` 权威过滤——非聚焦编辑器的过期发布被忽略）；`applyMarks` 作用于聚焦编辑器；`richTextEditable = false`（code）时富文本命令 no-op、上下文行不出现；`bridge(forKeyWindow:)` 优先 hasFocus。特殊块编辑器聚焦发布 `focusedSpecialBlockId` → 插入目标 `.afterBlock` 首次真实生效（原死代码）。
+- **插入后焦点**（FR-039）：host 插入方法设 `pendingFocusBlockId`；`RichTextBlockView` 以 `focusRequest` 传给新块编辑器，其 Coordinator 在窗口就绪后 `makeFirstResponder` + 光标置开头，完成回调清请求（仅 todo/code 文本块；截图/图片/文件不抢焦点）。
+- **偏移单位修复**（FR-042）：`publishSelection` 发布前经 `scalarOffset(fromUTF16:in:)`（新纯函数）把 UTF-16 码元偏移转为 scalar——修复 CJK/emoji 光标处拆分错位。
+- **用户实测回归修复（2026-08-13 下午）**：headless 单测全绿但真实 App 症状依旧——两个只在真实管线暴露的根因：① `makeCoordinator` 只在首次渲染捕获 `parent` struct，SwiftUI 从不刷新——caret-split 后主编辑器下一次按键提交用的是插入前的旧 `blocks` 快照，把刚插入的 Todo/尾部块整体抹掉（编辑上下文断裂、⌘Z 无法恢复）；修复 = `updateNSView` 每次把当前 struct 赋回 `coordinator.parent`（RichTextView/CodeTextView 同步）。② 主编辑面 320pt 最小高度在后续块存在时继续生效，把插入块推到正文下方 ~320pt 形成大空白；修复 = `minimumHeight: secondaryBlocks.isEmpty ? nil : 0`。③ `NoteWindowContent` 外层 `.task` 的 `host.load()` 迟到会重取 DB 覆盖内存块表（含刚插入的块与撤销上下文）；修复 = 仅 `host.note == nil` 时才 load（协调器 open() 已负责首次/重开加载）。回归钉住：新增 `AppTests/EditorContinuityIntegrationTests`（真实 NoteWindowContent 管线：插入后正文打字不丢块 + 焦点落新 Todo 编辑器 + 共享撤销栈恢复插入前单块）。
+- **第二轮用户实测修复（2026-08-13 傍晚）**：① 主编辑面 320pt 最小高度只在 `makeNSView` 应用一次——真实 App 中主编辑器身份不变、插入后 `minimumHeight: 0` 永不落到已存在的 NSTextView（空白依旧）；修复 = `updateNSView` 每次重应用 + `invalidateIntrinsicContentSize`。② ⌘B 生效而 ⌘I 失效：`withSymbolicTraits(.italic)`/NSFontManager 对无 italic 字面的字体（CJK PingFang）静默失效，NSFont 又丢弃 descriptor matrix；修复 = 无字面时经 `.obliqueness`（TextKit 原生字形倾斜）合成，canonical 往返以 `hasTrait(.italic) || .obliqueness != nil` 记 `.italic` mark。③ ⌘Z 仅两三次：早前"结构变更清空旧输入撤销"决策收回——`registerStructuralUndo` 不再 `removeAllActions`，且以 `groupsByEvent=false` 暂态注册保证结构组为独立顶层组（否则与相邻动作落入同一隐含事件组合并）。回归：`FormattingRoundTripTests`（斜体合成/obliqueness 往返）、`UnifiedEditingInfrastructureTests.structuralChangesPreserveFullUndoHistory`、`EditorContinuityIntegrationTests`（主纸面高度收缩）。
+- 不做：跨块连续选区（跨 NSTextView）、相邻 richText 块合并为单 NSTextView、Markdown 转换接入（`EditorCommands` 仍不接线——撤销走 App 原生 NSUndoManager 注册）。
+
 ## 5. Liquid Glass 策略
 
 ### 5.1 Category A — 系统提供（零自定义代码）
