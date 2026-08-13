@@ -162,24 +162,33 @@ import Persistence
         #expect(true)
     }
 
-    // MARK: - 003 T039 (FR-050/FR-051/SC-011): Settings navigation
+    // MARK: - 003 T039 (FR-050/FR-051/SC-011; Rev 2 T175): Settings navigation
 
     @Test
     func settingsUsesNativeToolbarStyleTabNavigation() {
-        // FR-050: native toolbar-style tab navigation (macOS 14+ TabView),
-        // exactly four logical areas.
+        // FR-050 (Rev 2): native toolbar-style tab navigation (macOS 14+
+        // TabView), exactly three logical areas.
         #expect(SettingsLayoutPolicy.usesNativeToolbarTabs == true,
                 "Settings must use native toolbar-style tab navigation (FR-050)")
-        #expect(SettingsLayoutPolicy.logicalAreas == ["General", "Sync", "Fonts", "Permissions"],
-                "exactly four logical areas (General/Sync/Fonts/Permissions)")
+        #expect(SettingsLayoutPolicy.logicalAreas == ["General", "Sync", "Privacy"],
+                "exactly three logical areas (General/Sync/Privacy, FR-050 Rev 2)")
     }
 
     @Test
-    func settingsPanelHeightFitsContent() {
-        // FR-051/SC-011: panel height adapts to content — no fixed blank
-        // canvas.
-        #expect(SettingsLayoutPolicy.fixedCanvasHeight == nil,
-                "no fixed-height pane with hundreds of pixels of empty space (FR-051)")
+    func settingsWindowShellIsStableAcrossTabs() {
+        // FR-051 (Rev 2): stable window shell — tab switches never change
+        // window geometry; the minimum width keeps the primary navigation
+        // expanded (no icon-collapse fallback).
+        #expect(SettingsWindowPolicy.windowSizeStableAcrossTabs,
+                "tab switches must not change window geometry (FR-051 Rev 2)")
+        #expect(SettingsWindowPolicy.navigationNeverCollapsesAtMinimumWidth,
+                "the minimum width must keep the text navigation expanded (FR-051 Rev 2)")
+        #expect(SettingsWindowPolicy.onlyOverflowingTabsScroll,
+                "only overflowing tabs get a scrolling container (FR-051 Rev 2)")
+        #expect(SettingsWindowPolicy.minimumWidth >= 600,
+                "minimum width must fit three text tabs in en/zh-Hans")
+        #expect(SettingsWindowPolicy.defaultHeight > SettingsWindowPolicy.minimumHeight,
+                "default height must exceed the minimum")
     }
 
     // MARK: - 003 T043 (spec §Failure & Recovery, CHK031)

@@ -4,10 +4,10 @@ import Domain
 // MARK: - FontPreferenceStore (T308, FR-043)
 //
 // Device-local storage of the global font preference, shared by the Settings
-// UI (`FontPreferenceView`) and the editor's font resolution
-// (`NoteFontResolver`). The key/suite constants must not drift between the
-// two consumers (the previous single-key usage lived inside
-// `FontPreferenceView`).
+// UI (`NoteFontSection`, Rev 2 — formerly `FontPreferenceView`) and the
+// editor's font resolution (`NoteFontResolver`). The key/suite constants
+// must not drift between the two consumers (the previous single-key usage
+// lived inside `FontPreferenceView`).
 
 public enum FontPreferenceStore {
     /// The standard UserDefaults domain used for device-local preferences.

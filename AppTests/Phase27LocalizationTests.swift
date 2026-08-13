@@ -11,11 +11,13 @@ import Foundation
 @Suite struct Phase27LocalizationTests {
 
     /// The keys added by Phase 26/27 (each must exist with both languages).
+    /// Rev 2 (2026-08-14): Settings copy changes — renamed keys replace the
+    /// removed ones ("Configured" → resolver-driven "Up to Date" etc.).
     private static let requiredKeys: [String] = [
         "Help", "Sticky Notes Help", "Menu-bar first", "Auto-save",
         "Keyboard shortcuts", "Markdown shortcuts", "Screenshots and files",
-        "Synchronization", "Not configured", "Configured", "Automatic sync",
-        "Remember unlocked vault on this Mac", "Sync Now", "Syncing…",
+        "Synchronization", "Not configured", "Up to Date", "Automatic sync",
+        "Keep sync unlocked on this Mac", "Sync Now", "Syncing…",
         "Moved to Trash", "Permanently Deleted", "Sync not configured",
         "Sync issue", "Retry", "Sync ready", "Add Todo", "Add Code Block",
         "Add File Reference…", "Capture Screenshot…", "Add Block",
@@ -28,9 +30,13 @@ import Foundation
         "New Note from Clipboard", "Show/Hide Note Windows",
         "Add screenshot", "Add file reference",
         "Configure Synchronization", "Provider", "WebDAV", "S3-compatible",
-        "Vault password", "Test Connection", "Configure", "Replace",
-        "Configure Sync…", "Replace Repository…", "Remove Configuration…",
-        "Export Diagnostic Bundle…",
+        "Vault password", "Test Connection", "Join", "Set Up",
+        "Set Up Sync…", "Join Existing Vault…", "Join Another Vault…",
+        "Set Up New Storage Location…", "Disconnect Sync…",
+        "Export Diagnostic Bundle…", "Export Sync Profile…",
+        "Last synced", "Storage", "Sync vault is locked", "Unlock…",
+        "Screen Recording", "Not Granted", "Enable…",
+        "Disconnect Sync?", "Disconnect",
     ]
 
     @Test

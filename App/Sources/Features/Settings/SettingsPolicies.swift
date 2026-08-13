@@ -1,19 +1,49 @@
 import Foundation
 
-// MARK: - Settings policies (003 T044-T050, FR-050/FR-051/FR-052/FR-055/FR-056)
+// MARK: - Settings policies (003 T044-T050, FR-050/FR-051/FR-052/FR-055/FR-056; Rev 2 2026-08-14)
 //
-// Testable policy sources for the Settings redesign (asserted by T039/T041/
-// T042/T043): native toolbar-style tab navigation, content-fit panels,
-// failure handling, recorder conflict semantics, and the single "note font"
-// concept. The views consult these; the tests assert them.
+// Testable policy sources for the Settings architecture (asserted by
+// T039/T041/T042/T043 and the Rev 2 T175 policy tests): native toolbar-style
+// tab navigation over three logical areas (General/Sync/Privacy — Rev 2),
+// a STABLE window shell whose geometry never depends on the selected tab
+// (FR-051 Rev 2), failure handling, and the single "note font" concept. The
+// views consult these; the tests assert them.
+//
+// Rev 2 (2026-08-14): the window shell is stable by design — switching tabs
+// MUST NOT resize the window, the window MUST NOT shrink below the minimum
+// that keeps the primary navigation expanded, and only the Sync pane (the
+// one that can actually overflow) uses an internal scrolling container.
 
 public enum SettingsLayoutPolicy {
     /// FR-050: native toolbar-style tab navigation (macOS 14+ TabView).
     public static let usesNativeToolbarTabs = true
-    /// The four logical areas.
-    public static let logicalAreas = ["General", "Sync", "Fonts", "Permissions"]
-    /// FR-051/SC-011: no fixed-height pane — panels fit their content.
-    public static let fixedCanvasHeight: CGFloat? = nil
+    /// FR-050 (Rev 2): the three logical areas. Fonts folded into General's
+    /// Notes section; Permissions renamed Privacy.
+    public static let logicalAreas = ["General", "Sync", "Privacy"]
+}
+
+/// The implementation-level window-shell policy (FR-051 Rev 2 behavior).
+/// The SPEC asserts behavior only (stable geometry across tab switches, no
+/// navigation collapse at the minimum width, default size shows
+/// General/Privacy completely, Sync overflows into an internal scroll
+/// region); these numbers are the current implementation values and may be
+/// tuned without a spec change.
+public enum SettingsWindowPolicy {
+    /// Stable default window size (points).
+    public static let defaultWidth: CGFloat = 640
+    public static let defaultHeight: CGFloat = 560
+    /// Minimum window size (points) — keeps the three text tabs expanded in
+    /// en and zh-Hans and shows General/Privacy fully.
+    public static let minimumWidth: CGFloat = 600
+    public static let minimumHeight: CGFloat = 440
+    /// FR-051 Rev 2: switching tabs never changes window geometry.
+    public static let windowSizeStableAcrossTabs = true
+    /// Only tabs that can actually overflow (Sync) get a scrolling
+    /// container; General/Privacy must not introduce one preemptively.
+    public static let onlyOverflowingTabsScroll = true
+    /// The minimum width keeps the primary (text) navigation expanded —
+    /// no compact icon fallback UI exists or is planned.
+    public static let navigationNeverCollapsesAtMinimumWidth = true
 }
 
 public enum SettingsFailurePolicy {

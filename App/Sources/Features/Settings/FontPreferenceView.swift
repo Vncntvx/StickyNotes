@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 import Domain
 
-// MARK: - FontPreferenceView (003 T047, FR-055)
+// MARK: - NoteFontSection (003 T047, FR-055; Rev 2 2026-08-14)
 //
 // Per tasks.md T047 and spec FR-055: a SINGLE user-facing "note font"
 // concept — one family picker + automatic system fallback for CJK —
@@ -10,8 +10,12 @@ import Domain
 // font"). The storage key is unchanged (001 FR-043); the default aligns
 // with macOS system typography; the preview is meaningfully bilingual
 // (Latin + CJK mixed, FR-055).
+//
+// Rev 2 (2026-08-14, FR-050): no longer its own first-level tab — embedded
+// as the General pane's "Notes" section content. Behavior and storage are
+// unchanged.
 
-public struct FontPreferenceView: View {
+public struct NoteFontSection: View {
     @State private var noteFontFamily: String = Self.currentFamily
     /// 003 T043 (CHK031): a save failure surfaces as a non-blocking
     /// localized notice; user data is never overwritten (the store
@@ -27,11 +31,7 @@ public struct FontPreferenceView: View {
     }
 
     public var body: some View {
-        Form {
-            Text("The note font applies to all notes. Chinese text uses a matching system font automatically.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-
+        Group {
             // FR-055: ONE "note font" field (no implementation typography
             // terms). The family name persists under the unchanged key.
             TextField("Note font", text: $noteFontFamily)
@@ -55,8 +55,6 @@ public struct FontPreferenceView: View {
                     .foregroundStyle(.orange)
             }
         }
-        .formStyle(.grouped)
-        .padding(20)
     }
 
     private func persist() {

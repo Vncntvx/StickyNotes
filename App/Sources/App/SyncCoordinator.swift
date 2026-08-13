@@ -110,6 +110,12 @@ public final class SyncCoordinator {
 
     public var isConfigured: Bool { configuration != nil }
 
+    /// Rev 2 (2026-08-14, FR-053): whether the vault master key is currently
+    /// available (engine wired). False after a restart with remember-unlock
+    /// off — the Settings surface must render the Locked state honestly
+    /// instead of a fake "Configured" with dead controls.
+    public var isVaultUnlocked: Bool { vault != nil }
+
     /// The configured vault's encryption-suite version (nil when no vault is
     /// unlocked/configured). Used by the sync-profile export (T032/FR-009)
     /// so the file always reflects the actual vault, never a hardcoded value.
@@ -392,6 +398,47 @@ public final class SyncCoordinator {
         self.lastErrorCode = nil
         wireEngine(configuration: joined, vault: vault)
         await runSync()
+    }
+
+    // MARK: - Unlock (Rev 2 2026-08-14, FR-162a(b)/FR-053)
+
+    /// Unlocks a configured-but-locked vault with the sync password:
+    /// fetches the vault bootstrap from the configured repository (READ-ONLY,
+    /// by locator — same object the join flow reads), derives/unwraps the
+    /// master key, and wires the engine. No local configuration or Keychain
+    /// item is written. Fail closed: wrong password / missing bootstrap /
+    /// wrong vault never mutate state.
+    public func unlock(password: String) async throws {
+        guard let configuration else {
+            throw StickyError.credentials(.notConfigured)
+        }
+        let credentialsData = try secretStore.load(forKey: configuration.keychainCredentialRef)
+        let credentials = credentialsData.flatMap {
+            try? CanonicalJSONDecoder().decode(SyncProviderCredentials.self, from: $0)
+        } ?? SyncProviderCredentials()
+        let provider = try makeProvider(configuration: configuration, credentials: credentials)
+
+        let bootstrapName = RemoteLayout.bootstrapObjectName(for: configuration.vaultLocator)
+        let wire: Data
+        do {
+            wire = try await provider.fetch(objectName: bootstrapName)
+        } catch ProviderError.notFound {
+            throw StickyError.credentials(.notFound)
+        }
+
+        let key = try await VaultBootstrapService.openRemoteBootstrap(
+            remoteBootstrap: wire,
+            password: password,
+            expectedVaultId: configuration.vaultId
+        )
+        let parsedBootstrap = try VaultBootstrap.fromCanonicalJSON(wire)
+        let vault = Vault(
+            vaultId: parsedBootstrap.vaultId,
+            encryptionSuiteVersion: parsedBootstrap.encryptionSuiteVersion,
+            masterKey: key
+        )
+        self.vault = vault
+        wireEngine(configuration: configuration, vault: vault)
     }
 
     // MARK: - Sync (FR-151/FR-152/FR-152a)

@@ -4,7 +4,7 @@ import Domain
 import SyncCore
 import SystemBridge
 
-// MARK: - SyncSettingsView (T170/T186/T285)
+// MARK: - SyncSettingsView (T170/T186/T285; Rev 2 2026-08-14, FR-053/FR-054)
 //
 // Per tasks.md T170/T186/T285 and spec FR-150/FR-151/FR-152/FR-152a/FR-153/
 // FR-154/FR-160/FR-162/FR-162a/FR-163/FR-164/FR-165:
@@ -18,6 +18,14 @@ import SystemBridge
 // auto-delete of prior remote data (FR-154), the unrecoverable-password
 // warning (FR-163), the FR-162a remember-unlock toggle, and the FR-191
 // diagnostic-bundle export (T186).
+//
+// Rev 2 (2026-08-14, FR-053/FR-054): user-facing hierarchy — Status /
+// Storage / Automatic Sync / Security / Actions / Advanced. Status is
+// resolver-driven (never the internal "Configured" string); the Locked
+// state is shown honestly with an Unlock action; controls that cannot work
+// while locked are disabled. Advanced keeps Join as its own product action.
+// Status/error feedback is TRANSIENT (auto-clears; never survives a
+// Settings close/reopen) and announced via VoiceOver (FR-180b).
 
 public struct SyncSettingsView: View {
     let syncCoordinator: SyncCoordinator?
@@ -26,15 +34,17 @@ public struct SyncSettingsView: View {
     @State private var showJoinSheet = false
     @State private var showReplaceSheet = false
     @State private var showRemoveConfirmation = false
+    @State private var showUnlockAlert = false
+    @State private var unlockPassword = ""
     @State private var errorMessage: String?
     @State private var statusMessage: String?
+    /// Cancels a pending auto-clear when a new transient message arrives
+    /// (repeated actions must not let an older message clear the newer one).
+    @State private var transientTask: Task<Void, Never>?
 
-    /// The configured status, including the active protocol so the user can
-    /// always see which sync protocol is in use (FR-150).
-    private var statusText: String {
-        guard syncCoordinator?.isConfigured == true else { return "Not configured" }
-        return "Configured"
-    }
+    private var isConfigured: Bool { syncCoordinator?.isConfigured == true }
+    private var isVaultUnlocked: Bool { syncCoordinator?.isVaultUnlocked == true }
+    private var isInProgress: Bool { syncCoordinator?.isInProgress == true }
 
     /// The active protocol (WebDAV / S3-compatible), or "—" when
     /// unconfigured.
@@ -69,198 +79,35 @@ public struct SyncSettingsView: View {
     }
 
     public var body: some View {
-        Form {
-            Section("Synchronization") {
-                Text("Sticky Notes syncs end-to-end encrypted to exactly one WebDAV or S3-compatible repository. Content is encrypted on this Mac before upload.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-
-                LabeledContent("Status") {
-                    Text(statusText)
-                }
-                LabeledContent("Provider") {
-                    Text(providerText)
-                }
-                if let configuration = syncCoordinator?.configuration {
-                    // FR-008/US1: the vault locator is the join key for
-                    // another Mac (manual entry or exported profile). Opaque
-                    // and non-sensitive (CHK032); displayed so device A can
-                    // share it with device B.
-                    LabeledContent("Vault") {
-                        Text(configuration.vaultLocator)
-                            .font(.system(.body, design: .monospaced))
-                            .textSelection(.enabled)
-                            .help("The vault locator. Enter it on another Mac to join this vault.")
-                    }
-                    LabeledContent("Repository") {
-                        Text(repositoryText(configuration))
-                            .textSelection(.enabled)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                LabeledContent("Last successful sync") {
-                    if let date = syncCoordinator?.lastSuccessfulSyncAt {
-                        Text(DisplayFormatters.lastModified(date))
-                    } else {
-                        Text("—")
-                    }
-                }
-                if let error = syncCoordinator?.lastErrorCode {
-                    // FR-174-d (sync.historyAgedOut) is INFORMATIONAL, not an
-                    // error: some sync history may have aged out; content is
-                    // preserved. Show it muted instead of the alarming orange.
-                    if error == "sync.historyAgedOut" {
-                        LabeledContent("Sync history") {
-                            Text("Some sync history may have aged out; your notes were preserved.")
-                                .foregroundStyle(.secondary)
-                        }
-                    } else {
-                        // 003 T058 (FR-011/SC-012): the settings surface shows
-                        // the HUMAN-READABLE FR-012 mapping — never the raw
-                        // internal code (codes stay in the diagnostic export
-                        // experience only).
-                        LabeledContent("Last error") {
-                            Text(SyncStatusResolver.resolve(
-                                isConfigured: true,
-                                lastErrorCode: error,
-                                vaultLocked: false,
-                                hasOfflineChangesPending: false,
-                                summary: .empty
-                            )?.title ?? "Sync needs attention")
-                                .foregroundStyle(.orange)
-                        }
-                    }
-                }
-
-                if syncCoordinator?.isConfigured == true {
-                    Toggle("Automatic sync", isOn: Binding(
-                        get: { syncCoordinator?.autoSyncEnabled ?? false },
-                        set: { syncCoordinator?.setAutoSyncEnabled($0) }
-                    ))
-                    .help("Syncs automatically a few seconds after local changes (FR-152a)")
-
-                    // FR-152 (clarified 2026-08-08): user-selectable strategy —
-                    // change-only or a fixed periodic interval.
-                    Picker("Sync frequency", selection: Binding(
-                        get: { syncCoordinator?.autoSyncPolicy ?? .default },
-                        set: { syncCoordinator?.setAutoSyncPolicy($0) }
-                    )) {
-                        ForEach(AutoSyncPolicy.allCases, id: \.self) { policy in
-                            Text(policy.displayName).tag(policy)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .disabled(!(syncCoordinator?.autoSyncEnabled ?? false))
-                    .help("When automatic sync is on: sync after local changes only, or also on a fixed interval (FR-152)")
-
-                    Toggle("Remember unlocked vault on this Mac", isOn: Binding(
-                        get: { (syncCoordinator?.configuration?.rememberedUnlock ?? .disabled) == .enabledUntilLockOrRestart },
-                        set: { newValue in
-                            Task {
-                                do {
-                                    try await syncCoordinator?.setRememberUnlock(newValue)
-                                    statusMessage = newValue
-                                        ? String(localized: "Unlock will be remembered until this Mac restarts or you lock the vault.")
-                                        : String(localized: "Remembered unlock cleared.")
-                                } catch {
-                                    errorMessage = String(localized: "Could not change the remember-unlock setting.")
-                                }
-                            }
-                        }
-                    ))
-
-                    Button {
-                        Task {
-                            await syncCoordinator?.manualSync()
-                        }
-                    } label: {
-                        if syncCoordinator?.isInProgress == true {
-                            HStack(spacing: 6) {
-                                ProgressView().controlSize(.small)
-                                Text("Syncing…")
-                            }
-                        } else {
-                            Text("Sync Now")
-                        }
-                    }
-                }
-            }
-
-            // 003 T057 (FR-054/SC-013): the advanced maintenance area —
-            // separate from the primary sync status page.
-            Section("Advanced") {
-                if syncCoordinator?.isConfigured == true {
-                    // FR-002/US1/AC6 (T029): joining a DIFFERENT existing
-                    // vault from the configured state applies replace
-                    // semantics — the mode picker stays available.
-                    Button("Join Existing Vault…") {
-                        showJoinSheet = true
-                    }
-                    .help("Joins a vault created on another Mac. Your local notes are preserved.")
-                    Button("Replace Repository…", role: .destructive) {
-                        showReplaceSheet = true
-                    }
-                    .help("Configures a new repository. Local notes are preserved; the prior repository's remote data is not deleted.")
-                    Button("Remove Configuration…", role: .destructive) {
-                        showRemoveConfirmation = true
-                    }
-                    .help("Removes the local sync configuration. Local notes are NOT deleted.")
-                    // FR-009/US2 (T016): export the sync profile (schema v2,
-                    // no secrets) so another Mac can join this vault.
-                    Button("Export Sync Profile…") {
-                        exportSyncProfile()
-                    }
-                    .help("Saves a sync profile for another Mac. Contains no credentials, keys, or note content.")
+        // Rev 2 (FR-051): the Sync pane is the ONE tab that can actually
+        // overflow vertically — it owns the scrolling container. Geometry
+        // still comes from the window shell, not from this content.
+        ScrollView {
+            Form {
+                if isConfigured {
+                    statusSection
+                    storageSection
+                    automaticSyncSection
+                    securitySection
+                    actionsSection
+                    advancedSection
                 } else {
-                    // 003 T050 (FR-054 + clarify 4, CHK006/CHK033): the
-                    // FIRST-configuration page presents BOTH initial-setup
-                    // paths — configure a new repository OR join an existing
-                    // vault — so joining is discoverable without an advanced
-                    // area.
-                    Button("Configure Sync…") {
-                        showConfigureSheet = true
-                    }
-                    Button("Join Existing Vault…") {
-                        showJoinSheet = true
-                    }
-                    .help("Joins a vault created on another Mac. Your local notes are preserved.")
+                    notConfiguredSection
                 }
-
-                // FR-163: unrecoverable-password warning.
-                Label("If you forget your sync password, your synced notes cannot be recovered. Neither the developer nor the storage provider can restore them.", systemImage: "exclamationmark.triangle")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-
-                // FR-191 (T186): diagnostic bundle export.
-                Button("Export Diagnostic Bundle…") {
-                    exportDiagnosticBundle()
-                }
-                .help("Saves a sanitized diagnostics JSON for support. No note content or credentials are included.")
+                transientFeedback
             }
-
-            if let statusMessage {
-                Label(statusMessage, systemImage: "checkmark.circle")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            if let errorMessage {
-                Label(errorMessage, systemImage: "exclamationmark.triangle")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-            }
+            .formStyle(.grouped)
+            .padding(20)
         }
-        .formStyle(.grouped)
-        .padding(20)
         .sheet(isPresented: $showConfigureSheet) {
             SyncConfigureSheet(
                 syncCoordinator: syncCoordinator,
-                title: String(localized: "Configure Synchronization"),
+                title: String(localized: "Set Up Synchronization"),
                 onComplete: { status in
-                    statusMessage = status
-                    errorMessage = nil
+                    presentTransient(status, isError: false)
                 },
                 onError: { error in
-                    errorMessage = error
+                    presentTransient(error, isError: true)
                 }
             )
         }
@@ -270,42 +117,365 @@ public struct SyncSettingsView: View {
                 title: String(localized: "Join Existing Vault"),
                 startsInJoinMode: true,
                 onComplete: { status in
-                    statusMessage = status
-                    errorMessage = nil
+                    presentTransient(status, isError: false)
                 },
                 onError: { error in
-                    errorMessage = error
+                    presentTransient(error, isError: true)
                 }
             )
         }
         .sheet(isPresented: $showReplaceSheet) {
             SyncConfigureSheet(
                 syncCoordinator: syncCoordinator,
-                title: String(localized: "Replace Repository"),
+                title: String(localized: "Set Up New Storage Location"),
                 replacing: true,
                 onComplete: { status in
-                    statusMessage = status
-                    errorMessage = nil
+                    presentTransient(status, isError: false)
                 },
                 onError: { error in
-                    errorMessage = error
+                    presentTransient(error, isError: true)
                 }
             )
         }
         .confirmationDialog(
-            "Remove sync configuration?",
+            "Disconnect Sync?",
             isPresented: $showRemoveConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Remove Configuration", role: .destructive) {
+            Button("Disconnect", role: .destructive) {
                 Task {
                     await syncCoordinator?.removeConfiguration()
-                    statusMessage = String(localized: "Sync configuration removed. Your local notes were kept.")
+                    presentTransient(
+                        String(localized: "Sync disconnected. Your notes and the data at the storage location were kept."),
+                        isError: false
+                    )
                 }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Local notes are preserved. Remote data in the previous repository is not deleted — cleaning it up is your responsibility.")
+            Text("Stops syncing on this Mac. Your notes and the data at the storage location are kept.")
+        }
+        .alert("Unlock Vault", isPresented: $showUnlockAlert) {
+            SecureField("Vault password", text: $unlockPassword)
+            Button("Unlock") {
+                Task { await performUnlock() }
+            }
+            .keyboardShortcut(.defaultAction)
+            Button("Cancel", role: .cancel) {
+                unlockPassword = ""
+            }
+        } message: {
+            Text("Enter your sync password to start syncing on this Mac.")
+        }
+    }
+
+    // MARK: - Sections
+
+    /// FR-053: the status row is derived from the FR-012 mapping (or the
+    /// Locked state) — never the internal "Configured" string.
+    @ViewBuilder
+    private var statusSection: some View {
+        Section("Status") {
+            if isInProgress {
+                Label {
+                    Text("Syncing…")
+                } icon: {
+                    ProgressView().controlSize(.small)
+                }
+            } else if !isVaultUnlocked {
+                LabeledContent {
+                    Button("Unlock…") { showUnlockAlert = true }
+                } label: {
+                    Label("Sync vault is locked", systemImage: "lock.fill")
+                }
+                Text("Your notes are safe on this Mac. Unlock the vault to start syncing again.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                statusResolvedRow
+            }
+            LabeledContent("Last synced") {
+                if let date = syncCoordinator?.lastSuccessfulSyncAt {
+                    Text(DisplayFormatters.lastModified(date))
+                } else {
+                    Text("—")
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var statusResolvedRow: some View {
+        // FR-174-d (sync.historyAgedOut) is INFORMATIONAL, not an error:
+        // show it muted instead of the alarming orange.
+        if syncCoordinator?.lastErrorCode == "sync.historyAgedOut" {
+            Label("Some sync history may have aged out; your notes were preserved.", systemImage: "clock.arrow.circlepath")
+                .foregroundStyle(.secondary)
+        } else if let presentation = SyncStatusResolver.resolve(
+            isConfigured: true,
+            lastErrorCode: syncCoordinator?.lastErrorCode,
+            vaultLocked: false,
+            hasOfflineChangesPending: false,
+            summary: .empty
+        ) {
+            // 003 T058 (FR-011/SC-012): the HUMAN-READABLE FR-012 mapping —
+            // never the raw internal code (codes stay in the diagnostic
+            // export experience only).
+            Label(presentation.title, systemImage: presentation.symbolName)
+                .foregroundStyle(.orange)
+            Text(presentation.detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } else {
+            Label("Up to Date", systemImage: "checkmark.circle")
+                .foregroundStyle(.green)
+        }
+    }
+
+    /// Rev 2: user-meaningful storage semantics — which protocol, and the
+    /// bucket/prefix or endpoint/prefix the user chose. Long values are
+    /// middle-truncated and never drive window width.
+    private var storageSection: some View {
+        Section("Storage") {
+            if let configuration = syncCoordinator?.configuration {
+                LabeledContent("Provider") {
+                    Text(providerText)
+                }
+                LabeledContent("Location") {
+                    Text(repositoryText(configuration))
+                        .truncationMode(.middle)
+                        .lineLimit(1)
+                        .foregroundStyle(.secondary)
+                        .help(repositoryText(configuration))
+                }
+            }
+        }
+    }
+
+    private var automaticSyncSection: some View {
+        Section {
+            Toggle("Automatic sync", isOn: Binding(
+                get: { syncCoordinator?.autoSyncEnabled ?? false },
+                set: { syncCoordinator?.setAutoSyncEnabled($0) }
+            ))
+            .help(isVaultUnlocked
+                ? "Syncs automatically a few seconds after local changes"
+                : "Automatic sync starts once the vault is unlocked on this Mac.")
+
+            // FR-152 (clarified 2026-08-08): user-selectable strategy —
+            // change-only or a fixed periodic interval.
+            Picker("Sync frequency", selection: Binding(
+                get: { syncCoordinator?.autoSyncPolicy ?? .default },
+                set: { syncCoordinator?.setAutoSyncPolicy($0) }
+            )) {
+                ForEach(AutoSyncPolicy.allCases, id: \.self) { policy in
+                    Text(policy.displayName).tag(policy)
+                }
+            }
+            .pickerStyle(.menu)
+            .disabled(!(syncCoordinator?.autoSyncEnabled ?? false) || !isVaultUnlocked)
+            .help("When automatic sync is on: sync after local changes only, or also on a fixed interval")
+
+            Text("Syncs automatically a few seconds after changes, and at the interval you choose.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// FR-162a (Rev 2 copy): the toggle renames the internal
+    /// "remember-unlock" mechanism to user semantics. Verified behavior:
+    /// the VAULT KEY (not the password) is stored in Keychain and cleared on
+    /// restart or explicit lock.
+    private var securitySection: some View {
+        Section("Security") {
+            Toggle("Keep sync unlocked on this Mac", isOn: Binding(
+                get: { (syncCoordinator?.configuration?.rememberedUnlock ?? .disabled) == .enabledUntilLockOrRestart },
+                set: { newValue in
+                    Task {
+                        do {
+                            try await syncCoordinator?.setRememberUnlock(newValue)
+                            presentTransient(
+                                newValue
+                                    ? String(localized: "Sync will stay unlocked on this Mac until it restarts or you lock the vault.")
+                                    : String(localized: "The remembered unlock was cleared."),
+                                isError: false
+                            )
+                        } catch {
+                            presentTransient(String(localized: "Could not change the remember-unlock setting."), isError: true)
+                        }
+                    }
+                }
+            ))
+            .disabled(!isVaultUnlocked)
+            .help("Keeps the vault unlocked across app relaunches until this Mac restarts or you lock the vault.")
+            Text("Saves the vault key securely in Keychain. It's cleared when you restart or lock the vault.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var actionsSection: some View {
+        Section {
+            Button {
+                Task {
+                    await syncCoordinator?.manualSync()
+                }
+            } label: {
+                if isInProgress {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.small)
+                        Text("Syncing…")
+                    }
+                } else {
+                    Text("Sync Now")
+                }
+            }
+            .disabled(!isVaultUnlocked || isInProgress)
+        }
+    }
+
+    /// FR-054 (Rev 2): maintenance operations separated from the primary
+    /// page. Join stays its OWN product action (never merged into the
+    /// storage-location change flow). Destructive actions are visually
+    /// distinct and confirmed; FR-163 is a concise Recovery info row in the
+    /// stable state, not an always-on orange warning.
+    private var advancedSection: some View {
+        Section("Advanced") {
+            // FR-002/US1/AC6 (T029): joining a DIFFERENT existing vault
+            // applies replace semantics; CHK033 keeps the recovery re-entry.
+            Button("Join Another Vault…") {
+                showJoinSheet = true
+            }
+            .help("Connects this Mac to a vault created on another Mac. Your local notes are preserved.")
+
+            Button("Set Up New Storage Location…") {
+                showReplaceSheet = true
+            }
+            .help("Creates a new vault at a new storage location. Local notes are preserved; the previous location's data is not deleted.")
+
+            // FR-009/US2 (T016): export the sync profile (schema v2,
+            // no secrets) so another Mac can join this vault.
+            Button("Export Sync Profile…") {
+                exportSyncProfile()
+            }
+            .help("Saves a sync profile for another Mac. Contains no credentials, keys, or note content.")
+
+            Button("Disconnect Sync…", role: .destructive) {
+                showRemoveConfirmation = true
+            }
+            .help("Stops syncing on this Mac. Your notes and the data at the storage location are kept.")
+
+            // FR-191 (T186): diagnostic bundle export.
+            Button("Export Diagnostic Bundle…") {
+                exportDiagnosticBundle()
+            }
+            .help("Saves a sanitized diagnostics JSON for support. No note content or credentials are included.")
+
+            if let configuration = syncCoordinator?.configuration {
+                // FR-008/US1: the vault locator is the join key for another
+                // Mac (manual entry fallback when scan/profile import are
+                // unavailable). Opaque and non-sensitive (CHK032); shown
+                // only here in the advanced area, middle-truncated.
+                LabeledContent("Vault") {
+                    Text(configuration.vaultLocator)
+                        .font(.system(.body, design: .monospaced))
+                        .truncationMode(.middle)
+                        .lineLimit(1)
+                        .textSelection(.enabled)
+                        .help("The vault locator. Enter it on another Mac to join this vault.")
+                }
+            }
+
+            // FR-163: unrecoverable-password information — concise, standard
+            // style, not panel-dominant.
+            Label("No password recovery. If you forget your sync password, your synced notes can't be recovered by anyone.", systemImage: "info.circle")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// Unconfigured state: both initial-setup paths (FR-054 + clarify 4,
+    /// CHK006/CHK033) — joining is discoverable without an advanced area.
+    private var notConfiguredSection: some View {
+        Section {
+            LabeledContent("Status") {
+                Text("Not configured")
+                    .foregroundStyle(.secondary)
+            }
+            Text("Sync keeps your notes available on all your Macs through a WebDAV or S3-compatible storage location. Your notes are encrypted on this Mac before upload. Your storage provider receives only encrypted note data.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            Button("Set Up Sync…") {
+                showConfigureSheet = true
+            }
+            Button("Join Existing Vault…") {
+                showJoinSheet = true
+            }
+            .help("Joins a vault created on another Mac. Your local notes are preserved.")
+        }
+    }
+
+    /// Rev 2: transient feedback — appears after an action, auto-clears,
+    /// never survives a Settings close/reopen.
+    @ViewBuilder
+    private var transientFeedback: some View {
+        if let statusMessage {
+            Label(statusMessage, systemImage: "checkmark.circle")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        if let errorMessage {
+            Label(errorMessage, systemImage: "exclamationmark.triangle")
+                .font(.caption)
+                .foregroundStyle(.orange)
+        }
+    }
+
+    /// Presents a transient status/error message: cancels any pending
+    /// auto-clear, announces via VoiceOver (FR-180b), and schedules the
+    /// auto-clear.
+    private func presentTransient(_ message: String, isError: Bool) {
+        transientTask?.cancel()
+        if isError {
+            statusMessage = nil
+            errorMessage = message
+        } else {
+            errorMessage = nil
+            statusMessage = message
+        }
+        AccessibilityAnnouncements.announce(message)
+        transientTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard !Task.isCancelled else { return }
+            statusMessage = nil
+            errorMessage = nil
+        }
+    }
+
+    /// Rev 2 (FR-162a(b)/FR-053): unlock the locked vault with the sync
+    /// password (read-only remote bootstrap fetch + existing crypto
+    /// primitives). Sanitized, distinguishable failure codes.
+    private func performUnlock() async {
+        let password = unlockPassword
+        unlockPassword = ""
+        do {
+            try await syncCoordinator?.unlock(password: password)
+            presentTransient(String(localized: "Vault unlocked. Syncing is available on this Mac."), isError: false)
+        } catch {
+            let code: String
+            if let sticky = error as? StickyError {
+                switch sticky {
+                case .encryption(.wrongPassword):
+                    code = "wrong-password"
+                case .credentials(.notFound):
+                    code = "vault-not-found"
+                default:
+                    code = sticky.sanitizedCode
+                }
+            } else {
+                code = "unlock-failed"
+            }
+            presentTransient(String(localized: "Could not unlock the vault: \(code)."), isError: true)
         }
     }
 
@@ -338,9 +508,9 @@ public struct SyncSettingsView: View {
                 originDeviceName: AppDevice.current().displayName
             )
             try wire.write(to: url, options: .atomic)
-            statusMessage = String(localized: "Sync profile exported. No credentials or note content are included.")
+            presentTransient(String(localized: "Sync profile exported. No credentials or note content are included."), isError: false)
         } catch {
-            errorMessage = String(localized: "Could not export the sync profile.")
+            presentTransient(String(localized: "Could not export the sync profile."), isError: true)
         }
     }
 
@@ -367,7 +537,7 @@ public struct SyncSettingsView: View {
             )
         )
         guard let data = try? DiagnosticBundleGenerator.encode(bundle) else {
-            statusMessage = String(localized: "Could not generate the diagnostic bundle.")
+            presentTransient(String(localized: "Could not generate the diagnostic bundle."), isError: true)
             return
         }
         let panel = NSSavePanel()
@@ -378,9 +548,9 @@ public struct SyncSettingsView: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             try data.write(to: url, options: .atomic)
-            statusMessage = String(localized: "Diagnostic bundle exported. It contains no note content or credentials.")
+            presentTransient(String(localized: "Diagnostic bundle exported. It contains no note content or credentials."), isError: false)
         } catch {
-            statusMessage = String(localized: "Could not save the diagnostic bundle.")
+            presentTransient(String(localized: "Could not save the diagnostic bundle."), isError: true)
         }
     }
 }
@@ -395,7 +565,7 @@ private struct SyncConfigureSheet: View {
     let title: String
     var replacing = false
     /// T029: open the sheet already in join mode (the configured-state
-    /// "Join Existing Vault…" entry point). Non-replacing create sheets
+    /// "Join Another Vault…" entry point). Non-replacing create sheets
     /// default to create mode.
     var startsInJoinMode = false
     let onComplete: (String) -> Void
@@ -598,7 +768,7 @@ private struct SyncConfigureSheet: View {
                     .textFieldStyle(.roundedBorder)
             }
             if mode == .create {
-                Toggle("Remember unlocked vault on this Mac", isOn: $rememberUnlock)
+                Toggle("Keep sync unlocked on this Mac", isOn: $rememberUnlock)
             }
 
             if let sheetStatus {
@@ -619,7 +789,7 @@ private struct SyncConfigureSheet: View {
                     Task { await testConnection() }
                 }
                 .disabled(isTesting || isConfiguring)
-                Button(isConfiguring ? "Working…" : (replacing ? "Replace" : (mode == .join ? "Join" : "Configure"))) {
+                Button(isConfiguring ? "Working…" : (replacing || mode == .create ? "Set Up" : "Join")) {
                     Task { await configureOrJoin() }
                 }
                 .keyboardShortcut(.defaultAction)
@@ -809,7 +979,7 @@ private struct SyncConfigureSheet: View {
                     credentials: credentials,
                     vaultPassword: vaultPassword
                 )
-                onComplete(String(localized: "Repository replaced. Local notes were preserved; the prior repository's remote data was not deleted."))
+                onComplete(String(localized: "A new vault was created at the new storage location. Your local notes were kept; the old location's data was not deleted."))
             } else {
                 try await syncCoordinator?.configure(
                     providerType: providerType,

@@ -18,8 +18,9 @@ import SyncCore
 
 /// Deterministic in-memory provider for the composition tests. Implements
 /// the conditional semantics of `SyncProviderProtocol`; the vault manifest
-/// is stored encrypted, exactly like the real providers.
-final class InMemorySyncProvider: SyncProviderProtocol, @unchecked Sendable {
+/// is stored encrypted, exactly like the real providers. (Non-final so
+/// SyncCoordinatorUnlockTests can count provider calls.)
+class InMemorySyncProvider: SyncProviderProtocol, @unchecked Sendable {
     private struct State: Sendable {
         var objects: [String: Data] = [:]
         var manifest: (data: Data, token: String)?
@@ -989,12 +990,19 @@ final class RepoLayoutInMemoryProvider: SyncProviderProtocol, @unchecked Sendabl
     @Test
     func advancedMaintenanceOperationsAreSeparated() {
         // SC-013: replace/remove/join/export live in a SEPARATE Advanced
-        // area, not the primary sync page.
+        // area, not the primary sync page (FR-054 Rev 2 user-facing names).
         #expect(SyncAdvancedAreaPolicy.operationsInSeparateAdvancedArea == true)
         #expect(SyncAdvancedAreaPolicy.operations == [
-            "Replace Repository", "Remove Configuration", "Join Existing Vault",
-            "Export Sync Profile", "Export Diagnostic Bundle",
+            "Join Another Vault", "Set Up New Storage Location",
+            "Export Sync Profile", "Disconnect Sync", "Export Diagnostic Bundle",
         ])
+    }
+
+    @Test
+    func joinIsASeparateProductAction() {
+        // FR-054 Rev 2: joining an existing vault is its own product action
+        // and must never be merged into the storage-location change flow.
+        #expect(SyncAdvancedAreaPolicy.joinIsSeparateProductAction == true)
     }
 
     @Test
@@ -1016,7 +1024,10 @@ final class RepoLayoutInMemoryProvider: SyncProviderProtocol, @unchecked Sendabl
     @Test
     func unrecoverableWarningIsStandardNotPanelDominant() {
         // FR-163: the encrypted-notes-unrecoverable warning is standard
-        // warning style, concise — not dominating the pane.
+        // warning style, concise — not dominating the pane; the stable
+        // configured state shows a Recovery info row instead of an
+        // always-on orange warning.
         #expect(SyncAdvancedAreaPolicy.warningIsConciseStandard == true)
+        #expect(SyncAdvancedAreaPolicy.stableStateShowsRecoveryInfoRow == true)
     }
 }
