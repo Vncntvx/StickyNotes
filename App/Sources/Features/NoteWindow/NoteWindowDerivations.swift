@@ -260,6 +260,22 @@ public enum NoteWindowDerivations {
         )
     }
 
+    /// Trims the trailing empty paragraphs (trailing newline/whitespace
+    /// scalars) from a canonical rich-text document. Runs and links are
+    /// re-split at the trimmed offset, so marks survive on the remaining
+    /// text. Feeds the caret-at-end insertion path: the empty paragraph the
+    /// caret sat in is CONSUMED, never materialized as an empty block
+    /// (004 修复 2026-08-13).
+    public static func trimmingTrailingEmptyLines(_ document: RichTextDocument) -> RichTextDocument {
+        let scalars = Array(document.text.unicodeScalars)
+        var end = scalars.count
+        while end > 0, CharacterSet.whitespacesAndNewlines.contains(scalars[end - 1]) {
+            end -= 1
+        }
+        guard end < scalars.count else { return document }
+        return splitRichTextBlock(payload: document, offset: end).leading
+    }
+
     // MARK: Opacity formatting (004 FR-009, data-model.md §4.4)
 
     /// Formats an opacity value as a complete "NN%" string — never

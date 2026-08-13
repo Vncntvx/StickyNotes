@@ -86,9 +86,37 @@ public final class NoteWindowHostModel {
             self.note = try await repo.fetch(id: noteId)
             self.blocks = try await repo.fetchBlocks(noteId: noteId)
             self.hasEverHadMeaningfulContent = Self.isMeaningful(note, blocks: blocks)
+            healTrailingEmptyLinesOnLoad()
         } catch {
             self.note = nil
         }
+    }
+
+    /// 004 修复 (2026-08-13 用户实测): notes edited under the pre-fix
+    /// builds accumulated trailing empty paragraphs inside their rich-text
+    /// blocks (degraded insertions left them), rendered as a phantom gap
+    /// below the last content line. Consume them once on load — blocks are
+    /// separated by the fixed inter-block rhythm, never by trailing
+    /// newlines inside a block, so this is both safe and idempotent.
+    private func healTrailingEmptyLinesOnLoad() {
+        var updated = blocks
+        var changed = false
+        for idx in updated.indices {
+            guard case .richText(let doc) = updated[idx].payload else { continue }
+            let trimmed = NoteWindowDerivations.trimmingTrailingEmptyLines(doc)
+            guard trimmed.text != doc.text else { continue }
+            let b = updated[idx]
+            updated[idx] = Block(
+                id: b.id, noteId: b.noteId, kind: .richText, sortKey: b.sortKey,
+                payload: .richText(trimmed),
+                versionId: b.versionId, parentVersionId: b.parentVersionId,
+                lastModifiedDeviceId: b.lastModifiedDeviceId,
+                createdAt: b.createdAt, modifiedAt: Date()
+            )
+            changed = true
+        }
+        guard changed else { return }
+        updateBlocks(updated, isStructural: true)
     }
 
     // MARK: - Editing
@@ -231,8 +259,57 @@ public final class NoteWindowHostModel {
         _ target: InsertionTarget,
         makeBlock: (Int) -> Block
     ) -> [Block] {
+        sweepingAbandonedWhitespaceBlocks(applyingTarget(target, makeBlock: makeBlock))
+    }
+
+    /// 004 修复 (2026-08-13 用户实测): whitespace-only secondary rich-text
+    /// blocks render as phantom empty lines at the insertion site and never
+    /// self-heal — FR-050a exit removal needs a focus ENTRY, which an
+    /// orphaned tail never receives. They are already "empty" per FR-050a
+    /// semantics, so every structural insertion sweeps them. The PRIMARY
+    /// surface is exempt: its zero-height caret slot is the caret-at-start
+    /// exception (and the empty note's click target).
+    private func sweepingAbandonedWhitespaceBlocks(_ updated: [Block]) -> [Block] {
+        let primaryId = updated.first(where: { $0.kind == .richText })?.id
+        return updated.filter { block in
+            guard block.id != primaryId, case .richText(let doc) = block.payload else { return true }
+            return !doc.text.allSatisfy(\.isWhitespace)
+        }
+    }
+
+    private func applyingTarget(
+        _ target: InsertionTarget,
+        makeBlock: (Int) -> Block
+    ) -> [Block] {
+        // Rebuilds the rich-text block at `idx` with its trailing empty
+        // lines consumed (returns `blocks` unchanged when there is nothing
+        // to trim or the block isn't rich text). A block inserted right
+        // after must land directly below the LAST content line — never
+        // below a phantom gap of trailing empty paragraphs. The
+        // caretSplit path consumes the tail via Case A; this covers the
+        // degraded `.append` / `.afterBlock` paths (menu commands, stale
+        // caret context).
+        func consumingTrailingEmptyLines(_ list: [Block], at idx: Int) -> [Block] {
+            guard case .richText(let doc) = list[idx].payload else { return list }
+            let trimmed = NoteWindowDerivations.trimmingTrailingEmptyLines(doc)
+            guard trimmed.text != doc.text else { return list }
+            var updated = list
+            let b = list[idx]
+            updated[idx] = Block(
+                id: b.id, noteId: b.noteId, kind: .richText, sortKey: b.sortKey,
+                payload: .richText(trimmed),
+                versionId: b.versionId, parentVersionId: b.parentVersionId,
+                lastModifiedDeviceId: b.lastModifiedDeviceId,
+                createdAt: b.createdAt, modifiedAt: Date()
+            )
+            return updated
+        }
         func appendFallback() -> [Block] {
-            self.blocks + [makeBlock((self.blocks.map(\.sortKey).max() ?? 0) + 1024)]
+            var base = self.blocks
+            if let lastIdx = base.indices.max(by: { base[$0].sortKey < base[$1].sortKey }) {
+                base = consumingTrailingEmptyLines(base, at: lastIdx)
+            }
+            return base + [makeBlock((base.map(\.sortKey).max() ?? 0) + 1024)]
         }
         switch target {
         case .append:
@@ -241,11 +318,12 @@ public final class NoteWindowHostModel {
             guard let idx = self.blocks.firstIndex(where: { $0.id == blockId }) else {
                 return appendFallback()
             }
-            let before = blocks[idx].sortKey
-            let after = blocks.indices.contains(idx + 1) ? blocks[idx + 1].sortKey : before + 1024
-            var updated = blocks
-            updated.insert(makeBlock((before + after) / 2), at: idx + 1)
-            return updated
+            let updated = consumingTrailingEmptyLines(blocks, at: idx)
+            let before = updated[idx].sortKey
+            let after = updated.indices.contains(idx + 1) ? updated[idx + 1].sortKey : before + 1024
+            var result = updated
+            result.insert(makeBlock((before + after) / 2), at: idx + 1)
+            return result
         case .caretSplit(let blockId, let offset):
             guard let idx = self.blocks.firstIndex(where: { $0.id == blockId }),
                   case .richText(let doc) = self.blocks[idx].payload else {
@@ -254,10 +332,54 @@ public final class NoteWindowHostModel {
             let split = NoteWindowDerivations.splitRichTextBlock(payload: doc, offset: offset)
             let s = blocks[idx].sortKey
             let after = blocks.indices.contains(idx + 1) ? blocks[idx + 1].sortKey : s + 1024
+
+            // Case A — caret at the block's END (or an entirely empty
+            // block): NEVER spawn an empty trailing block (the reported
+            // Add-Todo/Add-Code bug). A whitespace-only tail (the newline
+            // terminating the last visible line, runs of empty paragraphs)
+            // counts as empty — the caret visually sits at the end of the
+            // content, so the tail is consumed rather than materialized as
+            // a phantom block. Trailing empty paragraphs are consumed;
+            // when nothing survives, the new block REPLACES the empty one.
+            if split.trailing.text.allSatisfy(\.isWhitespace) {
+                let trimmed = NoteWindowDerivations.trimmingTrailingEmptyLines(split.leading)
+                if trimmed.text.isEmpty {
+                    var updated = blocks
+                    updated[idx] = makeBlock(s)
+                    return updated
+                }
+                var updated = blocks
+                updated[idx] = Block(
+                    id: blockId, noteId: noteId, kind: .richText, sortKey: s,
+                    payload: .richText(trimmed),
+                    versionId: blocks[idx].versionId, parentVersionId: blocks[idx].parentVersionId,
+                    lastModifiedDeviceId: blocks[idx].lastModifiedDeviceId,
+                    createdAt: blocks[idx].createdAt, modifiedAt: Date()
+                )
+                updated.insert(makeBlock((s + after) / 2), at: idx + 1)
+                return updated
+            }
+
+            // Case B — caret at the block's START: insert BEFORE, no empty
+            // leading block. Exception: the PRIMARY surface renders pinned
+            // above every secondary block, so there the empty leading half
+            // stays as the 0pt primary slot — the only way the new block
+            // can appear above the text (FR-050a removes the emptied slot
+            // the moment the insertion focus moves on).
+            let isPrimarySurface = blocks.firstIndex(where: { $0.kind == .richText }) == idx
+            if split.leading.text.isEmpty, !isPrimarySurface {
+                let before = idx > 0 ? blocks[idx - 1].sortKey : s - 1024
+                var updated = blocks
+                updated.insert(makeBlock((before + s) / 2), at: idx)
+                return updated
+            }
+
+            // Case C — a genuine middle split (and the primary-surface
+            // caret-at-start exception above): the block keeps its id; its
+            // payload becomes the LEADING text.
             let trailingSort = (s + after) / 2
             let newSort = (s + trailingSort) / 2
             var updated = blocks
-            // The block keeps its id; its payload becomes the LEADING text.
             updated[idx] = Block(
                 id: blockId, noteId: noteId, kind: .richText, sortKey: s,
                 payload: .richText(split.leading),
@@ -533,6 +655,52 @@ public final class NoteWindowHostModel {
                 try? await todoRepo.delete(id: blockId)
             }
         )
+    }
+
+    /// FR-050a empty-block exit for todo blocks (004 修复 P1-6): when the
+    /// cursor exits an EMPTIED todo, the block merges away per
+    /// `BlockMergeOperation.decide` (keepFinalBlock + FR-063 respected via
+    /// `EditorAppBridge.applyEmptyBlockRemoval`). Routed through the host
+    /// — not the view-level structural path — because the block row's
+    /// removal CASCADES the TodoItem row (FK), so the same undo group must
+    /// restore both; a view-level swap would resurrect the block without
+    /// its row (broken checkbox after ⌘Z).
+    public func removeEmptiedTodoBlock(blockId: UUID) async {
+        guard let todoRepo = environment.persistence.todoRepository,
+              let idx = blocks.firstIndex(where: { $0.id == blockId }),
+              BlockMergeOperation.isEmpty(blocks[idx]) else { return }
+        let item = try? await todoRepo.fetchTodo(blockId: blockId)
+        if let item {
+            // An emptied todo that carries children stays — the block-row
+            // cascade would delete the parent row without reparenting.
+            let all = (try? await todoRepo.fetchTodos(noteId: noteId)) ?? []
+            guard !all.contains(where: { $0.parentTodoId == item.id }) else { return }
+        }
+        guard let updated = EditorAppBridge.applyEmptyBlockRemoval(
+            blocks: blocks,
+            emptiedBlockIndex: idx,
+            hasIMEComposition: false
+        ) else { return }
+        let previous = blocks
+        updateBlocks(updated, isStructural: true)
+        // ONE undo group: block list + TodoItem row round-trip together.
+        // The flush inside each restore lands the block row BEFORE the
+        // TodoItem re-insert (FK references the block).
+        registerStructuralUndo(
+            restoreOld: { [weak self] in
+                guard let self else { return }
+                self.updateBlocks(previous, isStructural: true)
+                await self.flush()
+                if let item { try? await todoRepo.insert(item) }
+            },
+            restoreNew: { [weak self] in
+                guard let self else { return }
+                self.updateBlocks(updated, isStructural: true)
+                await self.flush()
+                try? await todoRepo.delete(id: blockId)
+            }
+        )
+        await flush()
     }
 
     /// Moves a todo up/down among its siblings (drag-reorder equivalent).

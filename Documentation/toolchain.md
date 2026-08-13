@@ -16,10 +16,10 @@ are preserved regardless of the dev machine's own OS version.
 | Swift language mode | 6 (strict concurrency)                       |
 | Swift compiler      | 6.3 (intended)                               |
 | SwiftPM             | pinned via `Package.resolved`                |
-| Test frameworks     | Swift Testing (primary), XCTest (where Apple APIs require), XCUITest (critical UI) |
+| Test frameworks     | Swift Testing (primary), XCTest (where Apple APIs require). XCUITest removed 2026-08-13 with the AppUITests target |
 
-A full Xcode install is **required** to build the app target, host
-XCUITest, and run XCTest-based suites.
+A full Xcode install is **required** to build the app target and run
+XCTest-based suites.
 
 ## Detected on this dev machine (verified 2026-08-07)
 
@@ -64,7 +64,7 @@ DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild test  -
 
 - Build and unit-test the entire StickyCore Swift package (all 7 modules + 7 test targets) — Swift Testing suites run green.
 - Build the App target via `xcodebuild` (once `StickyNotes.xcodeproj` exists — T001).
-- Run XCUITest and XCTest-based suites.
+- Run XCTest/Swift Testing-based suites.
 - Build and run all Milestone 0 prototypes (`Prototypes/`).
 - Verify that GRDB.swift and SwiftArgon2 resolve and link.
 

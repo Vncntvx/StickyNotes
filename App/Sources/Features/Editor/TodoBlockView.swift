@@ -38,11 +38,18 @@ public struct TodoBlockView: View {
     let undoManager: UndoManager?
     let requestFocus: Bool
     let onFocusRequestHandled: () -> Void
+    /// 004 修复 (P1-6): focus transitions of the todo text editor — the
+    /// host applies the FR-050a empty-block exit (with TodoItem-row undo
+    /// integrity).
+    let onFocusChange: (Bool, Bool) -> Void
     /// 004 修复: host undo/redo revision — re-fetches the TodoItem so the
     /// checkbox follows structural undo/redo.
     let todoRevision: Int
 
     @State private var todoItem: TodoItem?
+    // 004 修复 (P1-5): the trailing controls collapse into ONE hover-gated
+    // ellipsis menu (was five always-visible buttons).
+    @State private var isHoveringRow = false
 
     public init(
         block: Block,
@@ -58,6 +65,7 @@ public struct TodoBlockView: View {
         undoManager: UndoManager? = nil,
         requestFocus: Bool = false,
         onFocusRequestHandled: @escaping () -> Void = {},
+        onFocusChange: @escaping (Bool, Bool) -> Void = { _, _ in },
         todoRevision: Int = 0
     ) {
         self.block = block
@@ -73,6 +81,7 @@ public struct TodoBlockView: View {
         self.undoManager = undoManager
         self.requestFocus = requestFocus
         self.onFocusRequestHandled = onFocusRequestHandled
+        self.onFocusChange = onFocusChange
         self.todoRevision = todoRevision
     }
 
@@ -105,10 +114,15 @@ public struct TodoBlockView: View {
                 onCommit: { document in
                     commitText(document)
                 },
+                onFocusChange: onFocusChange,
                 selectionBridge: selectionBridge,
                 richTextBlockId: block.id,
                 undoManager: undoManager,
                 minimumHeight: 0,
+                // 004 修复 (第二轮): no vertical inset — the 12pt top inset
+                // floated the checkbox above the text's ink line and the
+                // bottom inset doubled the row-to-row rhythm.
+                verticalInset: 0,
                 isSpecialBlock: true,
                 displayStyling: EditorDisplayStyling(strikethrough: isComplete, secondaryColor: isComplete),
                 requestFocus: requestFocus,
@@ -116,56 +130,29 @@ public struct TodoBlockView: View {
             )
             .frame(maxWidth: .infinity, alignment: .topLeading)
 
-            HStack(spacing: 6) {
-                Button {
-                    Task { await onMove(block.id, -1) }
-                } label: {
-                    Image(systemName: "arrow.up")
-                }
-                .buttonStyle(.plain)
-                .help("Move todo up")
-                .accessibilityLabel("Move todo up")
-
-                Button {
-                    Task { await onMove(block.id, 1) }
-                } label: {
-                    Image(systemName: "arrow.down")
-                }
-                .buttonStyle(.plain)
-                .help("Move todo down")
-                .accessibilityLabel("Move todo down")
-
-                Button {
-                    Task { await onIndent(block.id) }
-                } label: {
-                    Image(systemName: "arrow.right.to.line")
-                }
-                .buttonStyle(.plain)
-                .help("Indent (subtask)")
-                .accessibilityLabel("Indent todo")
-
-                Button {
-                    Task { await onOutdent(block.id) }
-                } label: {
-                    Image(systemName: "arrow.left.to.line")
-                }
-                .buttonStyle(.plain)
-                .help("Un-indent")
-                .accessibilityLabel("Un-indent todo")
-
-                Button {
-                    Task { await onDelete(block.id) }
-                } label: {
-                    Image(systemName: "trash")
-                }
-                .buttonStyle(.plain)
-                .help("Delete todo")
-                .accessibilityLabel("Delete todo")
+            // 004 修复 (P1-5): ONE hover-gated ellipsis menu replaces the
+            // five always-visible buttons (the FileReferenceCardView menu
+            // pattern). The invisible state keeps its layout slot so the
+            // row width never jumps on hover.
+            Menu {
+                Button("Move Up") { Task { await onMove(block.id, -1) } }
+                Button("Move Down") { Task { await onMove(block.id, 1) } }
+                Button("Indent") { Task { await onIndent(block.id) } }
+                Button("Outdent") { Task { await onOutdent(block.id) } }
+                Divider()
+                Button("Delete", role: .destructive) { Task { await onDelete(block.id) } }
+            } label: {
+                Image(systemName: "ellipsis")
             }
-            .controlSize(.small)
-            .foregroundStyle(.secondary)
+            .buttonStyle(.plain)
+            .help("Todo actions")
+            .accessibilityLabel("Todo actions")
+            .opacity(isHoveringRow ? 1 : 0)
+            .allowsHitTesting(isHoveringRow)
         }
-        .padding(.vertical, 2)
+        .onHover { hovering in
+            isHoveringRow = hovering
+        }
         .task(id: todoRevision) {
             // Re-fetches on appear AND after structural undo/redo (the
             // revision bumps so the checkbox follows ⌘Z/⌘⇧Z).

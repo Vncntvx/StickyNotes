@@ -197,6 +197,41 @@ import Domain
         #expect(trailing.text == "世界")
     }
 
+    // MARK: trimmingTrailingEmptyLines (004 修复: caret-at-end consumes
+    // the empty paragraph instead of spawning an empty trailing block)
+
+    @Test
+    func trimmingTrailingEmptyLinesStripsOnlyTheTrailingParagraphs() {
+        #expect(NoteWindowDerivations.trimmingTrailingEmptyLines(.plain("abc\n")).text == "abc")
+        #expect(NoteWindowDerivations.trimmingTrailingEmptyLines(.plain("abc\n\n\n")).text == "abc")
+        #expect(NoteWindowDerivations.trimmingTrailingEmptyLines(.plain("abc")).text == "abc",
+                "no trailing newline → unchanged")
+        #expect(NoteWindowDerivations.trimmingTrailingEmptyLines(.plain("abc\n\ndef\n")).text == "abc\n\ndef",
+                "interior empty lines are content")
+        #expect(NoteWindowDerivations.trimmingTrailingEmptyLines(.plain("abc\n  \n")).text == "abc",
+                "whitespace-only trailing paragraphs count as empty")
+        #expect(NoteWindowDerivations.trimmingTrailingEmptyLines(.plain("")).text == "")
+        #expect(NoteWindowDerivations.trimmingTrailingEmptyLines(.plain("\n\n")).text == "",
+                "an all-empty-paragraph document trims to empty")
+    }
+
+    @Test
+    func trimmingTrailingEmptyLinesPreservesRunsOnRemainingText() {
+        let doc = RichTextDocument(
+            text: "ab\n",
+            paragraphs: [
+                RichTextParagraph(
+                    startScalar: 0, endScalar: 2, style: .body,
+                    runs: [RichTextRun(startScalar: 0, endScalar: 2, marks: [.bold])]
+                )
+            ]
+        )
+        let trimmed = NoteWindowDerivations.trimmingTrailingEmptyLines(doc)
+        #expect(trimmed.text == "ab")
+        #expect(trimmed.paragraphs.flatMap(\.runs) == [RichTextRun(startScalar: 0, endScalar: 2, marks: [.bold])],
+                "runs survive the trim")
+    }
+
     @Test
     func splitAcrossParagraphBoundariesRebuildsParagraphs() {
         let doc = RichTextDocument(

@@ -22,6 +22,10 @@ public struct CodeTextView: NSViewRepresentable {
     let undoManager: UndoManager?
     let requestFocus: Bool
     let onFocusRequestHandled: () -> Void
+    /// 004 修复 (P1-6): focus transitions — mirrors RichTextView's
+    /// `(focused, hasMarkedText)` contract so the FR-050a empty-block
+    /// exit applies to code blocks too (FR-063 IME guard included).
+    let onFocusChange: (Bool, Bool) -> Void
 
     public init(
         text: String,
@@ -30,7 +34,8 @@ public struct CodeTextView: NSViewRepresentable {
         blockId: UUID? = nil,
         undoManager: UndoManager? = nil,
         requestFocus: Bool = false,
-        onFocusRequestHandled: @escaping () -> Void = {}
+        onFocusRequestHandled: @escaping () -> Void = {},
+        onFocusChange: @escaping (Bool, Bool) -> Void = { _, _ in }
     ) {
         self.text = text
         self.onCommit = onCommit
@@ -39,6 +44,7 @@ public struct CodeTextView: NSViewRepresentable {
         self.undoManager = undoManager
         self.requestFocus = requestFocus
         self.onFocusRequestHandled = onFocusRequestHandled
+        self.onFocusChange = onFocusChange
     }
 
     public func makeCoordinator() -> Coordinator {
@@ -126,6 +132,7 @@ public struct CodeTextView: NSViewRepresentable {
         }
 
         public func textDidBeginEditing(_ notification: Notification) {
+            parent.onFocusChange(true, false)
             if let textView = notification.object as? NSTextView {
                 publishSelection(from: textView)
             }
@@ -133,6 +140,9 @@ public struct CodeTextView: NSViewRepresentable {
 
         public func textDidEndEditing(_ notification: Notification) {
             if let textView = notification.object as? NSTextView {
+                // 004 修复 (P1-6): the FR-050a empty-block exit reads the
+                // IME state at focus loss (FR-063).
+                parent.onFocusChange(false, textView.hasMarkedText())
                 publishSelection(from: textView)
             }
         }
@@ -212,10 +222,11 @@ public struct CodeTextView: NSViewRepresentable {
     }
 }
 
-/// The code block's editor view: content-sized with a small minimum (two
-/// lines) — never part of the 320pt paper minimum.
+/// The code block's editor view: content-sized — one line pays one line of
+/// height (+ insets), N lines pay N. The only floor is a single line: the
+/// empty block's click target (004 修复 2026-08-13: the legacy fixed 44pt
+/// two-line floor left single-line code floating in dead space).
 final class CodeEditorTextView: NSTextView {
-    static let minimumHeight: CGFloat = 44
 
     override var intrinsicContentSize: NSSize {
         if let layoutManager, let textContainer {
@@ -223,9 +234,14 @@ final class CodeEditorTextView: NSTextView {
         }
         let used = layoutManager?.usedRect(for: textContainer ?? NSTextContainer()).height ?? 0
         let contentHeight = used + textContainerInset.height * 2
+        // One monospaced line + insets — content-sized text never pays more
+        // than its lines; empty text keeps this as its click target.
+        let lineFont = font ?? NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        let lineHeight = lineFont.ascender - lineFont.descender + lineFont.leading
+        let singleLineFloor = ceil(lineHeight) + textContainerInset.height * 2
         return NSSize(
             width: NSView.noIntrinsicMetric,
-            height: max(contentHeight, Self.minimumHeight)
+            height: max(contentHeight, singleLineFloor)
         )
     }
 

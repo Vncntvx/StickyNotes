@@ -44,6 +44,14 @@ public struct RichTextBlockView: View {
     let onIndentTodo: (UUID) async -> Void
     let onOutdentTodo: (UUID) async -> Void
     let onMoveTodo: (UUID, Int) async -> Void
+    /// 004 修复 (P1-6): FR-050a empty-block exit for todo blocks — routed
+    /// through the host so the cascade-deleted TodoItem row restores in the
+    /// same undo group as the block.
+    let onEmptyTodoExit: (UUID) async -> Void
+    /// 004 修复 (第二轮): the code block's delete affordance (the hover
+    /// ellipsis menu) — routed through the host's structural deletion (ONE
+    /// undo group, FR-141a immediate persist).
+    let onDeleteCode: (UUID) async -> Void
     let onFileAction: (UUID, FileReferenceAction) async -> Void
     let onSetCover: (UUID?, Bool) async -> Void
     let onUpdateCaption: (UUID, String?) async -> Void
@@ -96,6 +104,8 @@ public struct RichTextBlockView: View {
         onIndentTodo: @escaping (UUID) async -> Void = { _ in },
         onOutdentTodo: @escaping (UUID) async -> Void = { _ in },
         onMoveTodo: @escaping (UUID, Int) async -> Void = { _, _ in },
+        onEmptyTodoExit: @escaping (UUID) async -> Void = { _ in },
+        onDeleteCode: @escaping (UUID) async -> Void = { _ in },
         onFileAction: @escaping (UUID, FileReferenceAction) async -> Void = { _, _ in },
         onSetCover: @escaping (UUID?, Bool) async -> Void = { _, _ in },
         onUpdateCaption: @escaping (UUID, String?) async -> Void = { _, _ in },
@@ -121,6 +131,8 @@ public struct RichTextBlockView: View {
         self.onIndentTodo = onIndentTodo
         self.onOutdentTodo = onOutdentTodo
         self.onMoveTodo = onMoveTodo
+        self.onEmptyTodoExit = onEmptyTodoExit
+        self.onDeleteCode = onDeleteCode
         self.onFileAction = onFileAction
         self.onSetCover = onSetCover
         self.onUpdateCaption = onUpdateCaption
@@ -226,8 +238,10 @@ public struct RichTextBlockView: View {
             // LazyVStack: FR-072b — only visible rows are realized
             // for notes with 100+ todo blocks (bounded row
             // realization). 004 FR-010: trailing rich-text blocks
-            // (caret splits) render as editable blocks too.
-            LazyVStack(alignment: .leading, spacing: 10) {
+            // (caret splits) render as editable blocks too. The stack
+            // spacing is the SINGLE inter-block rhythm source (004 修复
+            // 2026-08-13 — block components own no vertical padding).
+            LazyVStack(alignment: .leading, spacing: BlockLayoutMetrics.interBlockSpacing) {
                 ForEach(Array(secondaryBlocks.enumerated()), id: \.element.id) { index, block in
                     BlockContainer {
                         blockView(block, index: index)
@@ -309,7 +323,11 @@ public struct RichTextBlockView: View {
             // follow it, it sizes to content — otherwise the minimum keeps
             // pushing the inserted block ~320pt below the last body line
             // ("huge gap" feedback).
-            minimumHeight: secondaryBlocks.isEmpty ? nil : 0
+            minimumHeight: secondaryBlocks.isEmpty ? nil : 0,
+            // 004 修复 (第二轮): …and its bottom inset collapses the same
+            // moment — the dead paper under the last ink line is what the
+            // user still read as 大段间隔 in front of the inserted block.
+            collapsesBottomInset: !secondaryBlocks.isEmpty
         )
         .frame(maxWidth: .infinity, alignment: .topLeading)
         // 004 T034 (FR-010): cursor-line hover triggers the insertion
@@ -359,6 +377,10 @@ public struct RichTextBlockView: View {
                     richTextBlockId: block.id,
                     undoManager: undoManager,
                     minimumHeight: 0,
+                    // 004 修复 (第二轮): secondary editors own no vertical
+                    // inset — the 12pt top+bottom doubled the block-stack
+                    // spacing into a 34pt phantom rhythm between blocks.
+                    verticalInset: 0,
                     requestFocus: pendingFocus == block.id,
                     onFocusRequestHandled: handleFocusRequest
                 )
@@ -383,6 +405,13 @@ public struct RichTextBlockView: View {
                 undoManager: undoManager,
                 requestFocus: pendingFocus == block.id,
                 onFocusRequestHandled: handleFocusRequest,
+                onFocusChange: { focused, hasMarkedText in
+                    // FR-050a: an emptied todo merges away when the cursor
+                    // exits it (FR-063 IME guard). The host owns the
+                    // removal so the TodoItem row restores with the block.
+                    guard !focused, !hasMarkedText else { return }
+                    Task { await onEmptyTodoExit(block.id) }
+                },
                 todoRevision: todoRevision
             )
         case .code:
@@ -391,10 +420,25 @@ public struct RichTextBlockView: View {
                 onChanged: { updated in
                     replaceBlock(updated, at: index)
                 },
+                onDelete: onDeleteCode,
                 selectionBridge: selectionBridge,
                 undoManager: undoManager,
                 requestFocus: pendingFocus == block.id,
-                onFocusRequestHandled: handleFocusRequest
+                onFocusRequestHandled: handleFocusRequest,
+                onFocusChange: { focused, hasMarkedText in
+                    // FR-050a: an emptied code block merges away when the
+                    // cursor exits it (FR-063 IME guard). Code carries no
+                    // satellite rows — the view-level structural path
+                    // (one undo group) is sufficient.
+                    guard !focused, !hasMarkedText else { return }
+                    guard let idx = blocks.firstIndex(where: { $0.id == block.id }),
+                          let updated = EditorAppBridge.applyEmptyBlockRemoval(
+                              blocks: blocks,
+                              emptiedBlockIndex: idx,
+                              hasIMEComposition: false
+                          ) else { return }
+                    onStructuralBlocksChanged(updated)
+                }
             )
         case .fileRef:
             FileReferenceCardView(block: block, onAction: { action in

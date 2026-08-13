@@ -217,4 +217,172 @@ import SystemBridge
         }
         #expect(code.sortKey > maxBefore, "append uses a sort key past the current max")
     }
+
+    // MARK: caret-split edge semantics (004 修复 2026-08-13)
+    //
+    // Caret at END must never spawn an empty trailing block (the reported
+    // Add-Todo/Add-Code bug); caret at the START of a secondary block
+    // inserts before it; an entirely empty block is REPLACED.
+
+    /// Seeds the primary rich-text block with the given text.
+    private func seedRichText(_ host: NoteWindowHostModel, text: String) async throws -> UUID {
+        var blocks = host.blocks
+        guard let richId = blocks.first(where: { $0.kind == .richText })?.id else {
+            throw TestError.failed("no rich-text block")
+        }
+        blocks = blocks.map { block in
+            guard block.id == richId else { return block }
+            return Block(
+                id: block.id, noteId: block.noteId, kind: .richText,
+                sortKey: block.sortKey,
+                payload: .richText(.plain(text)),
+                versionId: block.versionId, parentVersionId: block.parentVersionId,
+                lastModifiedDeviceId: block.lastModifiedDeviceId,
+                createdAt: block.createdAt, modifiedAt: Date()
+            )
+        }
+        host.updateBlocks(blocks)
+        await host.flush()
+        return richId
+    }
+
+    @Test
+    func caretAtEndWithoutTrailingNewlineLeavesNoEmptyBlock() async throws {
+        let (env, _) = try makeEnvironment()
+        let (host, _) = try await makeHost(env: env)
+        let richId = try await seedRichText(host, text: "alpha")
+
+        guard let todoId = await host.insertTodoBlock(target: .caretSplit(blockId: richId, offset: 5)) else {
+            Issue.record("targeted insert failed")
+            return
+        }
+        let persisted = try await env.persistence.noteRepository!.fetchBlocks(noteId: host.noteId)
+        #expect(persisted.count == 2, "caret at end must not spawn an empty trailing block (got \(persisted.count))")
+        guard let rich = persisted.first(where: { $0.id == richId }),
+              case .richText(let doc) = rich.payload else {
+            Issue.record("rich block missing")
+            return
+        }
+        #expect(doc.text == "alpha", "the block keeps its text (id preserved)")
+        guard let todo = persisted.first(where: { $0.id == todoId }) else {
+            Issue.record("todo block missing")
+            return
+        }
+        #expect(rich.sortKey < todo.sortKey, "the new block lands after the text")
+    }
+
+    @Test
+    func caretAtEndConsumesTheTrailingEmptyLine() async throws {
+        let (env, _) = try makeEnvironment()
+        let (host, _) = try await makeHost(env: env)
+        let richId = try await seedRichText(host, text: "alpha\n")
+
+        guard let codeId = await host.insertCodeBlock(target: .caretSplit(blockId: richId, offset: 6)) else {
+            Issue.record("targeted insert failed")
+            return
+        }
+        let persisted = try await env.persistence.noteRepository!.fetchBlocks(noteId: host.noteId)
+        #expect(persisted.count == 2, "the empty paragraph is consumed, not materialized")
+        guard let rich = persisted.first(where: { $0.id == richId }),
+              case .richText(let doc) = rich.payload else {
+            Issue.record("rich block missing")
+            return
+        }
+        #expect(doc.text == "alpha", "the trailing newline is consumed")
+        guard let code = persisted.first(where: { $0.id == codeId }) else {
+            Issue.record("code block missing")
+            return
+        }
+        #expect(rich.sortKey < code.sortKey)
+    }
+
+    @Test
+    func caretAtStartOfSecondaryBlockInsertsBeforeWithoutEmptyLeading() async throws {
+        let (env, _) = try makeEnvironment()
+        let (host, _) = try await makeHost(env: env)
+        let richId = try await seedRichText(host, text: "alpha beta")
+        // Split in the middle first: [rich "alpha", code, rich " beta"].
+        guard let codeId = await host.insertCodeBlock(target: .caretSplit(blockId: richId, offset: 5)) else {
+            Issue.record("code insert failed")
+            return
+        }
+        let split = try await env.persistence.noteRepository!.fetchBlocks(noteId: host.noteId)
+        guard let trailing = split.last(where: { $0.kind == .richText }) else {
+            Issue.record("trailing block missing")
+            return
+        }
+        // Now insert at the very START of the trailing block.
+        guard let todoId = await host.insertTodoBlock(target: .caretSplit(blockId: trailing.id, offset: 0)) else {
+            Issue.record("todo insert failed")
+            return
+        }
+        let persisted = try await env.persistence.noteRepository!.fetchBlocks(noteId: host.noteId)
+        let richTexts = persisted.filter { $0.kind == .richText }
+        #expect(richTexts.count == 2, "no empty leading block (got \(richTexts.count) rich-text blocks)")
+        #expect(!persisted.contains { block in
+            if case .richText(let doc) = block.payload { return doc.text.isEmpty }
+            return false
+        }, "no empty rich-text block survives")
+        guard let code = persisted.first(where: { $0.id == codeId }),
+              let todo = persisted.first(where: { $0.id == todoId }),
+              let trailingAfter = persisted.first(where: { $0.id == trailing.id }) else {
+            Issue.record("blocks missing")
+            return
+        }
+        #expect(code.sortKey < todo.sortKey && todo.sortKey < trailingAfter.sortKey,
+                "the new block lands before the split's trailing text")
+    }
+
+    @Test
+    func caretSplitOnEntirelyEmptyBlockReplacesIt() async throws {
+        let (env, _) = try makeEnvironment()
+        let (host, _) = try await makeHost(env: env)
+        let blocksBefore = host.blocks
+        guard let richId = blocksBefore.first(where: { $0.kind == .richText })?.id else {
+            Issue.record("no primary block")
+            return
+        }
+        // A fresh note is ONE empty rich-text block — the insertion REPLACES it.
+        guard let todoId = await host.insertTodoBlock(target: .caretSplit(blockId: richId, offset: 0)) else {
+            Issue.record("todo insert failed")
+            return
+        }
+        let persisted = try await env.persistence.noteRepository!.fetchBlocks(noteId: host.noteId)
+        #expect(persisted.count == 1, "the empty block is replaced, not split")
+        #expect(persisted.first?.id == todoId)
+        #expect(persisted.first?.kind == .todo)
+    }
+
+    @Test
+    func caretAtStartOfPrimarySurfaceKeepsZeroHeightLeadingSlot() async throws {
+        // The primary rich-text surface renders pinned ABOVE every secondary
+        // block — inserting before the caret at its very start keeps the
+        // (empty) leading half as the 0pt primary slot so the new block
+        // visually lands above the text; FR-050a removes the emptied slot on
+        // focus exit.
+        let (env, _) = try makeEnvironment()
+        let (host, _) = try await makeHost(env: env)
+        let richId = try await seedRichText(host, text: "alpha")
+        guard let todoId = await host.insertTodoBlock(target: .caretSplit(blockId: richId, offset: 0)) else {
+            Issue.record("todo insert failed")
+            return
+        }
+        let persisted = try await env.persistence.noteRepository!.fetchBlocks(noteId: host.noteId)
+        #expect(persisted.count == 3)
+        guard let primary = persisted.first(where: { $0.id == richId }),
+              case .richText(let doc) = primary.payload,
+              let todo = persisted.first(where: { $0.id == todoId }),
+              let trailing = persisted.last(where: { $0.kind == .richText }) else {
+            Issue.record("expected blocks missing")
+            return
+        }
+        #expect(doc.text.isEmpty, "the primary keeps the empty leading slot (0pt, self-heals)")
+        #expect(trailing.id != richId)
+        if case .richText(let trailingDoc) = trailing.payload {
+            #expect(trailingDoc.text == "alpha")
+        } else {
+            Issue.record("trailing not richText")
+        }
+        #expect(primary.sortKey < todo.sortKey && todo.sortKey < trailing.sortKey)
+    }
 }

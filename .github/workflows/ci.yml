@@ -177,35 +177,6 @@ jobs:
             CODE_SIGNING_ALLOWED="$CODE_SIGNING_ALLOWED" \
             | xcpretty
 
-  ui-smoke:
-    name: UI smoke test (launch only)
-    runs-on: macos-26
-    needs: build
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - name: Select Xcode
-        run: sudo xcode-select -switch /Applications/Xcode_$XCODE_VERSION.app
-      - name: Build for testing (unsigned)
-        run: |
-          xcodebuild build-for-testing \
-            -project "$PROJECT" \
-            -scheme "$SCHEME" \
-            -configuration Debug \
-            CODE_SIGNING_ALLOWED=NO \
-            | xcpretty
-      # 2026-08-09: the click journeys were cancelled (unreliable on macOS 27
-      # beta headless sessions); only the launch smoke test remains, which
-      # needs no signing (it never writes the App Group container).
-      - name: XCUITest launch smoke test
-        run: |
-          xcodebuild test-without-building \
-            -project "$PROJECT" \
-            -scheme "$SCHEME" \
-            -destination 'platform=macOS' \
-            -only-testing:AppUITests/CriticalFlowsUITests \
-            | xcpretty
-
   static-warnings:
     name: Treat warnings as errors (project-owned code)
     runs-on: macos-26

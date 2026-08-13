@@ -4,6 +4,11 @@
 # plan.md §Project Structure." (The Widget Extension target was REMOVED
 # 2026-08-13 with the widget surface — see spec.md US8 note.)
 #
+# The AppUITests target was REMOVED 2026-08-13: the unsigned XCTRunner-based
+# AppUITests-Runner.app triggers macOS Gatekeeper "is damaged" dialogs on the
+# dev machine, and the click journeys were already cancelled 2026-08-09
+# (unreliable on macOS 27 beta). Automated coverage stays in AppTests.
+#
 # Reconciliation (T249): the binary `StickyNotes.xcodeproj` IS committed to
 # the repository, and `project.yml` is the source of truth. CI regenerates
 # the project with `xcodegen generate` and runs `git diff --exit-code` as a
@@ -104,8 +109,7 @@ targets:
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/StickyNotes.app/Contents/MacOS/StickyNotes"
         BUNDLE_LOADER: "$(TEST_HOST)"
         # T305: test bundles need a generated Info.plist so the scheme can
-        # also run signed (ad-hoc) — the full XCUITest journeys require a
-        # signed app.
+        # also run signed (ad-hoc).
         GENERATE_INFOPLIST_FILE: "YES"
     dependencies:
       - target: StickyNotes
@@ -131,20 +135,6 @@ targets:
         product: GRDB
         link: false
 
-  AppUITests:
-    type: bundle.ui-testing
-    platform: macOS
-    sources:
-      - path: AppUITests
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: local.stickynotes.app.uitests
-        # T305: generated Info.plist (see AppTests) so the bundle can be
-        # signed ad-hoc when running the full UI journeys.
-        GENERATE_INFOPLIST_FILE: "YES"
-    dependencies:
-      - target: StickyNotes
-
 schemes:
   StickyNotes:
     build:
@@ -156,6 +146,5 @@ schemes:
       config: Debug
       targets:
         - AppTests
-        - AppUITests
     archive:
       config: Release

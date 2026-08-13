@@ -125,11 +125,23 @@ public final class NoteWindowCoordinator {
             _ = any
             return
         }
-        let host = hosts[noteId]
+        guard let host = hosts[noteId] else { return }
+        // 004 修复 (2026-08-13 用户实测): the menu commands previously
+        // passed NO target → every insertion degraded to `.append`, landing
+        // at the note's end (错位) and leaving trailing empty paragraphs as
+        // a phantom gap. Resolve the caret context exactly like the toolbar.
+        let target = insertionTarget(for: host)
         switch kind {
-        case .todo: Task { _ = await host?.insertTodoBlock() }
-        case .code: Task { _ = await host?.insertCodeBlock() }
+        case .todo: Task { _ = await host.insertTodoBlock(target: target) }
+        case .code: Task { _ = await host.insertCodeBlock(target: target) }
         }
+    }
+
+    /// 004 US4 (FR-010): the key window's insertion target — the editor's
+    /// caret/focus context, degraded to `.append` when stale.
+    private func insertionTarget(for host: NoteWindowHostModel) -> InsertionTarget {
+        let context = EditorSelectionContext.current(for: host.noteId)
+        return NoteWindowDerivations.resolveInsertionTarget(blocks: host.blocks, context: context)
     }
 
     private func insertFileReferenceInKeyWindow() {
@@ -139,14 +151,16 @@ public final class NoteWindowCoordinator {
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        Task { await host.insertFileReferenceBlock(url: url) }
+        let target = insertionTarget(for: host)
+        Task { await host.insertFileReferenceBlock(url: url, target: target) }
     }
 
     private func captureScreenshotInKeyWindow() {
         guard let host = keyHost() else { return }
         // FR-131: capture permission is requested on invocation; the host
         // presents the region/window capture flow.
-        Task { await host.captureRegion() }
+        let target = insertionTarget(for: host)
+        Task { await host.captureRegion(target: target) }
     }
 
     /// Opens (or focuses) the note's window. Returns the window.
@@ -612,6 +626,19 @@ public struct NoteWindowContent: View {
                         },
                         onMoveTodo: { blockId, direction in
                             await host.reorderTodo(blockId: blockId, direction: direction)
+                        },
+                        onEmptyTodoExit: { blockId in
+                            // FR-050a: the emptied todo merges away on
+                            // cursor exit — host-side so the TodoItem row
+                            // round-trips with the block in one undo group.
+                            await host.removeEmptiedTodoBlock(blockId: blockId)
+                        },
+                        onDeleteCode: { blockId in
+                            // 004 修复 (第二轮): the code block's hover-menu
+                            // Delete — host-side structural deletion (ONE
+                            // undo group re-inserts it on ⌘Z, FR-141a
+                            // immediate persist).
+                            await host.deleteBlock(id: blockId)
                         },
                         onFileAction: { blockId, action in
                             await host.performFileAction(blockId: blockId, action: action)

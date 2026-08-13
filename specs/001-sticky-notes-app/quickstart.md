@@ -12,7 +12,7 @@ belong in `tasks.md` (generated later by `/speckit-tasks`).
 - **macOS**: 26 or later (the minimum deployment target; preserved regardless of
   the dev machine's own OS version).
 - **Xcode**: 26.x (preferred 26.6). A full Xcode install is required — the
-  Command Line Tools alone cannot build the app target or host XCUITest.
+  Command Line Tools alone cannot build the app target.
   See [research.md](./research.md) R0 for the toolchain note recorded during
   planning.
 - **Swift**: 6.3, Swift 6 language mode, strict concurrency.
@@ -141,22 +141,6 @@ xcodebuild test \
   -destination 'platform=macOS'
 ```
 
-> **UI-test runner Gatekeeper workaround (verified 2026-08-07)**: the first
-> `xcodebuild test` run on a freshly built `AppUITests-Runner.app` can be
-> blocked by a "damaged / downloaded at an unknown date" Gatekeeper dialog
-> (unsigned runner carrying `com.apple.provenance` on this machine). Fix
-> once per build before re-running:
->
-> ```bash
-> RUNNER=$(find ~/Library/Developer/Xcode/DerivedData -name "AppUITests-Runner.app" -maxdepth 6 | head -1)
-> xattr -dr com.apple.provenance "$RUNNER"; xattr -dr com.apple.quarantine "$RUNNER"
-> codesign --force --sign - --deep "$RUNNER"
-> ```
->
-> `spctl --assess --type execute "$RUNNER"` should return rc=0 afterwards.
-> Without the UI-test target the unit/integration suites are unaffected
-> (`-only-testing:AppTests`).
-
 ### Schema tests
 
 `StickyCore/Tests/PersistenceTests` asserts the single current schema: all
@@ -235,20 +219,15 @@ recent sanitized logs — no note content, file names, paths, or secrets.
 
 Pass `CODE_SIGNING_ALLOWED=NO` for local debug builds (see above).
 
-## Running the AppUITests launch smoke test
+## AppUITests (removed 2026-08-13)
 
-**2026-08-09**: all automated click journeys in `AppUITests` were **cancelled**
-per product decision — synthetic XCUITest clicks/typing are unreliable on
-macOS 27 beta and require an interactive display session. The bundle retains
-only the launch smoke test (`testMenuBarOpenAndDismiss`), which needs no
-signing and no display interaction; interactive flows are covered by manual
-QA instead. Run it like any other suite:
+The `AppUITests` target was **removed** on 2026-08-13. The automated click
+journeys were already cancelled 2026-08-09 (unreliable on macOS 27 beta),
+and the remaining launch smoke test's unsigned `AppUITests-Runner.app`
+(XCTRunner-based) kept triggering macOS Gatekeeper "is damaged" dialogs on
+this dev machine. Interactive flows are covered by manual QA; automated
+coverage lives entirely in `AppTests`.
 
-```bash
-DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild \
-  test -project StickyNotes.xcodeproj -scheme StickyNotes \
-  -destination 'platform=macOS' -only-testing:AppUITests/CriticalFlowsUITests
-```
 
 ## Manual testing on your Mac (stable Keychain access)
 

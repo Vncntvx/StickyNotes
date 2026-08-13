@@ -19,26 +19,41 @@ import SystemBridge
 public struct CodeBlockView: View {
     let block: Block
     let onChanged: (Block) -> Void
+    /// 004 修复 (第二轮): the code block's delete affordance — the user
+    /// reported 无法删除 (the card only had the copy button). Routes to the
+    /// host's structural deletion (ONE undo group, FR-141a immediate).
+    let onDelete: (UUID) async -> Void
     /// 004 修复: unified editing context wiring.
     let selectionBridge: EditorSelectionBridge?
     let undoManager: UndoManager?
     let requestFocus: Bool
     let onFocusRequestHandled: () -> Void
+    /// 004 修复 (P1-6): focus transitions of the code editor (FR-050a
+    /// empty-block exit).
+    let onFocusChange: (Bool, Bool) -> Void
+
+    // 004 修复 (第二轮): the delete menu is hover-gated (the TodoBlockView
+    // pattern) — the slot stays reserved so the card width never jumps.
+    @State private var isHoveringCard = false
 
     public init(
         block: Block,
         onChanged: @escaping (Block) -> Void = { _ in },
+        onDelete: @escaping (UUID) async -> Void = { _ in },
         selectionBridge: EditorSelectionBridge? = nil,
         undoManager: UndoManager? = nil,
         requestFocus: Bool = false,
-        onFocusRequestHandled: @escaping () -> Void = {}
+        onFocusRequestHandled: @escaping () -> Void = {},
+        onFocusChange: @escaping (Bool, Bool) -> Void = { _, _ in }
     ) {
         self.block = block
         self.onChanged = onChanged
+        self.onDelete = onDelete
         self.selectionBridge = selectionBridge
         self.undoManager = undoManager
         self.requestFocus = requestFocus
         self.onFocusRequestHandled = onFocusRequestHandled
+        self.onFocusChange = onFocusChange
     }
 
     public var body: some View {
@@ -58,7 +73,8 @@ public struct CodeBlockView: View {
                     blockId: block.id,
                     undoManager: undoManager,
                     requestFocus: requestFocus,
-                    onFocusRequestHandled: onFocusRequestHandled
+                    onFocusRequestHandled: onFocusRequestHandled,
+                    onFocusChange: onFocusChange
                 )
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Button {
@@ -69,10 +85,27 @@ public struct CodeBlockView: View {
                 .buttonStyle(.plain)
                 .help("Copy code")
                 .accessibilityLabel("Copy code")
+                // 004 修复 (第二轮): the hover-gated ellipsis menu (the
+                // TodoBlockView/FileReferenceCardView pattern).
+                Menu {
+                    Button("Delete", role: .destructive) {
+                        Task { await onDelete(block.id) }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                }
+                .buttonStyle(.plain)
+                .help("Code block actions")
+                .accessibilityLabel("Code block actions")
+                .opacity(isHoveringCard ? 1 : 0)
+                .allowsHitTesting(isHoveringCard)
             }
         }
         .padding(8)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
+        .onHover { hovering in
+            isHoveringCard = hovering
+        }
     }
 
     private var payloadText: String {

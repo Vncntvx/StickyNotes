@@ -50,17 +50,6 @@
                ReferencedContainer = "container:StickyNotes.xcodeproj">
             </BuildableReference>
          </TestableReference>
-         <TestableReference
-            skipped = "NO"
-            parallelizable = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "42D00892214D497762E443B7"
-               BuildableName = "AppUITests.xctest"
-               BlueprintName = "AppUITests"
-               ReferencedContainer = "container:StickyNotes.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
       </Testables>
       <CommandLineArguments>
       </CommandLineArguments>

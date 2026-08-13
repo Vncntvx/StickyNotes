@@ -59,9 +59,9 @@ public struct RichTextView: NSViewRepresentable {
     // the paper's horizontal padding lives in the SwiftUI container
     // (RichTextBlockView `.padding(.horizontal, inset)`), which applies to
     // title and body alike. Vertical inset stays for first-line breathing.
-    static let textContainerHorizontalInset: CGFloat = 0
-    static let lineFragmentPadding: CGFloat = 0
-    static let textContainerVerticalInset: CGFloat = 12
+    public static let textContainerHorizontalInset: CGFloat = 0
+    public static let lineFragmentPadding: CGFloat = 0
+    public static let textContainerVerticalInset: CGFloat = 12
 
     /// The canonical document currently owned by the model.
     let document: RichTextDocument
@@ -88,6 +88,16 @@ public struct RichTextView: NSViewRepresentable {
     /// 320pt minimum; trailing/todo editors pass 0 (content-sized, so an
     /// inserted block no longer renders a second 320pt paper).
     let minimumHeight: CGFloat?
+    /// 004 修复 (2026-08-13 用户实测第二轮): the text-container VERTICAL
+    /// inset. The primary paper keeps 12pt (first-line breathing room
+    /// under the controls row); secondary editors (trailing split blocks,
+    /// todo text) pass 0 — the block-stack spacing owns their rhythm, an
+    /// inset would double it (34pt between blocks read as 大段间隔).
+    let verticalInset: CGFloat
+    /// 004 修复 (2026-08-13 用户实测第二轮): collapse the paper's BOTTOM
+    /// inset once blocks follow it (NotePaperTextView.collapsesBottomInset)
+    /// — the dead paper under the last ink line disappears.
+    let collapsesBottomInset: Bool
     /// 004 修复: special-block editor (todo text) — publishes its
     /// focusedSpecialBlockId so insertion targets `.afterBlock` (FR-010).
     let isSpecialBlock: Bool
@@ -110,6 +120,8 @@ public struct RichTextView: NSViewRepresentable {
         richTextBlockId: UUID? = nil,
         undoManager: UndoManager? = nil,
         minimumHeight: CGFloat? = nil,
+        verticalInset: CGFloat = RichTextView.textContainerVerticalInset,
+        collapsesBottomInset: Bool = false,
         isSpecialBlock: Bool = false,
         displayStyling: EditorDisplayStyling? = nil,
         requestFocus: Bool = false,
@@ -124,6 +136,8 @@ public struct RichTextView: NSViewRepresentable {
         self.richTextBlockId = richTextBlockId
         self.undoManager = undoManager
         self.minimumHeight = minimumHeight
+        self.verticalInset = verticalInset
+        self.collapsesBottomInset = collapsesBottomInset
         self.isSpecialBlock = isSpecialBlock
         self.displayStyling = displayStyling
         self.requestFocus = requestFocus
@@ -153,9 +167,12 @@ public struct RichTextView: NSViewRepresentable {
         // eat — verified 2026-08-09: a 24pt SwiftUI top padding rendered
         // as ~12pt). The caret starts at the inset, so the typing
         // position matches the visual inset.
+        // 004 修复 (第二轮): the inset height is per-editor — the primary
+        // paper keeps 12pt; secondary editors pass 0 (the block-stack
+        // spacing owns their rhythm).
         textView.textContainerInset = NSSize(
             width: Self.textContainerHorizontalInset,
-            height: Self.textContainerVerticalInset
+            height: verticalInset
         )
         textView.textContainer?.lineFragmentPadding = Self.lineFragmentPadding
         textView.font = fontResolver.font(size: textSize, for: "")
@@ -166,6 +183,7 @@ public struct RichTextView: NSViewRepresentable {
         if let minimumHeight {
             textView.minimumHeight = minimumHeight
         }
+        textView.collapsesBottomInset = collapsesBottomInset
         context.coordinator.apply(document: document, textSize: textSize, resolver: fontResolver, to: textView)
         return textView
     }
@@ -181,10 +199,29 @@ public struct RichTextView: NSViewRepresentable {
         // re-applied on EVERY update — makeNSView runs once per identity,
         // so the primary paper kept its 320pt minimum after blocks were
         // inserted below it (the "huge gap" persisted).
-        if let paper = textView as? NotePaperTextView, let minimumHeight,
-           paper.minimumHeight != minimumHeight {
-            paper.minimumHeight = minimumHeight
-            paper.invalidateIntrinsicContentSize()
+        // 第二轮: the bottom-inset collapse + the vertical inset follow the
+        // same discipline — the insertion flips both IN PLACE.
+        if let paper = textView as? NotePaperTextView {
+            var dirty = false
+            if let minimumHeight, paper.minimumHeight != minimumHeight {
+                paper.minimumHeight = minimumHeight
+                dirty = true
+            }
+            if paper.collapsesBottomInset != collapsesBottomInset {
+                paper.collapsesBottomInset = collapsesBottomInset
+                dirty = true
+            }
+            if dirty {
+                paper.invalidateIntrinsicContentSize()
+            }
+        }
+        if textView.textContainerInset.height != verticalInset {
+            textView.textContainerInset = NSSize(
+                width: Self.textContainerHorizontalInset,
+                height: verticalInset
+            )
+            textView.invalidateIntrinsicContentSize()
+            textView.needsDisplay = true
         }
         // 004 T037: keep the bridge attached to the live text view.
         context.coordinator.attach(textView, bridge: selectionBridge, blockId: richTextBlockId)
@@ -376,6 +413,12 @@ public struct RichTextView: NSViewRepresentable {
                 excludesDisplayStyling: parent.displayStyling?.strikethrough == true
             )
             parent.onCommit(document)
+            // 004 修复 (2026-08-13 用户实测): FR-063 suppresses selection
+            // publishes DURING composition — republish after the commit so
+            // the insertion-target registry never lags behind the caret
+            // (stale offsets made window-level Insert split at the wrong
+            // position right after CJK input).
+            publishSelection(from: textView)
         }
 
         public func textDidEndEditing(_ notification: Notification) {
@@ -590,6 +633,16 @@ final class NotePaperTextView: NSTextView {
     /// editors = 0 so an inserted block no longer renders a second paper).
     var minimumHeight: CGFloat = NotePaperTextView.minimumPaperHeight
 
+    /// 004 修复 (2026-08-13 用户实测第二轮): bottom-inset collapse. When
+    /// blocks follow the paper, the BOTTOM text-container inset becomes
+    /// dead paper under the last ink line (read by the user as 大段间隔
+    /// before the inserted block) — the stack spacing already owns the
+    /// rhythm below. The top inset always survives (first-line breathing
+    /// room under the controls row). NSTextView insets are symmetric, so
+    /// the collapse happens in the intrinsic height: the text keeps its
+    /// top-inset origin, the frame simply stops at the last line.
+    var collapsesBottomInset: Bool = false
+
     override var intrinsicContentSize: NSSize {
         // 004 T063 (2026-08-13): force the layout pass before reading
         // usedRect — the enclosing SwiftUI ScrollView relies on this
@@ -599,10 +652,20 @@ final class NotePaperTextView: NSTextView {
             layoutManager.ensureLayout(for: textContainer)
         }
         let used = layoutManager?.usedRect(for: textContainer ?? NSTextContainer()).height ?? 0
-        let contentHeight = used + textContainerInset.height * 2
+        let topInset = textContainerInset.height
+        let bottomInset = collapsesBottomInset ? 0 : textContainerInset.height
+        let contentHeight = used + topInset + bottomInset
+        // The floor: the primary paper keeps its 320pt click target; a
+        // content-sized editor (minimumHeight == 0 — trailing/todo/primary-
+        // with-blocks) keeps ONE line so an empty block never collapses to
+        // 0pt (the caret/click target must survive the zero vertical inset).
+        let lineFont = font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        let lineHeight = lineFont.ascender - lineFont.descender + lineFont.leading
+        let oneLineFloor = topInset + ceil(lineHeight)
+        let floor = minimumHeight > 0 ? minimumHeight : oneLineFloor
         return NSSize(
             width: NSView.noIntrinsicMetric,
-            height: max(contentHeight, minimumHeight)
+            height: max(contentHeight, floor)
         )
     }
 
