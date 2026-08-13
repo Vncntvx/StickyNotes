@@ -41,6 +41,10 @@ public struct SyncSettingsView: View {
     /// Cancels a pending auto-clear when a new transient message arrives
     /// (repeated actions must not let an older message clear the newer one).
     @State private var transientTask: Task<Void, Never>?
+    /// Local lightweight copy feedback for the Vault ID affordance (never
+    /// routed through the sync transient feedback).
+    @State private var vaultIDCopied = false
+    @State private var vaultIDCopiedTask: Task<Void, Never>?
 
     private var isConfigured: Bool { syncCoordinator?.isConfigured == true }
     private var isVaultUnlocked: Bool { syncCoordinator?.isVaultUnlocked == true }
@@ -53,24 +57,6 @@ public struct SyncSettingsView: View {
         case .webdav: return "WebDAV"
         case .s3: return "S3-compatible"
         case nil: return "—"
-        }
-    }
-
-    /// The configured repository address (endpoint + bucket/prefix, no
-    /// credentials) — lets the user verify WHERE their vault lives.
-    private func repositoryText(_ configuration: VaultConfiguration) -> String {
-        let config = configuration.providerConfig
-        switch configuration.providerType {
-        case .webdav:
-            return config.prefix.map { "\(config.endpoint)/\($0)" } ?? config.endpoint
-        case .s3:
-            if let bucket = config.bucket {
-                if let prefix = config.prefix, !prefix.isEmpty {
-                    return "\(bucket)/\(prefix)"
-                }
-                return bucket
-            }
-            return config.endpoint
         }
     }
 
@@ -184,11 +170,17 @@ public struct SyncSettingsView: View {
                 }
             } else if !isVaultUnlocked {
                 LabeledContent {
+                    // Polish round 2: the restore action is the primary
+                    // next step while locked — native prominent, not a big
+                    // CTA.
                     Button("Unlock…") { showUnlockAlert = true }
+                        .buttonStyle(.borderedProminent)
                 } label: {
                     Label("Sync vault is locked", systemImage: "lock.fill")
                 }
-                Text("Your notes are safe on this Mac. Unlock the vault to start syncing again.")
+                // Polish round 2: describe the verifiable state ("still
+                // available on this Mac") instead of an absolute "safe".
+                Text("Unlock to resume syncing. Your notes on this Mac are still available.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -232,9 +224,12 @@ public struct SyncSettingsView: View {
         }
     }
 
-    /// Rev 2: user-meaningful storage semantics — which protocol, and the
-    /// bucket/prefix or endpoint/prefix the user chose. Long values are
-    /// middle-truncated and never drive window width.
+    /// Rev 2 + polish round 2: user-meaningful storage semantics — which
+    /// protocol, and the bucket/prefix or endpoint/prefix the user chose,
+    /// with the legacy auto-generated locator segment stripped
+    /// (SyncLocationPresentation). Long values middle-truncate and never
+    /// drive window width; the full user-semantic value is selectable and
+    /// shown in the help tag.
     private var storageSection: some View {
         Section("Storage") {
             if let configuration = syncCoordinator?.configuration {
@@ -242,11 +237,12 @@ public struct SyncSettingsView: View {
                     Text(providerText)
                 }
                 LabeledContent("Location") {
-                    Text(repositoryText(configuration))
+                    Text(SyncLocationPresentation.location(for: configuration))
                         .truncationMode(.middle)
                         .lineLimit(1)
                         .foregroundStyle(.secondary)
-                        .help(repositoryText(configuration))
+                        .textSelection(.enabled)
+                        .help(SyncLocationPresentation.location(for: configuration))
                 }
             }
         }
@@ -276,7 +272,10 @@ public struct SyncSettingsView: View {
             .disabled(!(syncCoordinator?.autoSyncEnabled ?? false) || !isVaultUnlocked)
             .help("When automatic sync is on: sync after local changes only, or also on a fixed interval")
 
-            Text("Syncs automatically a few seconds after changes, and at the interval you choose.")
+            // Polish round 2: describe the behavior WHEN enabled (2-4 s
+            // debounce after editing + optional periodic interval), not a
+            // present-tense claim that reads as currently happening.
+            Text("When enabled, changes sync automatically a few seconds after editing. You can also choose a periodic interval.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -334,63 +333,134 @@ public struct SyncSettingsView: View {
         }
     }
 
-    /// FR-054 (Rev 2): maintenance operations separated from the primary
-    /// page. Join stays its OWN product action (never merged into the
-    /// storage-location change flow). Destructive actions are visually
-    /// distinct and confirmed; FR-163 is a concise Recovery info row in the
-    /// stable state, not an always-on orange warning.
+    /// FR-054 (Rev 2 + polish round 2): maintenance operations live in a
+    /// default-collapsed disclosure (system DisclosureGroup — VoiceOver
+    /// announces expanded/collapsed, Reduce Motion unaffected). Join stays
+    /// its OWN product action; destructive actions are confirmed with the
+    /// correct role; FR-163 is a concise informational Recovery row.
     private var advancedSection: some View {
-        Section("Advanced") {
+        Section {
+            DisclosureGroup {
+                advancedContent
+            } label: {
+                Text("Advanced")
+            }
+        }
+    }
+
+    /// The disclosure content: semantically grouped, system rows. Borderless
+    /// buttons carry the hierarchy (no per-action gray button chrome);
+    /// dividers only BETWEEN groups (Vault/Storage → Export/Support →
+    /// Vault ID/Recovery → Connection), never per action.
+    @ViewBuilder
+    private var advancedContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Vault / Storage
             // FR-002/US1/AC6 (T029): joining a DIFFERENT existing vault
             // applies replace semantics; CHK033 keeps the recovery re-entry.
             Button("Join Another Vault…") {
                 showJoinSheet = true
             }
+            .buttonStyle(.borderless)
             .help("Connects this Mac to a vault created on another Mac. Your local notes are preserved.")
 
             Button("Set Up New Storage Location…") {
                 showReplaceSheet = true
             }
+            .buttonStyle(.borderless)
             .help("Creates a new vault at a new storage location. Local notes are preserved; the previous location's data is not deleted.")
 
+            Divider()
+                .padding(.vertical, 6)
+
+            // Export / Support
             // FR-009/US2 (T016): export the sync profile (schema v2,
             // no secrets) so another Mac can join this vault.
             Button("Export Sync Profile…") {
                 exportSyncProfile()
             }
+            .buttonStyle(.borderless)
             .help("Saves a sync profile for another Mac. Contains no credentials, keys, or note content.")
-
-            Button("Disconnect Sync…", role: .destructive) {
-                showRemoveConfirmation = true
-            }
-            .help("Stops syncing on this Mac. Your notes and the data at the storage location are kept.")
 
             // FR-191 (T186): diagnostic bundle export.
             Button("Export Diagnostic Bundle…") {
                 exportDiagnosticBundle()
             }
+            .buttonStyle(.borderless)
             .help("Saves a sanitized diagnostics JSON for support. No note content or credentials are included.")
 
+            Divider()
+                .padding(.vertical, 6)
+
+            // Vault ID (copyable) + Recovery
             if let configuration = syncCoordinator?.configuration {
-                // FR-008/US1: the vault locator is the join key for another
-                // Mac (manual entry fallback when scan/profile import are
-                // unavailable). Opaque and non-sensitive (CHK032); shown
-                // only here in the advanced area, middle-truncated.
-                LabeledContent("Vault") {
-                    Text(configuration.vaultLocator)
-                        .font(.system(.body, design: .monospaced))
-                        .truncationMode(.middle)
-                        .lineLimit(1)
-                        .textSelection(.enabled)
-                        .help("The vault locator. Enter it on another Mac to join this vault.")
-                }
+                vaultIDRow(configuration.vaultLocator)
             }
 
             // FR-163: unrecoverable-password information — concise, standard
-            // style, not panel-dominant.
-            Label("No password recovery. If you forget your sync password, your synced notes can't be recovered by anyone.", systemImage: "info.circle")
+            // style, no absolute "by anyone" phrasing.
+            Label("There is no password recovery. If you forget your sync password, your encrypted sync data can't be recovered.", systemImage: "info.circle")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .padding(.top, 6)
+
+            Divider()
+                .padding(.vertical, 6)
+
+            // Connection — separated from the export actions.
+            Button("Disconnect Sync…") {
+                showRemoveConfirmation = true
+            }
+            .buttonStyle(.borderless)
+            .help("Stops syncing on this Mac. Your notes and the data at the storage location are kept.")
+        }
+        .padding(.vertical, 4)
+    }
+
+    /// FR-008/US1: the vault locator is the join key for another Mac
+    /// (manual entry fallback when scan/profile import are unavailable).
+    /// Opaque and non-sensitive (CHK032); middle-truncated so it never
+    /// drives window width, full value via help/selection, and a LOCAL
+    /// lightweight Copy affordance (never routed through the sync transient
+    /// feedback).
+    private func vaultIDRow(_ locator: String) -> some View {
+        HStack(spacing: 8) {
+            Text("Vault ID")
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 8)
+            Text(locator)
+                .font(.system(.body, design: .monospaced))
+                .truncationMode(.middle)
+                .lineLimit(1)
+                .textSelection(.enabled)
+                .help(locator)
+            Button {
+                copyVaultID(locator)
+            } label: {
+                Image(systemName: vaultIDCopied ? "checkmark" : "doc.on.doc")
+            }
+            .buttonStyle(.borderless)
+            .controlSize(.small)
+            .accessibilityLabel("Copy Vault ID")
+            .help("Copy Vault ID")
+        }
+    }
+
+    /// Local copy feedback: clipboard + VoiceOver announcement + a brief
+    /// checkmark swap on the button. Deliberately NOT `presentTransient`
+    /// (that surface carries sync operation results — a clipboard action
+    /// must not overwrite them or trigger the sync banner).
+    private func copyVaultID(_ locator: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(locator, forType: .string)
+        AccessibilityAnnouncements.announce(String(localized: "Copied."))
+        vaultIDCopiedTask?.cancel()
+        vaultIDCopied = true
+        vaultIDCopiedTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard !Task.isCancelled else { return }
+            vaultIDCopied = false
         }
     }
 

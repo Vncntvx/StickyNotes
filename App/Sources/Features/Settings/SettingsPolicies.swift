@@ -1,4 +1,5 @@
 import Foundation
+import Domain
 
 // MARK: - Settings policies (003 T044-T050, FR-050/FR-051/FR-052/FR-055/FR-056; Rev 2 2026-08-14)
 //
@@ -83,4 +84,71 @@ public enum FontPreferenceUI {
     /// FR-055: a meaningful bilingual preview sample.
     public static let bilingualPreviewSample = "Aa 中文"
     public static let bilingualPreviewEnabled = true
+}
+
+// MARK: - SyncLocationPresentation (Settings polish round 2, 2026-08-14)
+
+/// Display-only composition of the user-facing storage location.
+///
+/// Current builds persist ONLY the user-chosen folder in
+/// `RedactedSyncConfig.prefix` (the vault locator is composed at provider
+/// construction time, never persisted — verified against every app-side
+/// writer in this repo's history). A persisted prefix whose LEADING segment
+/// equals the vault locator is therefore a legacy/foreign write with the
+/// auto-generated layout `<locator>` or `<locator>/<user-folder>…`; only
+/// that leading segment is stripped for display. Everything else — ordinary
+/// user prefixes, user-typed 32-hex segments, the locator in any
+/// non-leading position — is kept verbatim. This is structural legacy-layout
+/// recognition, NOT generic locator filtering.
+public enum SyncLocationPresentation {
+
+    /// The persisted prefix with the legacy leading locator segment removed
+    /// (nil when nothing user-meaningful remains).
+    public static func userPrefix(prefix: String?, vaultLocator: String) -> String? {
+        guard let prefix, !prefix.isEmpty else { return nil }
+        let trimmed = prefix.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !trimmed.isEmpty else { return nil }
+        let segments = trimmed
+            .split(separator: "/", omittingEmptySubsequences: true)
+            .map(String.init)
+        if segments.first == vaultLocator {
+            let rest = segments.dropFirst()
+            return rest.isEmpty ? nil : rest.joined(separator: "/")
+        }
+        return trimmed
+    }
+
+    /// The user-facing storage location for a configuration: bucket/prefix
+    /// (S3) or host+path/prefix (WebDAV), with the legacy locator segment
+    /// stripped. Never includes the opaque vault locator.
+    public static func location(for configuration: VaultConfiguration) -> String {
+        let prefix = userPrefix(
+            prefix: configuration.providerConfig.prefix,
+            vaultLocator: configuration.vaultLocator
+        )
+        switch configuration.providerType {
+        case .webdav:
+            let host = endpointHost(configuration.providerConfig.endpoint)
+            if let prefix {
+                return "\(host)/\(prefix)"
+            }
+            return host
+        case .s3:
+            let bucket = configuration.providerConfig.bucket
+                .flatMap { $0.isEmpty ? nil : $0 }
+                ?? configuration.providerConfig.endpoint
+            if let prefix {
+                return "\(bucket)/\(prefix)"
+            }
+            return bucket
+        }
+    }
+
+    /// Endpoint without the URL scheme for display (e.g.
+    /// "https://example.com/dav/" → "example.com/dav").
+    public static func endpointHost(_ endpoint: String) -> String {
+        guard let url = URL(string: endpoint), let host = url.host else { return endpoint }
+        let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return path.isEmpty ? host : "\(host)/\(path)"
+    }
 }

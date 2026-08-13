@@ -6273,6 +6273,142 @@
           }
         }
       }
+    },
+    "Vault ID": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault ID"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保险库 ID"
+          }
+        }
+      }
+    },
+    "Copy Vault ID": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Vault ID"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制保险库 ID"
+          }
+        }
+      }
+    },
+    "Copied.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copied."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已复制。"
+          }
+        }
+      }
+    },
+    "Unlock to resume syncing. Your notes on this Mac are still available.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlock to resume syncing. Your notes on this Mac are still available."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解锁以继续同步。这台 Mac 上的笔记仍然可用。"
+          }
+        }
+      }
+    },
+    "When enabled, changes sync automatically a few seconds after editing. You can also choose a periodic interval.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When enabled, changes sync automatically a few seconds after editing. You can also choose a periodic interval."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开启后，编辑内容几秒后自动同步；也可以选择定期同步间隔。"
+          }
+        }
+      }
+    },
+    "Applies to all notes. Chinese text uses a matching system font when needed.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Applies to all notes. Chinese text uses a matching system font when needed."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "应用于所有笔记；中文会在需要时使用匹配的系统字体。"
+          }
+        }
+      }
+    },
+    "There is no password recovery. If you forget your sync password, your encrypted sync data can't be recovered.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "There is no password recovery. If you forget your sync password, your encrypted sync data can't be recovered."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没有密码找回机制。如果忘记同步密码，加密的同步数据将无法恢复。"
+          }
+        }
+      }
+    },
+    "Type a font family name — for example, Helvetica Neue.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type a font family name — for example, Helvetica Neue."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "输入字体族名称，例如 Helvetica Neue。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

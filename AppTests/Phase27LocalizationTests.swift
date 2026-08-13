@@ -37,6 +37,8 @@ import Foundation
         "Last synced", "Storage", "Sync vault is locked", "Unlock…",
         "Screen Recording", "Not Granted", "Enable…",
         "Disconnect Sync?", "Disconnect",
+        // Settings polish round 2 (2026-08-14)
+        "Vault ID", "Copy Vault ID", "Copied.",
     ]
 
     @Test

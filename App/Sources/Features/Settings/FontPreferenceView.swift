@@ -34,7 +34,14 @@ public struct NoteFontSection: View {
         Group {
             // FR-055: ONE "note font" field (no implementation typography
             // terms). The family name persists under the unchanged key.
+            // Polish round 2: a visible input affordance matching the real
+            // interaction (direct typing) — bordered field, bounded width,
+            // localized help. The width is a bounded maximum, verified
+            // against en/zh-Hans at the minimum window width.
             TextField("Note font", text: $noteFontFamily)
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: 240)
+                .help("Type a font family name — for example, Helvetica Neue.")
                 .onChange(of: noteFontFamily) { _, _ in persist() }
 
             // FR-055: meaningful bilingual live preview (Latin + CJK

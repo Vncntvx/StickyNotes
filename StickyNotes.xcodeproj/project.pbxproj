@@ -93,6 +93,7 @@
 		AC6DE148D104D58C8295A1F8 /* PermissionFallbackIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5843B5DCDAC79240A5B9829C /* PermissionFallbackIntegrationTests.swift */; };
 		AC929567510D62B71D506A1C /* UnifiedEditingInfrastructureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 620CB5C2E15155215D2C3649 /* UnifiedEditingInfrastructureTests.swift */; };
 		B1891C7992D03F59FF289AF0 /* LibrarySheetToggleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18AEBB1AF4516D9DDE0195C1 /* LibrarySheetToggleTests.swift */; };
+		B2CD65FA356B065F0DE2D19C /* SyncLocationPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5C02DD25556C8BF8D4659A8 /* SyncLocationPresentationTests.swift */; };
 		B2E24EF4CDD2A2C3561F71BF /* ScreenshotBlockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78CD3DDE7950E7C9897A7354 /* ScreenshotBlockView.swift */; };
 		B4FCBD5655604D9F38D45948 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17DCD27851E847489C9BE57D /* AppEnvironment.swift */; };
 		BB7588FFD7FC25FB76FE07CF /* CaptureFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE37C4D28AB3CF1A90875194 /* CaptureFlow.swift */; };
@@ -235,6 +236,7 @@
 		B2F91B1246693F0D0CE9D112 /* TodoCodeFileRefIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoCodeFileRefIntegrationTests.swift; sourceTree = "<group>"; };
 		B3789B6CB93CA4F1A5D7D853 /* SyncBannerSemanticsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncBannerSemanticsTests.swift; sourceTree = "<group>"; };
 		B3A7B3718B04AC7F567177D8 /* SettingsPolicies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPolicies.swift; sourceTree = "<group>"; };
+		B5C02DD25556C8BF8D4659A8 /* SyncLocationPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncLocationPresentationTests.swift; sourceTree = "<group>"; };
 		B7739B6E2926F4062557BD94 /* FontPreferenceApplicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FontPreferenceApplicationTests.swift; sourceTree = "<group>"; };
 		B908268520A5CA32B2919457 /* EditorSelectionBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorSelectionBridge.swift; sourceTree = "<group>"; };
 		B917177F40E441DAC7FA3F17 /* NoteToolbarStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteToolbarStateTests.swift; sourceTree = "<group>"; };
@@ -451,6 +453,7 @@
 				B3789B6CB93CA4F1A5D7D853 /* SyncBannerSemanticsTests.swift */,
 				238D8FE16B06923FB561C0B3 /* SyncCompositionTests.swift */,
 				F47BDB69337B2BF3061A9ADB /* SyncCoordinatorUnlockTests.swift */,
+				B5C02DD25556C8BF8D4659A8 /* SyncLocationPresentationTests.swift */,
 				E2C37AFC0C1B1A0A65C281E1 /* SyncProfileExportTests.swift */,
 				808D80D86305AA21C95CABF0 /* SyncStatusPresentationTests.swift */,
 				3505C9972F00A1E45A146D61 /* SystemBehaviorEnvironmentTests.swift */,
@@ -721,6 +724,7 @@
 				2F59C8DBBFF2BC15F3CBE645 /* SyncBannerSemanticsTests.swift in Sources */,
 				5DAE9DB23601424BB994A099 /* SyncCompositionTests.swift in Sources */,
 				4D4012BF87D0B7AAB4E74DD5 /* SyncCoordinatorUnlockTests.swift in Sources */,
+				B2CD65FA356B065F0DE2D19C /* SyncLocationPresentationTests.swift in Sources */,
 				C485CC3E814965D2A3AF6AAA /* SyncProfileExportTests.swift in Sources */,
 				25308A42055C456725C65737 /* SyncStatusPresentationTests.swift in Sources */,
 				0578ED262CF60071CA3FD3FA /* SystemBehaviorEnvironmentTests.swift in Sources */,
@@ -802,7 +806,7 @@
 /* Begin PBXTargetDependency section */
 		023059DFD5F7CABCA47FBFA2 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			productRef = "TEMP_9C3374F7-DA9E-4547-9EF0-B6750EAC3F15" /* SystemBridge */;
+			productRef = "TEMP_FD6A9B4E-8AA0-459C-8A6C-765262476487" /* SystemBridge */;
 		};
 		208B5F7C95E524C074BFEA21 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -811,19 +815,19 @@
 		};
 		2CCA10F60EAE0ABC186D9562 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			productRef = "TEMP_69304E7B-9C44-47E1-9C47-863969398F55" /* GRDB */;
+			productRef = "TEMP_30A98E32-FF0E-4478-BD79-633036885334" /* GRDB */;
 		};
 		7C31425EBA1B9D2B171A038D /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			productRef = "TEMP_A2A85B21-B561-432A-BB95-ACCCC0BAFAF9" /* Domain */;
+			productRef = "TEMP_263355AB-9637-432A-9B93-E7C02CD38E57" /* Domain */;
 		};
 		BEAF6103BFDCA24A3D04399C /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			productRef = "TEMP_9735ADA8-A564-4998-B4BA-14F347F6BB42" /* Persistence */;
+			productRef = "TEMP_2C56791A-6E5D-45F8-AFE5-091A90557DBB" /* Persistence */;
 		};
 		E955A8F681F660898712CB65 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			productRef = "TEMP_FACE9466-013A-42B2-9A02-42546441BB4B" /* EditorCore */;
+			productRef = "TEMP_FEFF1506-AAC3-4882-92C4-BC91FDBD6D91" /* EditorCore */;
 		};
 /* End PBXTargetDependency section */
 
@@ -1120,24 +1124,24 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = SystemBridge;
 		};
-		"TEMP_69304E7B-9C44-47E1-9C47-863969398F55" /* GRDB */ = {
+		"TEMP_263355AB-9637-432A-9B93-E7C02CD38E57" /* Domain */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Domain;
+		};
+		"TEMP_2C56791A-6E5D-45F8-AFE5-091A90557DBB" /* Persistence */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Persistence;
+		};
+		"TEMP_30A98E32-FF0E-4478-BD79-633036885334" /* GRDB */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 0A7913A0291CE7CDB8AEF30F /* XCRemoteSwiftPackageReference "GRDB.swift" */;
 			productName = GRDB;
 		};
-		"TEMP_9735ADA8-A564-4998-B4BA-14F347F6BB42" /* Persistence */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = Persistence;
-		};
-		"TEMP_9C3374F7-DA9E-4547-9EF0-B6750EAC3F15" /* SystemBridge */ = {
+		"TEMP_FD6A9B4E-8AA0-459C-8A6C-765262476487" /* SystemBridge */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = SystemBridge;
 		};
-		"TEMP_A2A85B21-B561-432A-BB95-ACCCC0BAFAF9" /* Domain */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = Domain;
-		};
-		"TEMP_FACE9466-013A-42B2-9A02-42546441BB4B" /* EditorCore */ = {
+		"TEMP_FEFF1506-AAC3-4882-92C4-BC91FDBD6D91" /* EditorCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = EditorCore;
 		};

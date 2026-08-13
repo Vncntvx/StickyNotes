@@ -93,7 +93,9 @@ public struct SettingsView: View {
             } header: {
                 Text("Notes")
             } footer: {
-                Text("The note font applies to all notes. Chinese text uses a matching system font automatically.")
+                // Polish round 2: concise — the first sentence was already
+                // carried by the section semantics.
+                Text("Applies to all notes. Chinese text uses a matching system font when needed.")
                     .font(.caption)
             }
         }
@@ -105,16 +107,11 @@ public struct SettingsView: View {
 
     private var privacyTab: some View {
         Form {
+            // Polish round 2: the footer duplicated the row description
+            // (what / why / state / next step are all already present) —
+            // removed rather than reworded.
             Section {
                 screenRecordingRow
-            } footer: {
-                // Rev 2 (FR-056/FR-134): only the capture features need this
-                // permission; everything else works without it. (The
-                // accessibility row was removed 2026-08-14 — no shipped
-                // feature consumes it, and settings must not invite
-                // pre-granting a permission a future feature might use.)
-                Text("Screen recording is used only for capture. Everything else works without it.")
-                    .font(.caption)
             }
         }
         .formStyle(.grouped)

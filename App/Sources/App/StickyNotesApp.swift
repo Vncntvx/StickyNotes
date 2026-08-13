@@ -115,6 +115,10 @@ struct StickyNotesApp: App {
             height: SettingsWindowPolicy.defaultHeight
         )
         .windowResizability(.contentMinSize)
+        // Polish round 2 (2026-08-14): hide the titlebar page title that
+        // duplicates the selected toolbar tab label (General→General). The
+        // tab strip is toolbar content and is unaffected.
+        .windowToolbarStyle(.unified(showsTitle: false))
 
         Window("About Sticky Notes", id: "about") {
             AboutView()
