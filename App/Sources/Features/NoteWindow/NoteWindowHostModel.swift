@@ -36,9 +36,10 @@ public final class NoteWindowHostModel {
     /// (primary/trailing/todo/code) and every structural change use it, so
     /// ⌘Z/⌘⇧Z span the whole note document.
     public let undoManager = UndoManager()
-    /// 004 修复: insertion-focus request — the newly inserted block's id;
-    /// RichTextBlockView makes that editor first responder, then clears it.
-    public private(set) var pendingFocusBlockId: UUID?
+    /// 004 修复: document-level focus request — the target block's editor
+    /// becomes first responder (caret at `position`); RichTextBlockView
+    /// clears it once handled.
+    public private(set) var pendingFocusRequest: EditorFocusRequest?
     /// 004 修复: structural undo/redo revision — todo rows re-fetch their
     /// TodoItem state when it changes (completion/depth/sort undo).
     public private(set) var undoRevision = 0
@@ -231,9 +232,9 @@ public final class NoteWindowHostModel {
         }
     }
 
-    /// Clears the insertion-focus request once the editor handled it.
+    /// Clears the document-level focus request once the editor handled it.
     public func clearPendingFocusRequest() {
-        pendingFocusBlockId = nil
+        pendingFocusRequest = nil
     }
 
     /// Flushes any pending debounced write now (focus loss, window close,
@@ -457,7 +458,7 @@ public final class NoteWindowHostModel {
                     try? await todoRepo.insert(item)
                 }
             )
-            pendingFocusBlockId = blockId
+            pendingFocusRequest = EditorFocusRequest(blockId: blockId, position: .start)
             await flush()
             try await todoRepo.insert(item)
             return blockId
@@ -487,9 +488,61 @@ public final class NoteWindowHostModel {
             restoreOld: { [weak self] in self?.updateBlocks(previous, isStructural: true) },
             restoreNew: { [weak self] in self?.updateBlocks(newBlocks, isStructural: true) }
         )
-        pendingFocusBlockId = blockId
+        pendingFocusRequest = EditorFocusRequest(blockId: blockId, position: .start)
         await flush()
         return blockId
+    }
+
+    /// Inserts an empty rich-text paragraph at the resolved target (004
+    /// 修复 2026-08-14, P0): "create a paragraph" is a FIRST-CLASS document
+    /// operation, not a caret-split side effect. Bypasses the whitespace
+    /// sweep (`applyingTarget`, not `blocksApplyingTarget`) — an explicitly
+    /// created empty paragraph is intentional and must survive.
+    @discardableResult
+    public func insertRichTextBlock(
+        target: InsertionTarget? = nil,
+        focus position: EditorFocusRequest.Position = .start
+    ) async -> UUID? {
+        let blockId = UUID()
+        let previous = blocks
+        let newBlocks = applyingTarget(target ?? .append) { sortKey in
+            Block(
+                id: blockId,
+                noteId: noteId,
+                kind: .richText,
+                sortKey: sortKey,
+                payload: .richText(.empty),
+                lastModifiedDeviceId: DeviceIdentity.current.id
+            )
+        }
+        updateBlocks(newBlocks, isStructural: true)
+        // 004 修复: ONE undo group.
+        registerStructuralUndo(
+            restoreOld: { [weak self] in self?.updateBlocks(previous, isStructural: true) },
+            restoreNew: { [weak self] in self?.updateBlocks(newBlocks, isStructural: true) }
+        )
+        pendingFocusRequest = EditorFocusRequest(blockId: blockId, position: position)
+        await flush()
+        return blockId
+    }
+
+    /// Continues the document from its tail (004 修复 2026-08-14, P0):
+    /// - the last block is rich text → focus the EXISTING trailing
+    ///   paragraph with the caret at its end (never materializes a
+    ///   duplicate empty paragraph);
+    /// - the last block is a special block (or the note has no blocks) →
+    ///   materialize an empty rich-text paragraph after it and focus it.
+    public func continueDocument() async {
+        let ordered = NoteWindowDerivations.orderedBlocks(blocks)
+        guard let last = ordered.last else {
+            _ = await insertRichTextBlock(target: .append)
+            return
+        }
+        if last.kind == .richText {
+            pendingFocusRequest = EditorFocusRequest(blockId: last.id, position: .end)
+        } else {
+            _ = await insertRichTextBlock(target: .afterBlock(blockId: last.id))
+        }
     }
 
     /// Inserts a file-reference block for a user-selected/dropped file

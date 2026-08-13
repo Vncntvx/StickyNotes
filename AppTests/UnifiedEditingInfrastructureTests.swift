@@ -69,7 +69,7 @@ import Persistence
         note: Note,
         blocks: [Block],
         undoManager: UndoManager? = nil,
-        focusRequest: UUID? = nil,
+        focusRequest: EditorFocusRequest? = nil,
         onFocusRequestHandled: @escaping () -> Void = {},
         onBlocksChanged: @escaping ([Block]) -> Void = { _ in }
     ) -> NSHostingView<RichTextBlockView> {
@@ -240,7 +240,7 @@ import Persistence
             note: note,
             blocks: [primary, todo],
             onBlocksChanged: { _ in },
-            focusRequest: todoId,
+            focusRequest: EditorFocusRequest(blockId: todoId, position: .start),
             onFocusRequestHandled: { handled = true }
         ))
         let window = NSWindow(

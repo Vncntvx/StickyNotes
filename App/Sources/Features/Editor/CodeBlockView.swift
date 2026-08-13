@@ -27,6 +27,10 @@ public struct CodeBlockView: View {
     let selectionBridge: EditorSelectionBridge?
     let undoManager: UndoManager?
     let requestFocus: Bool
+    /// 004 修复 (2026-08-14, P0): caret position forwarded to the code
+    /// editor (tail continuation never targets code in practice; the
+    /// contract stays uniform).
+    let caretAtEnd: Bool
     let onFocusRequestHandled: () -> Void
     /// 004 修复 (P1-6): focus transitions of the code editor (FR-050a
     /// empty-block exit).
@@ -43,6 +47,7 @@ public struct CodeBlockView: View {
         selectionBridge: EditorSelectionBridge? = nil,
         undoManager: UndoManager? = nil,
         requestFocus: Bool = false,
+        caretAtEnd: Bool = false,
         onFocusRequestHandled: @escaping () -> Void = {},
         onFocusChange: @escaping (Bool, Bool) -> Void = { _, _ in }
     ) {
@@ -52,6 +57,7 @@ public struct CodeBlockView: View {
         self.selectionBridge = selectionBridge
         self.undoManager = undoManager
         self.requestFocus = requestFocus
+        self.caretAtEnd = caretAtEnd
         self.onFocusRequestHandled = onFocusRequestHandled
         self.onFocusChange = onFocusChange
     }
@@ -73,6 +79,7 @@ public struct CodeBlockView: View {
                     blockId: block.id,
                     undoManager: undoManager,
                     requestFocus: requestFocus,
+                    caretAtEnd: caretAtEnd,
                     onFocusRequestHandled: onFocusRequestHandled,
                     onFocusChange: onFocusChange
                 )
@@ -101,7 +108,7 @@ public struct CodeBlockView: View {
                 .allowsHitTesting(isHoveringCard)
             }
         }
-        .padding(8)
+        .padding(BlockLayoutMetrics.codeCardPadding)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
         .onHover { hovering in
             isHoveringCard = hovering

@@ -60,10 +60,13 @@ public struct RichTextBlockView: View {
     /// 004 修复: the window-level shared UndoManager (threaded into every
     /// block editor — primary/trailing/todo/code).
     let undoManager: UndoManager?
-    /// 004 修复: insertion-focus request — the newly inserted block's id;
-    /// that block's editor becomes first responder (caret at start).
-    let focusRequest: UUID?
+    /// 004 修复: document-level focus request — the target block's editor
+    /// becomes first responder (caret at the requested position).
+    let focusRequest: EditorFocusRequest?
     let onFocusRequestHandled: () -> Void
+    /// 004 修复 (2026-08-14, P0): the document tail was clicked — the host
+    /// focuses the existing trailing paragraph or materializes a new one.
+    let onContinueDocument: () -> Void
     /// 004 修复: host undo/redo revision — todo rows re-fetch their
     /// TodoItem state when structural undo/redo changes it.
     let todoRevision: Int
@@ -84,9 +87,13 @@ public struct RichTextBlockView: View {
     // wrapping GeometryReader (which would pin content height to the
     // viewport and break vertical scrolling).
     @State private var paperWidth: CGFloat = 480
-    // 004 修复: the pending focus request consumed by the new block's
+    // 004 修复 (2026-08-14, P0): the ScrollView viewport HEIGHT — the
+    // document content fills at least the viewport so the tail
+    // continuation region reaches the bottom of a short note's paper.
+    @State private var viewportHeight: CGFloat = 0
+    // 004 修复: the pending focus request consumed by the target block's
     // editor (cleared when handled).
-    @State private var pendingFocus: UUID?
+    @State private var pendingFocus: EditorFocusRequest?
 
     public init(
         note: Note,
@@ -112,8 +119,9 @@ public struct RichTextBlockView: View {
         onOpenViewer: @escaping () -> Void = {},
         onEmbeddedImageAction: @escaping (UUID, EmbeddedImageAction) async -> Void = { _, _ in },
         undoManager: UndoManager? = nil,
-        focusRequest: UUID? = nil,
+        focusRequest: EditorFocusRequest? = nil,
         onFocusRequestHandled: @escaping () -> Void = {},
+        onContinueDocument: @escaping () -> Void = {},
         todoRevision: Int = 0
     ) {
         self.note = note
@@ -141,6 +149,7 @@ public struct RichTextBlockView: View {
         self.undoManager = undoManager
         self.focusRequest = focusRequest
         self.onFocusRequestHandled = onFocusRequestHandled
+        self.onContinueDocument = onContinueDocument
         self.todoRevision = todoRevision
         _pendingFocus = State(initialValue: focusRequest)
     }
@@ -148,6 +157,13 @@ public struct RichTextBlockView: View {
     public var body: some View {
         ScrollView {
             paper
+                // 004 修复 (2026-08-14, P0): the document content fills at
+                // least the viewport (minus the paper's 8/10 pt top/bottom
+                // padding) so the Spacer pushes the tail continuation
+                // region to the bottom of a short note's visible paper.
+                // A min-height floor, never a pin: longer notes still
+                // scroll naturally.
+                .frame(minHeight: max(0, viewportHeight - 18), alignment: .top)
                 .padding(.horizontal, inset)
                 .padding(.bottom, 10)
                 .padding(.top, 8)
@@ -158,11 +174,13 @@ public struct RichTextBlockView: View {
         // viewport and could not scroll. Width is now measured via
         // onGeometryChange (no wrapping); the content VStack sizes itself
         // from its children (the NSTextView's intrinsic height grows with
-        // the text), so the ScrollView scrolls naturally.
-        .onGeometryChange(for: CGFloat.self) { proxy in
-            proxy.size.width
-        } action: { width in
-            paperWidth = width
+        // the text), so the ScrollView scrolls naturally. Height is
+        // measured alongside (004 修复 2026-08-14) for the tail fill.
+        .onGeometryChange(for: CGSize.self) { proxy in
+            proxy.size
+        } action: { size in
+            paperWidth = size.width
+            viewportHeight = size.height
         }
         // 004 修复: a fresh insertion-focus request becomes the pending
         // focus consumed by the new block's editor.
@@ -191,64 +209,93 @@ public struct RichTextBlockView: View {
 
     // MARK: - 004 T042 semantic insets (FR-019)
 
-    /// The FR-019 semantic content inset (compact 10pt / regular 14–16pt,
-    /// switching at 480pt; capped at 24pt) — driven by the measured
-    /// `paperWidth`. The ONLY custom width-aware rule (plan §5/§8).
+    /// The FR-019 semantic content inset — the metrics' single
+    /// width-aware rule (compact 10pt below 480pt, regular above, cap 24).
     private var inset: CGFloat {
-        paperWidth < 480 ? 10 : min(14 + (paperWidth - 480) / 240, 24)
+        BlockLayoutMetrics.paperInset(for: paperWidth)
     }
 
-    /// The paper content: title → insertion control → primary editor →
-    /// special blocks. Sizes itself from its children — NOT wrapped in a
-    /// GeometryReader (that pins its height to the viewport and breaks
-    /// vertical scrolling — 2026-08-13 fix, T063).
+    /// The paper content: title → insertion control → ordered blocks. Sizes
+    /// itself from its children — NOT wrapped in a GeometryReader (that
+    /// pins its height to the viewport and breaks vertical scrolling —
+    /// 2026-08-13 fix, T063).
     private var paper: some View {
         // 004 T037: read the bridge state during body evaluation so
         // SwiftUI observes it (the insertion-control trigger).
         let textSelected = selectionBridge?.isTextSelected ?? false
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: BlockLayoutMetrics.documentSpacing) {
             // 004 T017 (FR-003): the editable title lives in the
             // paper, above the first content line (001 FR-050:
             // optional title; empty → nil).
             titleField
 
-            BlockInsertionControl(
-                onInsertTodo: onInsertTodo,
-                onInsertCode: onInsertCode,
-                onInsertFileReference: onInsertFileReference,
-                onCaptureScreenshot: onCaptureScreenshot,
-                isCursorLineHovered: $isCursorLineHovered,
-                isTextSelected: Binding(
-                    get: { textSelected },
-                    set: { _ in }
-                ),
-                isIMEComposing: $isIMEComposing
-            )
-
-            // Rich-text block (the seamless primary surface) —
-            // NSTextView-backed (verified 2026-08-07: SwiftUI
-            // `TextEditor`'s binding never writes back on macOS 27
-            // beta; plan-sanctioned fallback, canonical format
-            // unchanged). Natural height so short notes fit without
-            // a scroll track.
-            primaryEditor
-
-            // Special blocks rendered beneath (todo/code/file/image/
-            // screenshot) with the unified container (FR-050b).
-            // LazyVStack: FR-072b — only visible rows are realized
-            // for notes with 100+ todo blocks (bounded row
-            // realization). 004 FR-010: trailing rich-text blocks
-            // (caret splits) render as editable blocks too. The stack
-            // spacing is the SINGLE inter-block rhythm source (004 修复
-            // 2026-08-13 — block components own no vertical padding).
+            // 004 修复 (2026-08-14, 文档顺序): ONE ordered block list — the
+            // data order (host.blocks, canonical sortKey order) IS the
+            // visual order. The former primary/secondary split pinned the
+            // first rich-text block above every other block regardless of
+            // its sortKey; every block now renders at its own position.
+            // LazyVStack: FR-072b — only visible rows are realized for
+            // notes with 100+ todo blocks (bounded row realization). The
+            // stack spacing is the SINGLE inter-block rhythm source (004
+            // 修复 2026-08-13 — block components own no vertical padding).
             LazyVStack(alignment: .leading, spacing: BlockLayoutMetrics.interBlockSpacing) {
-                ForEach(Array(secondaryBlocks.enumerated()), id: \.element.id) { index, block in
+                ForEach(Array(blocks.enumerated()), id: \.element.id) { index, block in
                     BlockContainer {
                         blockView(block, index: index)
                     }
                 }
             }
+            // 004 T034 (FR-010): cursor-line hover triggers the insertion
+            // control — hovering any block row counts.
+            .onHover { hovering in
+                isCursorLineHovered = hovering
+            }
+            // 004 修复 (2026-08-14, P0): the insertion control is an
+            // ACCESSORY overlay, not a document-flow row — its visibility
+            // never changes any block's frame (the control itself is
+            // opacity-gated). It floats over the first block's leading
+            // edge, transiently (cursor-line hover / selection), the
+            // policy-sanctioned hover presentation (FR-043/CHK008).
+            .overlay(alignment: .topLeading) {
+                BlockInsertionControl(
+                    onInsertTodo: onInsertTodo,
+                    onInsertCode: onInsertCode,
+                    onInsertFileReference: onInsertFileReference,
+                    onCaptureScreenshot: onCaptureScreenshot,
+                    isCursorLineHovered: $isCursorLineHovered,
+                    isTextSelected: Binding(
+                        get: { textSelected },
+                        set: { _ in }
+                    ),
+                    isIMEComposing: $isIMEComposing
+                )
+            }
+
+            // 004 修复 (2026-08-14, P0): fills the remaining visible paper
+            // when the document is shorter than the viewport — the tail
+            // continuation region lands at the bottom; a long document
+            // collapses this to zero and keeps the region right after the
+            // last block.
+            Spacer(minLength: 0)
+
+            documentContinuationArea
         }
+    }
+
+    /// The document tail (004 修复 2026-08-14, P0): clicking it continues
+    /// the document — the host focuses the existing trailing rich-text
+    /// paragraph (caret at its end) or materializes a new empty paragraph
+    /// after the last special block. In-flow: it never participates in
+    /// block positioning (the Spacer above handles the fill).
+    private var documentContinuationArea: some View {
+        Color.clear
+            .frame(height: BlockLayoutMetrics.continuationAreaMinHeight)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                onContinueDocument()
+            }
+            .accessibilityLabel(String(localized: "Continue writing"))
     }
 
     // MARK: - 004 T058 title field (Q7 Apple Notes pattern, FR-003)
@@ -276,116 +323,13 @@ public struct RichTextBlockView: View {
 
     // MARK: - 004 T037 selection wiring (FR-010/FR-043)
 
-    // MARK: - Editor surfaces
-
-    /// The primary seamless rich-text surface (first rich-text block).
-    private var primaryEditor: some View {
-        RichTextView(
-            document: canonicalDocument,
-            textSize: ReadableTheme.textSize(for: note),
-            onCommit: { document in
-                didRemoveEmptyBlockOnExit = false
-                commit(document)
-                let state = StickyLogger.editor.signpostBegin("editor.keystroke")
-                StickyLogger.editor.signpostEnd(state, op: "editor.keystroke")
-            },
-            onFocusChange: { focused, hasMarkedText in
-                // FR-063: the IME composition state drives every
-                // transformation/removal decision.
-                isIMEComposing = hasMarkedText
-                // T300 (FR-050a): when the cursor exits an emptied
-                // block, remove it — merge into the FOLLOWING block
-                // or delete outright (clarified 2026-08-07); the
-                // final block is never removed; suppressed while an
-                // IME composition is active (FR-063).
-                guard !focused, !hasMarkedText, !didRemoveEmptyBlockOnExit else { return }
-                didRemoveEmptyBlockOnExit = true
-                // 004 修复: locate the emptied block BY ID — a caret
-                // split leaves multiple rich-text blocks, so the
-                // first-index lookup would remove the wrong one.
-                guard let richId = primaryRichTextBlock?.id,
-                      let richIndex = blocks.firstIndex(where: { $0.id == richId }),
-                      let updated = EditorAppBridge.applyEmptyBlockRemoval(
-                          blocks: blocks,
-                          emptiedBlockIndex: richIndex,
-                          hasIMEComposition: false
-                      ) else { return }
-                // ONE undo group: the removal restores the block on
-                // a single Undo (FR-050a). Structural change persists
-                // immediately per FR-141a.
-                onStructuralBlocksChanged(updated)
-            },
-            selectionBridge: selectionBridge,
-            richTextBlockId: primaryRichTextBlock?.id,
-            undoManager: undoManager,
-            // 004 修复: the primary paper keeps its 320pt minimum ONLY while
-            // it is the whole note (empty-note click surface). Once blocks
-            // follow it, it sizes to content — otherwise the minimum keeps
-            // pushing the inserted block ~320pt below the last body line
-            // ("huge gap" feedback).
-            minimumHeight: secondaryBlocks.isEmpty ? nil : 0,
-            // 004 修复 (第二轮): …and its bottom inset collapses the same
-            // moment — the dead paper under the last ink line is what the
-            // user still read as 大段间隔 in front of the inserted block.
-            collapsesBottomInset: !secondaryBlocks.isEmpty
-        )
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-        // 004 T034 (FR-010): cursor-line hover triggers the insertion
-        // control.
-        .onHover { hovering in
-            isCursorLineHovered = hovering
-        }
-    }
-
     // MARK: - Block rendering
-
-    /// All non-primary blocks: special blocks + trailing rich-text blocks
-    /// (caret splits — 004 FR-010).
-    private var secondaryBlocks: [Block] {
-        guard let primaryId = primaryRichTextBlock?.id else { return blocks }
-        return blocks.filter { $0.id != primaryId }
-    }
 
     @ViewBuilder
     private func blockView(_ block: Block, index: Int) -> some View {
         switch block.kind {
         case .richText:
-            // 004 FR-010: a trailing rich-text block (the caret split's
-            // second half) is editable like the primary surface — and
-            // belongs to the SAME editing context: same bridge, same
-            // undo manager, same focus discipline (004 修复).
-            if case .richText(let doc) = block.payload {
-                RichTextView(
-                    document: doc,
-                    textSize: ReadableTheme.textSize(for: note),
-                    onCommit: { document in
-                        replaceBlock(document, in: block)
-                    },
-                    onFocusChange: { focused, hasMarkedText in
-                        // FR-050a: an emptied trailing block merges away
-                        // when the cursor exits it (FR-063 IME guard).
-                        guard !focused, !hasMarkedText else { return }
-                        guard let idx = blocks.firstIndex(where: { $0.id == block.id }),
-                              let updated = EditorAppBridge.applyEmptyBlockRemoval(
-                                  blocks: blocks,
-                                  emptiedBlockIndex: idx,
-                                  hasIMEComposition: false
-                              ) else { return }
-                        onStructuralBlocksChanged(updated)
-                    },
-                    selectionBridge: selectionBridge,
-                    richTextBlockId: block.id,
-                    undoManager: undoManager,
-                    minimumHeight: 0,
-                    // 004 修复 (第二轮): secondary editors own no vertical
-                    // inset — the 12pt top+bottom doubled the block-stack
-                    // spacing into a 34pt phantom rhythm between blocks.
-                    verticalInset: 0,
-                    requestFocus: pendingFocus == block.id,
-                    onFocusRequestHandled: handleFocusRequest
-                )
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-            }
+            richTextBlockView(block, index: index)
         case .todo:
             TodoBlockView(
                 block: block,
@@ -403,7 +347,8 @@ public struct RichTextBlockView: View {
                 onMove: onMoveTodo,
                 selectionBridge: selectionBridge,
                 undoManager: undoManager,
-                requestFocus: pendingFocus == block.id,
+                requestFocus: pendingFocus?.blockId == block.id,
+                caretAtEnd: pendingFocus?.position == .end,
                 onFocusRequestHandled: handleFocusRequest,
                 onFocusChange: { focused, hasMarkedText in
                     // FR-050a: an emptied todo merges away when the cursor
@@ -423,7 +368,8 @@ public struct RichTextBlockView: View {
                 onDelete: onDeleteCode,
                 selectionBridge: selectionBridge,
                 undoManager: undoManager,
-                requestFocus: pendingFocus == block.id,
+                requestFocus: pendingFocus?.blockId == block.id,
+                caretAtEnd: pendingFocus?.position == .end,
                 onFocusRequestHandled: handleFocusRequest,
                 onFocusChange: { focused, hasMarkedText in
                     // FR-050a: an emptied code block merges away when the
@@ -459,6 +405,80 @@ public struct RichTextBlockView: View {
         }
     }
 
+    /// A rich-text block rendered at its sortKey position (004 修复
+    /// 2026-08-14: the primary/secondary split is gone — every rich-text
+    /// block is an editable block in the SAME editing context: bridge,
+    /// undo manager, focus discipline). Styling is position-derived only:
+    /// - the ONLY block keeps the 320pt empty-note click target;
+    /// - a block with blocks below collapses its bottom inset (dead paper
+    ///   under the last ink line);
+    /// - the FIRST block keeps the 12pt top inset (first-line breathing
+    ///   under the controls row); other blocks own none (the stack spacing
+    ///   owns their rhythm).
+    /// The OPENING paragraph (first rich-text block in sortKey order)
+    /// keeps the primary commit path (FR-050 auto-link detection); the
+    /// trailing blocks keep their plain commit — no behavior change.
+    @ViewBuilder
+    private func richTextBlockView(_ block: Block, index: Int) -> some View {
+        if case .richText(let doc) = block.payload {
+            let isOnlyBlock = blocks.count == 1
+            let isFirstBlock = index == 0
+            let hasBlocksBelow = index < blocks.count - 1
+            let isOpeningParagraph = block.id == openingRichTextBlockId
+            RichTextView(
+                document: doc,
+                textSize: ReadableTheme.textSize(for: note),
+                onCommit: { document in
+                    if isOpeningParagraph {
+                        didRemoveEmptyBlockOnExit = false
+                        commit(document)
+                        let state = StickyLogger.editor.signpostBegin("editor.keystroke")
+                        StickyLogger.editor.signpostEnd(state, op: "editor.keystroke")
+                    } else {
+                        replaceBlock(document, in: block)
+                    }
+                },
+                onFocusChange: { focused, hasMarkedText in
+                    // FR-063: the IME composition state drives every
+                    // transformation/removal decision.
+                    isIMEComposing = hasMarkedText
+                    // T300 (FR-050a): when the cursor exits an emptied
+                    // block, remove it — merge into the FOLLOWING block
+                    // or delete outright (clarified 2026-08-07); the
+                    // final block is never removed; suppressed while an
+                    // IME composition is active (FR-063).
+                    guard !focused, !hasMarkedText else { return }
+                    // The opening paragraph's removal fires exactly once
+                    // per exit; the flag resets on its next commit.
+                    if isOpeningParagraph {
+                        guard !didRemoveEmptyBlockOnExit else { return }
+                        didRemoveEmptyBlockOnExit = true
+                    }
+                    guard let idx = blocks.firstIndex(where: { $0.id == block.id }),
+                          let updated = EditorAppBridge.applyEmptyBlockRemoval(
+                              blocks: blocks,
+                              emptiedBlockIndex: idx,
+                              hasIMEComposition: false
+                          ) else { return }
+                    // ONE undo group: the removal restores the block on
+                    // a single Undo (FR-050a). Structural change persists
+                    // immediately per FR-141a.
+                    onStructuralBlocksChanged(updated)
+                },
+                selectionBridge: selectionBridge,
+                richTextBlockId: block.id,
+                undoManager: undoManager,
+                minimumHeight: isOnlyBlock ? nil : 0,
+                verticalInset: isFirstBlock ? RichTextView.textContainerVerticalInset : 0,
+                collapsesBottomInset: hasBlocksBelow,
+                requestFocus: pendingFocus?.blockId == block.id,
+                caretAtEnd: pendingFocus?.position == .end,
+                onFocusRequestHandled: handleFocusRequest
+            )
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+    }
+
     /// 004 修复: the new block's editor handled the insertion-focus
     /// request — clear the pending focus and report up (deferred to avoid
     /// mutating state during view update).
@@ -490,26 +510,19 @@ public struct RichTextBlockView: View {
 
     // MARK: - Canonical ↔ AppKit bridging (T161; NSTextView fallback 2026-08-07)
 
-    /// The primary rich-text block (the editor's main surface).
-    private var primaryRichTextBlock: Block? {
-        blocks.first(where: { $0.kind == .richText })
+    /// The opening rich-text paragraph (first rich-text block in sortKey
+    /// order) — the former 004 "primary"'s ONLY surviving role: it owns
+    /// the FR-050 auto-link commit path. It no longer changes rendering
+    /// order (004 修复 2026-08-14).
+    private var openingRichTextBlockId: UUID? {
+        blocks.first(where: { $0.kind == .richText })?.id
     }
 
-    /// The canonical document backing the editor (the model owns it; the
-    /// representable mirrors it).
-    private var canonicalDocument: RichTextDocument {
-        guard let richBlock = primaryRichTextBlock,
-              case .richText(let doc) = richBlock.payload else {
-            return .empty
-        }
-        return doc
-    }
-
-    /// Commits a canonical document produced by the editor: applies the
-    /// FR-050 auto-link detection (T143) and persists through the host's
-    /// debounced autosave (FR-141a).
+    /// Commits a canonical document produced by the opening paragraph:
+    /// applies the FR-050 auto-link detection (T143) and persists through
+    /// the host's debounced autosave (FR-141a).
     private func commit(_ document: RichTextDocument) {
-        guard var richBlock = primaryRichTextBlock else {
+        guard var richBlock = blocks.first(where: { $0.kind == .richText }) else {
             // Defensive (verified 2026-08-07): notes created before the
             // initial-block fix may lack the rich-text surface. Create it on
             // first commit so typed input is never dropped.

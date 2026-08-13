@@ -21,6 +21,10 @@ public struct CodeTextView: NSViewRepresentable {
     let blockId: UUID?
     let undoManager: UndoManager?
     let requestFocus: Bool
+    /// 004 修复 (2026-08-14, P0): caret position for a focus request —
+    /// `.end` only ever targets rich-text blocks in practice (tail
+    /// continuation); the parameter keeps the contract uniform.
+    let caretAtEnd: Bool
     let onFocusRequestHandled: () -> Void
     /// 004 修复 (P1-6): focus transitions — mirrors RichTextView's
     /// `(focused, hasMarkedText)` contract so the FR-050a empty-block
@@ -34,6 +38,7 @@ public struct CodeTextView: NSViewRepresentable {
         blockId: UUID? = nil,
         undoManager: UndoManager? = nil,
         requestFocus: Bool = false,
+        caretAtEnd: Bool = false,
         onFocusRequestHandled: @escaping () -> Void = {},
         onFocusChange: @escaping (Bool, Bool) -> Void = { _, _ in }
     ) {
@@ -43,6 +48,7 @@ public struct CodeTextView: NSViewRepresentable {
         self.blockId = blockId
         self.undoManager = undoManager
         self.requestFocus = requestFocus
+        self.caretAtEnd = caretAtEnd
         self.onFocusRequestHandled = onFocusRequestHandled
         self.onFocusChange = onFocusChange
     }
@@ -78,6 +84,10 @@ public struct CodeTextView: NSViewRepresentable {
         }
         if requestFocus {
             context.coordinator.requestFocusIfNeeded(textView)
+        } else if context.coordinator.didHandleFocusRequest {
+            // 004 修复 (2026-08-14, P0): re-arm the one-shot flag when the
+            // request clears — mirror of RichTextView.
+            context.coordinator.didHandleFocusRequest = false
         }
     }
 
@@ -88,7 +98,9 @@ public struct CodeTextView: NSViewRepresentable {
         var parent: CodeTextView
         private var isPushing = false
         private weak var liveTextView: NSTextView?
-        private var didHandleFocusRequest = false
+        /// One-shot per request edge (re-armed by updateNSView when the
+        /// request clears).
+        var didHandleFocusRequest = false
         private var focusAttempts = 0
         private weak var observedWindow: NSWindow?
         private var keyStateObservers: [any NSObjectProtocol] = []
@@ -176,7 +188,7 @@ public struct CodeTextView: NSViewRepresentable {
             if let window = textView.window {
                 didHandleFocusRequest = true
                 window.makeFirstResponder(textView)
-                textView.setSelectedRange(NSRange(location: 0, length: 0))
+                applyFocusCaret(to: textView)
                 parent.onFocusRequestHandled()
                 return
             }
@@ -192,12 +204,18 @@ public struct CodeTextView: NSViewRepresentable {
                 if let window = textView.window {
                     self?.didHandleFocusRequest = true
                     window.makeFirstResponder(textView)
-                    textView.setSelectedRange(NSRange(location: 0, length: 0))
+                    self?.applyFocusCaret(to: textView)
                     handler()
                 } else {
                     self?.requestFocusIfNeeded(textView)
                 }
             }
+        }
+
+        /// The caret position for a focus request (see RichTextView).
+        private func applyFocusCaret(to textView: NSTextView) {
+            let location = parent.caretAtEnd ? (textView.string as NSString).length : 0
+            textView.setSelectedRange(NSRange(location: location, length: 0))
         }
 
         private func observeKeyState(of window: NSWindow?) {
@@ -226,7 +244,7 @@ public struct CodeTextView: NSViewRepresentable {
 /// height (+ insets), N lines pay N. The only floor is a single line: the
 /// empty block's click target (004 修复 2026-08-13: the legacy fixed 44pt
 /// two-line floor left single-line code floating in dead space).
-final class CodeEditorTextView: NSTextView {
+final class CodeEditorTextView: IntrinsicSizingTextView {
 
     override var intrinsicContentSize: NSSize {
         if let layoutManager, let textContainer {
@@ -243,10 +261,5 @@ final class CodeEditorTextView: NSTextView {
             width: NSView.noIntrinsicMetric,
             height: max(contentHeight, singleLineFloor)
         )
-    }
-
-    override func didChangeText() {
-        super.didChangeText()
-        invalidateIntrinsicContentSize()
     }
 }

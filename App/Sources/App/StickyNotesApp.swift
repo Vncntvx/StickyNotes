@@ -505,19 +505,21 @@ struct StickyNotesApp: App {
 
     /// The ONE Settings window entry point (Rev 2, 2026-08-14, FR-051).
     ///
-    /// The SwiftUI `Settings` scene is the authoritative Settings window.
-    /// The scene's system open action (`showSettingsWindow:`) is unreliable
-    /// for LSUIElement (accessory) apps on macOS 27 beta — the menu-bar
-    /// Settings button did nothing even after activating the app first
-    /// (verified 2026-08-08) — so the entry routes through the captured
-    /// `openSettings` environment action (macOS 14+) and OBSERVES whether
-    /// the scene window actually appeared. The NSWindow fallback is created
-    /// only when the scene provably did not respond on this OS; it renders
-    /// the identical `SettingsView` under the identical geometry policy
-    /// (SettingsWindowPolicy). Where the scene works, no fallback window is
-    /// ever created.
+    /// The SwiftUI `Settings` scene is the authoritative Settings window and
+    /// the ONLY implementation used on this OS: the captured `openSettings`
+    /// environment action (macOS 14+) presents it. Verified 2026-08-14 on
+    /// this macOS 27 beta build: the scene opens from the menu-bar dropdown
+    /// path (the earlier `showSettingsWindow:` selector no-op for
+    /// LSUIElement apps — verified 2026-08-08 — does not apply to this
+    /// mechanism).
+    ///
+    /// The NSWindow fallback below exists ONLY for the degenerate case where
+    /// the capture view never appeared (the dropdown was used before the
+    /// MenuBarExtra content ever presented). It must never be created next
+    /// to the scene window: the previous time-based probe produced TWO
+    /// Settings windows when the scene presented slower than the probe
+    /// window (regression fixed 2026-08-14 by removing the probe entirely).
     @State private var settingsSceneOpener: OpenSettingsAction?
-    @State private var settingsWindow: NSWindow?
 
     private func openSettingsWindow() {
         NSApplication.shared.activate(ignoringOtherApps: true)
@@ -526,34 +528,26 @@ struct StickyNotesApp: App {
             $0.title.contains("Settings")
         }) {
             existing.makeKeyAndOrderFront(nil)
-            settingsWindow = existing
             StickyLogger(category: .app).debug("open-settings", code: "existing-window")
             return
         }
         if let opener = settingsSceneOpener {
             opener()
-            Task { @MainActor in
-                for _ in 0..<5 {
-                    try? await Task.sleep(nanoseconds: 200_000_000)
-                    if NSApp.windows.contains(where: { $0.title.contains("Settings") }) {
-                        StickyLogger(category: .app).debug("open-settings", code: "scene-opened")
-                        return
-                    }
-                }
-                StickyLogger(category: .app).debug("open-settings", code: "scene-unresponsive-fallback")
-                createSettingsFallbackWindow()
-            }
+            StickyLogger(category: .app).debug("open-settings", code: "scene-open-requested")
         } else {
-            // The capture view has not appeared yet (dropdown used before the
-            // MenuBarExtra content ever opened) — fall back directly.
+            // Degenerate case only — see the documentation comment above.
             createSettingsFallbackWindow()
         }
     }
 
-    /// The documented fallback for OSes where the Settings scene cannot be
-    /// presented (macOS 27 beta + LSUIElement). Identical content and
-    /// geometry policy to the scene; frame is autosaved.
+    /// Degenerate-case fallback: used ONLY when the scene open action was
+    /// never captured. Renders the identical `SettingsView` under the
+    /// identical geometry policy; guarded against stacking a second window.
     private func createSettingsFallbackWindow() {
+        if let existing = NSApp.windows.first(where: { $0.title.contains("Settings") }) {
+            existing.makeKeyAndOrderFront(nil)
+            return
+        }
         let window = NSWindow(
             contentRect: NSRect(
                 x: 0, y: 0,
@@ -577,7 +571,6 @@ struct StickyNotesApp: App {
         window.setFrameAutosaveName("StickyNotesSettings")
         window.center()
         window.makeKeyAndOrderFront(nil)
-        settingsWindow = window
         StickyLogger(category: .app).debug("open-settings", code: "fallback-created")
     }
 

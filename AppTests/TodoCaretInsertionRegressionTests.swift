@@ -448,4 +448,217 @@ import SystemBridge
         #expect(withOrphan.extentBelowTodo - clean.extentBelowTodo > 20,
                 "an orphan block renders phantom space below the todo")
     }
+
+    // MARK: - Width reflow (Goal A / Test Group B, 2026-08-13)
+    //
+    // A todo's OWN text editor is an NSTextView too: narrowing the window
+    // must reflow its soft-wrapped text and push the block below — never
+    // overflow into it.
+
+    @Test
+    func todoTextReflowsPushingCodeBelowAtNarrowWidth() throws {
+        let noteId = UUID()
+        let todoBlockId = UUID()
+        let todoId = UUID()
+        let item = TodoItem(
+            id: todoId, noteId: noteId, blockId: todoBlockId, sortKey: 1024,
+            depth: 0, lastModifiedDeviceId: deviceId
+        )
+        let todoText = String(
+            repeating: "这条待办没有任何硬换行只依赖软换行来换行显示。", count: 4
+        )
+        let blocks = [
+            Block(
+                noteId: noteId, kind: .richText, sortKey: 0,
+                payload: .richText(.plain("below")),
+                lastModifiedDeviceId: deviceId
+            ),
+            Block(
+                id: todoBlockId, noteId: noteId, kind: .todo, sortKey: 1024,
+                payload: .todo(TodoPayload(todoId: todoId, richText: RichTextDocument.plain(todoText))),
+                lastModifiedDeviceId: deviceId
+            ),
+            Block(
+                noteId: noteId, kind: .code, sortKey: 2048,
+                payload: .code(CodePayload(text: "let x = 1", language: nil)),
+                lastModifiedDeviceId: deviceId
+            ),
+        ]
+        let view = RichTextBlockView(
+            note: Note(lastModifiedDeviceId: deviceId),
+            blocks: blocks,
+            onBlocksChanged: { _ in },
+            todoProvider: { _ in item }
+        )
+        let hosting = NSHostingView(rootView: view)
+        hosting.frame = NSRect(x: 0, y: 0, width: 900, height: 900)
+        hosting.layoutSubtreeIfNeeded()
+        hosting.displayIfNeeded()
+
+        let todoEditor = try #require(
+            collectTextViews(in: hosting).first { $0.string == todoText },
+            "todo editor not realized"
+        )
+        let wideIntrinsic = todoEditor.intrinsicContentSize.height
+        let codeWide = try #require(
+            collectTextViews(in: hosting).first { $0 is CodeEditorTextView },
+            "code editor not realized"
+        )
+        let wideCodeMinY = frameInHosting(codeWide, hosting).minY
+
+        hosting.frame = NSRect(x: 0, y: 0, width: 320, height: 900)
+        hosting.layoutSubtreeIfNeeded()
+        hosting.displayIfNeeded()
+
+        let textViews = collectTextViews(in: hosting)
+        let todoNarrow = try #require(
+            textViews.first { $0.string == todoText },
+            "todo editor missing after narrow resize"
+        )
+        let codeEditor = try #require(
+            textViews.first { $0 is CodeEditorTextView },
+            "code editor not realized"
+        )
+        let todoFrame = frameInHosting(todoNarrow, hosting)
+        let codeFrame = frameInHosting(codeEditor, hosting)
+
+        #expect(todoNarrow.intrinsicContentSize.height > wideIntrinsic + 1,
+                "the todo text must reflow taller at 320 (\(wideIntrinsic) → \(todoNarrow.intrinsicContentSize.height))")
+        #expect(abs(todoFrame.height - todoNarrow.intrinsicContentSize.height) < 3,
+                "SwiftUI must apply the reflowed height to the todo editor frame")
+        #expect(codeFrame.minY > wideCodeMinY + 1,
+                "the code block must move DOWN when the todo text reflows (\(wideCodeMinY) → \(codeFrame.minY))")
+        #expect(codeFrame.minY >= todoFrame.maxY - 0.5,
+                "the reflowed todo must not overflow into the code block: todo.maxY \(todoFrame.maxY) vs code.minY \(codeFrame.minY)")
+    }
+
+    // MARK: - Todo marker alignment (Test Group F, 004 修复 2026-08-14, P0)
+    //
+    // Three separated sizes: visual marker (symbol intrinsic), the layout
+    // marker COLUMN (fixed gutter), the interaction hit target (the whole
+    // column). The todo text leading must be paper edge + column + gap —
+    // expanding the hit target must never drift the text.
+
+    @Test
+    func todoMarkerGutterKeepsTextLeadingStable() throws {
+        let noteId = UUID()
+        let todoBlockId = UUID()
+        let todoId = UUID()
+        let item = TodoItem(
+            id: todoId, noteId: noteId, blockId: todoBlockId, sortKey: 1024,
+            depth: 0, lastModifiedDeviceId: deviceId
+        )
+        let blocks = [
+            Block(
+                noteId: noteId, kind: .richText, sortKey: 0,
+                payload: .richText(.plain("hello")),
+                lastModifiedDeviceId: deviceId
+            ),
+            Block(
+                id: todoBlockId, noteId: noteId, kind: .todo, sortKey: 1024,
+                payload: .todo(TodoPayload(todoId: todoId, richText: .plain("single line todo"))),
+                lastModifiedDeviceId: deviceId
+            ),
+        ]
+        let view = RichTextBlockView(
+            note: Note(lastModifiedDeviceId: deviceId),
+            blocks: blocks,
+            onBlocksChanged: { _ in },
+            todoProvider: { _ in item }
+        )
+        let hosting = NSHostingView(rootView: view)
+        hosting.frame = NSRect(x: 0, y: 0, width: 420, height: 600)
+        hosting.layoutSubtreeIfNeeded()
+        hosting.displayIfNeeded()
+
+        let textViews = collectTextViews(in: hosting)
+        let primary = try #require(textViews.first { $0.string == "hello" }, "primary not realized")
+        let todo = try #require(textViews.first { $0.string == "single line todo" }, "todo editor not realized")
+        let primaryFrame = frameInHosting(primary, hosting)
+        let todoFrame = frameInHosting(todo, hosting)
+
+        let expectedLeading = primaryFrame.minX
+            + BlockLayoutMetrics.todoMarkerColumnWidth
+            + BlockLayoutMetrics.todoMarkerGap
+        #expect(abs(todoFrame.minX - expectedLeading) < 2,
+                "todo text leading = paper edge + marker column + gap (fixed gutter), got Δ\(todoFrame.minX - expectedLeading)")
+        #expect(BlockLayoutMetrics.todoMarkerColumnWidth >= 20,
+                "the marker column must be wide enough for a comfortable hit target")
+    }
+
+    /// The platform baseline override must report the layout manager's REAL
+    /// first-line baseline (container inset + first-line ascender).
+    @Test
+    func notePaperFirstBaselineTracksFontMetrics() {
+        let editor = NotePaperTextView()
+        editor.isRichText = true
+        editor.font = NSFont.systemFont(ofSize: 13)
+        editor.textContainerInset = NSSize(width: 0, height: 12)
+        editor.textContainer?.lineFragmentPadding = 0
+        editor.frame = NSRect(x: 0, y: 0, width: 400, height: 200)
+        editor.string = "hello"
+        let baseline = editor.firstBaselineOffsetFromTop
+        let expected = 12 + (editor.font?.ascender ?? 0)
+        #expect(abs(baseline - expected) < 2,
+                "firstBaselineOffsetFromTop = container inset + first-line ascender, got \(baseline) vs \(expected)")
+    }
+
+    /// A multi-line todo's row stays text-driven: the marker column adds
+    /// no height of its own (the row height = the text editor's height —
+    /// the checkbox aligns within it), so the block below tracks directly.
+    /// (The checkbox's exact Y is baseline-aligned via the platform metric
+    /// asserted in `notePaperFirstBaselineTracksFontMetrics`; the optical
+    /// result is verified visually.)
+    @Test
+    func multiLineTodoRowStaysTextDriven() throws {
+        let noteId = UUID()
+        let todoBlockId = UUID()
+        let todoId = UUID()
+        let item = TodoItem(
+            id: todoId, noteId: noteId, blockId: todoBlockId, sortKey: 1024,
+            depth: 0, lastModifiedDeviceId: deviceId
+        )
+        let blocks = [
+            Block(
+                id: todoBlockId, noteId: noteId, kind: .todo, sortKey: 1024,
+                payload: .todo(TodoPayload(todoId: todoId, richText: .plain("line one\nline two\nline three"))),
+                lastModifiedDeviceId: deviceId
+            ),
+            Block(
+                noteId: noteId, kind: .code, sortKey: 2048,
+                payload: .code(CodePayload(text: "let x = 1", language: nil)),
+                lastModifiedDeviceId: deviceId
+            ),
+        ]
+        let view = RichTextBlockView(
+            note: Note(lastModifiedDeviceId: deviceId),
+            blocks: blocks,
+            onBlocksChanged: { _ in },
+            todoProvider: { _ in item }
+        )
+        let hosting = NSHostingView(rootView: view)
+        hosting.frame = NSRect(x: 0, y: 0, width: 420, height: 600)
+        hosting.layoutSubtreeIfNeeded()
+        hosting.displayIfNeeded()
+
+        let textViews = collectTextViews(in: hosting)
+        let todoEditor = try #require(
+            textViews.first { $0.string.hasPrefix("line one") },
+            "todo editor not realized"
+        )
+        let codeEditor = try #require(
+            textViews.first { $0 is CodeEditorTextView },
+            "code editor not realized"
+        )
+        let todoFrame = frameInHosting(todoEditor, hosting)
+        let codeFrame = frameInHosting(codeEditor, hosting)
+
+        // Three lines of text — the row must actually be multi-line
+        // (proving the marker column did not flatten or inflate it).
+        #expect(todoFrame.height > 40,
+                "the multi-line todo row keeps its text height, got \(todoFrame.height)")
+        // No phantom inflation: the code card starts right below the text.
+        #expect(codeFrame.minY - 8 - todoFrame.maxY < 20,
+                "the marker column must not inflate the row, gap \(codeFrame.minY - 8 - todoFrame.maxY)")
+    }
 }

@@ -1,12 +1,6 @@
 import SwiftUI
 import AppKit
 
-// Temporary diagnostics (2026-08-10 overlay debugging) — REMOVE after
-// verification. stderr is unbuffered, unlike redirected stdout.
-private func diag(_ message: String) {
-    try? FileHandle.standardError.write(contentsOf: Data((message + "\n").utf8))
-}
-
 // MARK: - ContextualFormatOverlay (004, 2026-08-10 clickability fix)
 //
 // The contextual format row floats above the rich-text editor and must
@@ -48,7 +42,6 @@ final class ContextualFormatOverlay: NSObject {
         window.contentView?.addSubview(hosting, positioned: .above, relativeTo: nil)
         hostingView = hosting
         contentView = window.contentView
-        diag("[CFOverlay] install contentView=\(contentView != nil) window=\(window)")
         resizeObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.didResizeNotification, object: window, queue: .main
         ) { [weak self] _ in
@@ -92,14 +85,11 @@ final class ContextualFormatOverlay: NSObject {
 
     private func updateLayout() {
         guard let bridge, let hosting = hostingView, let contentView else {
-            diag("[CFOverlay] updateLayout skipped (missing bridge/hosting/content)")
             isVisible = false
             return
         }
         guard bridge.isTextSelected, bridge.hasFocus,
               let windowRect = bridge.selectionRectInWindow else {
-            let rectDesc = bridge.selectionRectInWindow.map { String(describing: $0) } ?? "nil"
-            diag("[CFOverlay] updateLayout hide sel=\(bridge.isTextSelected) focus=\(bridge.hasFocus) rect=\(rectDesc)")
             hosting.isHidden = true
             isVisible = false
             return
@@ -122,7 +112,6 @@ final class ContextualFormatOverlay: NSObject {
         hosting.setFrameOrigin(NSPoint(x: midX - size.width / 2, y: y))
         hosting.isHidden = false
         isVisible = true
-        diag("[CFOverlay] SHOW rect=\(rect) size=\(size) frame=\(hosting.frame) contentH=\(contentView.bounds.height)")
     }
 
     private func barSize(in hosting: NSHostingView<ContextualFormatBar>) -> CGSize {
@@ -161,7 +150,6 @@ struct ContextualFormatOverlayAnchor: NSViewRepresentable {
         // updateNSView can run before the mount view is attached to a
         // window (window == nil); retry asynchronously until it is — the
         // overlay must exist before the first selection can be made.
-        diag("[CFOverlay] anchor updateNSView window=\(nsView.window != nil) overlay=\(context.coordinator.overlay != nil)")
         Self.installWhenReady(coordinator: context.coordinator, view: nsView, bridge: bridge)
     }
 
@@ -172,7 +160,6 @@ struct ContextualFormatOverlayAnchor: NSViewRepresentable {
     ) {
         guard coordinator.overlay == nil else { return }
         if let window = view.window {
-            diag("[CFOverlay] anchor has window — installing")
             let overlay = ContextualFormatOverlay()
             overlay.install(in: window, bridge: bridge)
             coordinator.overlay = overlay

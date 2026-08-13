@@ -107,6 +107,29 @@ public struct InsertionContext: Equatable, Sendable {
     }
 }
 
+// MARK: - Document focus request (004 修复 2026-08-14, P0)
+
+/// A document-level focus request: which block's editor becomes first
+/// responder, and where the caret lands. The former `pendingFocusBlockId`
+/// carried no position — tail continuation needs `.end` to resume typing
+/// at the end of an existing trailing paragraph.
+public struct EditorFocusRequest: Equatable, Sendable {
+    public enum Position: Equatable, Sendable {
+        /// Caret at the block's start (insertion focus).
+        case start
+        /// Caret at the block's end (tail continuation).
+        case end
+    }
+
+    public var blockId: UUID
+    public var position: Position
+
+    public init(blockId: UUID, position: Position = .start) {
+        self.blockId = blockId
+        self.position = position
+    }
+}
+
 // MARK: - Pure functions
 
 public enum NoteWindowDerivations {
@@ -166,6 +189,22 @@ public enum NoteWindowDerivations {
             }
         }
         return ""
+    }
+
+    // MARK: Block ordering (004 修复 2026-08-14, P0)
+
+    /// The note's blocks in canonical order: ascending sortKey, ties broken
+    /// by block id (deterministic). The host's in-memory `blocks` array
+    /// already IS this order (repository `ORDER BY sortKey ASC` + insertion
+    /// positions) — this helper is the single ordering source for consumers
+    /// that need an explicit ordering (e.g. tail continuation), never a
+    /// per-view re-sort.
+    public static func orderedBlocks(_ blocks: [Block]) -> [Block] {
+        blocks.sorted {
+            $0.sortKey != $1.sortKey
+                ? $0.sortKey < $1.sortKey
+                : $0.id.uuidString < $1.id.uuidString
+        }
     }
 
     // MARK: Insertion target resolution (004 FR-010/Q4, contracts §5)

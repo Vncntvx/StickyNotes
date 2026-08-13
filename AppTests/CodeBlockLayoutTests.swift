@@ -74,4 +74,35 @@ import AppKit
         #expect(height >= oneLineHeight - 1, "the empty block keeps a one-line click target, got \(height)")
         #expect(height < 44, "the empty block no longer reserves two lines, got \(height)")
     }
+
+    // MARK: - Width reflow (Goal A / Test Group A, 2026-08-13)
+
+    /// App-equivalent setup: NO explicit containerSize — the frame drives
+    /// the text container (SwiftUI gives the editor a real frame; the app
+    /// never pins a container width). Narrowing the frame must reflow the
+    /// text and grow the intrinsic height.
+    @Test
+    func widthChangeReflowsIntrinsicHeight() {
+        let editor = CodeEditorTextView()
+        editor.isRichText = false
+        editor.font = font
+        editor.textContainerInset = NSSize(width: 0, height: 4)
+        editor.textContainer?.lineFragmentPadding = 0
+        editor.string = String(
+            repeating: "let value = 1 + 2 + 3 + 4 + 5 + 6 + 7 ", count: 4
+        )
+        editor.frame = NSRect(x: 0, y: 0, width: 480, height: 200)
+        let wide = editor.intrinsicContentSize.height
+
+        editor.setFrameSize(NSSize(width: 240, height: 200))
+        let narrow = editor.intrinsicContentSize.height
+
+        editor.setFrameSize(NSSize(width: 480, height: 200))
+        let back = editor.intrinsicContentSize.height
+
+        #expect(narrow > wide + 1,
+                "narrowing 480→240 must reflow into more lines: \(wide) → \(narrow)")
+        #expect(abs(back - wide) < 2,
+                "restoring the width must release the height: \(narrow) → \(back)")
+    }
 }

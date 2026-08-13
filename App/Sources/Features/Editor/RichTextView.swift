@@ -106,8 +106,13 @@ public struct RichTextView: NSViewRepresentable {
     /// round trip.
     let displayStyling: EditorDisplayStyling?
     /// 004 修复: insertion-focus request — this editor becomes first
-    /// responder (caret at start) once it lands in a window.
+    /// responder (caret at `caretAtEnd ? end : start`) once it lands in a
+    /// window.
     let requestFocus: Bool
+    /// 004 修复 (2026-08-14, P0): where the caret lands on a focus request
+    /// — `.end` resumes typing at the tail of an existing paragraph (tail
+    /// continuation), `.start` is the insertion default.
+    let caretAtEnd: Bool
     let onFocusRequestHandled: () -> Void
 
     public init(
@@ -125,6 +130,7 @@ public struct RichTextView: NSViewRepresentable {
         isSpecialBlock: Bool = false,
         displayStyling: EditorDisplayStyling? = nil,
         requestFocus: Bool = false,
+        caretAtEnd: Bool = false,
         onFocusRequestHandled: @escaping () -> Void = {}
     ) {
         self.document = document
@@ -141,6 +147,7 @@ public struct RichTextView: NSViewRepresentable {
         self.isSpecialBlock = isSpecialBlock
         self.displayStyling = displayStyling
         self.requestFocus = requestFocus
+        self.caretAtEnd = caretAtEnd
         self.onFocusRequestHandled = onFocusRequestHandled
     }
 
@@ -225,6 +232,14 @@ public struct RichTextView: NSViewRepresentable {
         }
         // 004 T037: keep the bridge attached to the live text view.
         context.coordinator.attach(textView, bridge: selectionBridge, blockId: richTextBlockId)
+        // 004 修复 (2026-08-14, P0): a width reflow must republish the
+        // selection rect — the contextual format row re-anchors to the
+        // real post-resize geometry.
+        if let paper = textView as? NotePaperTextView {
+            paper.onWidthReflow = { [weak coordinator = context.coordinator] in
+                coordinator?.republishSelection()
+            }
+        }
         // Push model changes only when the document actually differs (the
         // user is editing — never clobber the live text).
         if textView.string != document.text {
@@ -237,6 +252,11 @@ public struct RichTextView: NSViewRepresentable {
         context.coordinator.applyDisplayStyling(to: textView)
         if requestFocus {
             context.coordinator.requestFocusIfNeeded(textView)
+        } else if context.coordinator.didHandleFocusRequest {
+            // 004 修复 (2026-08-14, P0): re-arm the one-shot flag when the
+            // request clears — tail continuation re-focuses the SAME editor
+            // on every click, not once per editor identity.
+            context.coordinator.didHandleFocusRequest = false
         }
     }
 
@@ -253,8 +273,9 @@ public struct RichTextView: NSViewRepresentable {
         private weak var liveTextView: NSTextView?
         private weak var liveBridge: EditorSelectionBridge?
         private var liveBlockId: UUID?
-        /// 004 修复: insertion-focus requests are handled once per editor.
-        private var didHandleFocusRequest = false
+        /// 004 修复: insertion-focus requests are handled once per request
+        /// edge (re-armed by updateNSView when the request clears).
+        var didHandleFocusRequest = false
 
         /// 004 FR-012 (clarify 2026-08-10): the window whose key-state
         /// notifications republish the selection snapshot, plus the
@@ -312,7 +333,9 @@ public struct RichTextView: NSViewRepresentable {
             ) { [weak self] _ in self?.republishSelection() })
         }
 
-        private func republishSelection() {
+        /// Republishes the current selection/focus snapshot (key-state
+        /// notifications + width reflow).
+        func republishSelection() {
             guard let textView = liveTextView else { return }
             publishSelection(from: textView)
         }
@@ -371,7 +394,8 @@ public struct RichTextView: NSViewRepresentable {
         }
 
         /// 004 修复: insertion-focus — makes this editor the first
-        /// responder with the caret at the start, then reports handled.
+        /// responder (caret at start, or at the text end for tail
+        /// continuation), then reports handled.
         /// The representable can update before the window attaches (the
         /// update pass runs inside layout), so unattached attempts retry
         /// on the next runloop turn (bounded). The retry captures the
@@ -384,7 +408,7 @@ public struct RichTextView: NSViewRepresentable {
             if let window = textView.window {
                 didHandleFocusRequest = true
                 window.makeFirstResponder(textView)
-                textView.setSelectedRange(NSRange(location: 0, length: 0))
+                applyFocusCaret(to: textView)
                 parent.onFocusRequestHandled()
                 return
             }
@@ -396,12 +420,20 @@ public struct RichTextView: NSViewRepresentable {
                 if let window = textView.window {
                     self?.didHandleFocusRequest = true
                     window.makeFirstResponder(textView)
-                    textView.setSelectedRange(NSRange(location: 0, length: 0))
+                    self?.applyFocusCaret(to: textView)
                     handler()
                 } else {
                     self?.requestFocusIfNeeded(textView)
                 }
             }
+        }
+
+        /// The caret position for a focus request: the text start by
+        /// default; the text END for tail continuation (UTF-16 length —
+        /// NSRange space).
+        private func applyFocusCaret(to textView: NSTextView) {
+            let location = parent.caretAtEnd ? (textView.string as NSString).length : 0
+            textView.setSelectedRange(NSRange(location: location, length: 0))
         }
 
         public func textDidChange(_ notification: Notification) {
@@ -613,6 +645,47 @@ public struct RichTextView: NSViewRepresentable {
     }
 }
 
+// MARK: - IntrinsicSizingTextView (004 修复 2026-08-14, P0)
+
+/// The shared width-sensitive sizing base for the note's NSTextViews
+/// (`NotePaperTextView`, `CodeEditorTextView`). Both lifecycles are
+/// identical (verified by the width-reflow suites): the text container
+/// follows the frame width automatically, but SwiftUI only re-measures
+/// once the intrinsic is invalidated — so a REAL width change must
+/// invalidate it. The epsilon guard breaks the SwiftUI↔AppKit loop: a
+/// pure height change (SwiftUI applying the freshly measured intrinsic)
+/// must not re-invalidate.
+///
+/// Subclasses provide their own `intrinsicContentSize` floor/inset math.
+class IntrinsicSizingTextView: NSTextView {
+
+    /// The width the text was last laid out at.
+    private var lastLayoutWidth: CGFloat = 0
+
+    /// 004 修复 (2026-08-14, P0): invoked after a REAL width change
+    /// reflows the text — `NotePaperTextView` republishes the selection
+    /// rect so the contextual format row follows the fresh geometry
+    /// instead of a stale pre-resize rect.
+    var onWidthReflow: (() -> Void)?
+
+    override func setFrameSize(_ newSize: NSSize) {
+        let widthChanged = abs(newSize.width - lastLayoutWidth) > 0.5
+        super.setFrameSize(newSize)
+        guard widthChanged else { return }
+        lastLayoutWidth = newSize.width
+        invalidateIntrinsicContentSize()
+        onWidthReflow?()
+    }
+
+    /// 004 T063: every text edit (typing AND model pushes) re-publishes
+    /// the intrinsic height so the SwiftUI ScrollView grows as the note
+    /// lengthens.
+    override func didChangeText() {
+        super.didChangeText()
+        invalidateIntrinsicContentSize()
+    }
+}
+
 /// The note-paper text view: content-sized, but never shorter than a
 /// comfortable typing surface. Verified 2026-08-09: a purely content-sized
 /// NSTextView collapsed to a ~49pt strip for a short note, so clicks on
@@ -622,7 +695,7 @@ public struct RichTextView: NSViewRepresentable {
 /// intrinsic-size override keeps the text top-anchored (with the native
 /// inset) while giving the paper a full-height click target, and grows
 /// naturally for long notes (the enclosing SwiftUI ScrollView scrolls).
-final class NotePaperTextView: NSTextView {
+final class NotePaperTextView: IntrinsicSizingTextView {
     /// The default minimum paper height: an empty note is a comfortable
     /// clickable typing surface that still leaves headroom for the
     /// ScrollView. The PRIMARY paper keeps this value; trailing/todo
@@ -642,6 +715,26 @@ final class NotePaperTextView: NSTextView {
     /// the collapse happens in the intrinsic height: the text keeps its
     /// top-inset origin, the frame simply stops at the last line.
     var collapsesBottomInset: Bool = false
+
+    /// NSView's native baseline metric — NSTextView does NOT override it
+    /// (the platform value is unusable), so populate it with the layout
+    /// manager's REAL first-line baseline (004 修复 2026-08-14, P0: the
+    /// todo row aligns its checkbox to the first line via this override).
+    override var firstBaselineOffsetFromTop: CGFloat {
+        if let layoutManager, let container = textContainer {
+            layoutManager.ensureLayout(for: container)
+            if let storage = textStorage, storage.length > 0 {
+                // lineFragmentRect is in container content coordinates —
+                // it does NOT include the text-container inset.
+                let rect = layoutManager.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil)
+                let firstFont = storage.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
+                    ?? font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
+                return rect.minY + firstFont.ascender + textContainerInset.height
+            }
+        }
+        let current = font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        return textContainerInset.height + current.ascender
+    }
 
     override var intrinsicContentSize: NSSize {
         // 004 T063 (2026-08-13): force the layout pass before reading
@@ -667,13 +760,5 @@ final class NotePaperTextView: NSTextView {
             width: NSView.noIntrinsicMetric,
             height: max(contentHeight, floor)
         )
-    }
-
-    /// 004 T063: every text edit (typing AND model pushes) re-publishes
-    /// the intrinsic height so the SwiftUI ScrollView grows as the note
-    /// lengthens.
-    override func didChangeText() {
-        super.didChangeText()
-        invalidateIntrinsicContentSize()
     }
 }

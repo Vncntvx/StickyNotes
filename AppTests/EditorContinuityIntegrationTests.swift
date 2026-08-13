@@ -173,4 +173,310 @@ import SystemBridge
         window.close()
         NoteWindowBridge.unregister(noteId: note.id)
     }
+
+    // MARK: - Document continuation (Goal continuation / Test Group D,
+    // 004 修复 2026-08-14, P0)
+    //
+    // The tail continuation: after a trailing todo/code the user must be
+    // able to click below it and keep writing plain paragraphs — without
+    // ever materializing duplicate empty paragraphs.
+
+    private func makeHost(
+        env: AppEnvironment,
+        blocks: [Block]
+    ) async throws -> NoteWindowHostModel {
+        let repo = try #require(env.persistence.noteRepository)
+        let note = Note(lastModifiedDeviceId: Self.deviceId)
+        try await repo.create(note)
+        for block in blocks {
+            try await repo.insert(Block(
+                id: block.id, noteId: note.id, kind: block.kind,
+                sortKey: block.sortKey, payload: block.payload,
+                lastModifiedDeviceId: block.lastModifiedDeviceId
+            ))
+        }
+        let host = NoteWindowHostModel(noteId: note.id, environment: env)
+        await host.load()
+        return host
+    }
+
+    /// Case 1: [richText, todo] → a NEW empty paragraph lands last and
+    /// receives the focus request.
+    @Test
+    func continuationAfterTrailingTodoMaterializesParagraph() async throws {
+        let env = try makeEnvironment()
+        let richId = UUID()
+        let todoBlockId = UUID()
+        let host = try await makeHost(env: env, blocks: [
+            Block(id: richId, noteId: UUID(), kind: .richText, sortKey: 0,
+                  payload: .richText(.plain("body")), lastModifiedDeviceId: Self.deviceId),
+            Block(id: todoBlockId, noteId: UUID(), kind: .todo, sortKey: 1024,
+                  payload: .todo(TodoPayload(todoId: UUID(), richText: .plain("task"))),
+                  lastModifiedDeviceId: Self.deviceId),
+        ])
+
+        await host.continueDocument()
+
+        #expect(host.blocks.count == 3,
+                "one paragraph materializes after the todo (got \(host.blocks.count))")
+        let ordered = NoteWindowDerivations.orderedBlocks(host.blocks)
+        guard let trailing = ordered.last else {
+            Issue.record("no blocks")
+            return
+        }
+        #expect(trailing.kind == .richText, "the new paragraph is a rich-text block")
+        #expect(trailing.id != richId, "the new paragraph must not replace the opening one")
+        if case .richText(let doc) = trailing.payload {
+            #expect(doc.text.isEmpty, "the materialized paragraph starts empty")
+        }
+        #expect(host.pendingFocusRequest == EditorFocusRequest(blockId: trailing.id, position: .start),
+                "the new paragraph must receive the focus request")
+
+        let persisted = try await env.persistence.noteRepository!.fetchBlocks(noteId: host.noteId)
+        #expect(persisted.count == 3, "the paragraph persists immediately (structural, FR-141a)")
+    }
+
+    /// Case 2: [richText, code] → same behavior after a trailing code block.
+    @Test
+    func continuationAfterTrailingCodeMaterializesParagraph() async throws {
+        let env = try makeEnvironment()
+        let richId = UUID()
+        let codeId = UUID()
+        let host = try await makeHost(env: env, blocks: [
+            Block(id: richId, noteId: UUID(), kind: .richText, sortKey: 0,
+                  payload: .richText(.plain("body")), lastModifiedDeviceId: Self.deviceId),
+            Block(id: codeId, noteId: UUID(), kind: .code, sortKey: 1024,
+                  payload: .code(CodePayload(text: "let x = 1", language: nil)),
+                  lastModifiedDeviceId: Self.deviceId),
+        ])
+
+        await host.continueDocument()
+
+        #expect(host.blocks.count == 3, "one paragraph materializes after the code (got \(host.blocks.count))")
+        let ordered = NoteWindowDerivations.orderedBlocks(host.blocks)
+        #expect(ordered.last?.kind == .richText, "the new paragraph is last")
+        guard let trailing = ordered.last else { return }
+        #expect(host.pendingFocusRequest == EditorFocusRequest(blockId: trailing.id, position: .start))
+    }
+
+    /// Case 3: [richText, todo, richText("")] → NO new block; the existing
+    /// trailing paragraph is focused with the caret at its END.
+    @Test
+    func continuationWithExistingTrailingParagraphDoesNotDuplicate() async throws {
+        let env = try makeEnvironment()
+        let richId = UUID()
+        let todoBlockId = UUID()
+        let trailingId = UUID()
+        let host = try await makeHost(env: env, blocks: [
+            Block(id: richId, noteId: UUID(), kind: .richText, sortKey: 0,
+                  payload: .richText(.plain("body")), lastModifiedDeviceId: Self.deviceId),
+            Block(id: todoBlockId, noteId: UUID(), kind: .todo, sortKey: 1024,
+                  payload: .todo(TodoPayload(todoId: UUID(), richText: .plain("task"))),
+                  lastModifiedDeviceId: Self.deviceId),
+            Block(id: trailingId, noteId: UUID(), kind: .richText, sortKey: 1536,
+                  payload: .richText(.plain("")), lastModifiedDeviceId: Self.deviceId),
+        ])
+
+        await host.continueDocument()
+
+        #expect(host.blocks.count == 3,
+                "no duplicate paragraph may materialize (got \(host.blocks.count))")
+        #expect(host.pendingFocusRequest == EditorFocusRequest(blockId: trailingId, position: .end),
+                "the existing trailing paragraph must be focused at its end")
+    }
+
+    /// Case 4: [todo, code] (no rich-text block at all) → a paragraph is
+    /// appended and focused.
+    @Test
+    func continuationWithOnlySpecialBlocksAppendsParagraph() async throws {
+        let env = try makeEnvironment()
+        let todoBlockId = UUID()
+        let codeId = UUID()
+        let host = try await makeHost(env: env, blocks: [
+            Block(id: todoBlockId, noteId: UUID(), kind: .todo, sortKey: 100,
+                  payload: .todo(TodoPayload(todoId: UUID(), richText: .plain("task"))),
+                  lastModifiedDeviceId: Self.deviceId),
+            Block(id: codeId, noteId: UUID(), kind: .code, sortKey: 200,
+                  payload: .code(CodePayload(text: "let x = 1", language: nil)),
+                  lastModifiedDeviceId: Self.deviceId),
+        ])
+
+        await host.continueDocument()
+
+        #expect(host.blocks.count == 3, "a paragraph appends after the special blocks (got \(host.blocks.count))")
+        let ordered = NoteWindowDerivations.orderedBlocks(host.blocks)
+        guard let trailing = ordered.last else { return }
+        #expect(trailing.kind == .richText, "the appended block is a rich-text paragraph")
+        #expect(host.pendingFocusRequest == EditorFocusRequest(blockId: trailing.id, position: .start))
+    }
+
+    /// The real pipeline: [richText("head"), todo, richText("tail text")]
+    /// → the continuation click focuses the EXISTING trailing paragraph
+    /// with the caret at its text END (not start).
+    @Test
+    func continuationFocusesTrailingParagraphAtTextEnd() async throws {
+        let env = try makeEnvironment()
+        let coordinator = NoteWindowCoordinator(environment: env)
+        let repo = try #require(env.persistence.noteRepository)
+        let note = Note(lastModifiedDeviceId: Self.deviceId)
+        try await repo.create(note)
+        let richId = UUID()
+        let todoBlockId = UUID()
+        let trailingId = UUID()
+        try await repo.insert(Block(
+            id: richId, noteId: note.id, kind: .richText, sortKey: 0,
+            payload: .richText(.plain("head")), lastModifiedDeviceId: Self.deviceId
+        ))
+        try await repo.insert(Block(
+            id: todoBlockId, noteId: note.id, kind: .todo, sortKey: 1024,
+            payload: .todo(TodoPayload(todoId: UUID(), richText: .plain("task"))),
+            lastModifiedDeviceId: Self.deviceId
+        ))
+        try await repo.insert(Block(
+            id: trailingId, noteId: note.id, kind: .richText, sortKey: 1536,
+            payload: .richText(.plain("tail text")), lastModifiedDeviceId: Self.deviceId
+        ))
+
+        let host = NoteWindowHostModel(noteId: note.id, environment: env)
+        await host.load()
+        let content = NoteWindowContent(noteId: note.id, host: host, environment: env, coordinator: coordinator)
+        let hosting = NSHostingView(rootView: content)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 700),
+            styleMask: [.titled], backing: .buffered, defer: false
+        )
+        window.isReleasedWhenClosed = false
+        window.contentView = hosting
+        window.makeKeyAndOrderFront(nil)
+        hosting.layoutSubtreeIfNeeded()
+        hosting.displayIfNeeded()
+        try await waitUntil {
+            !allTextViews(in: hosting).isEmpty
+        }
+
+        await host.continueDocument()
+
+        // The trailing editor must become first responder with the caret
+        // at the END of "tail text".
+        var trailingEditor: NSTextView?
+        for _ in 0..<100 {
+            if let editor = allTextViews(in: hosting).first(where: { $0.string == "tail text" }),
+               window.firstResponder === editor {
+                trailingEditor = editor
+                break
+            }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        let editor = try #require(trailingEditor, "the trailing paragraph must become first responder")
+        #expect(editor.selectedRange().location == ("tail text" as NSString).length,
+                "the caret must land at the END of the trailing paragraph, got \(editor.selectedRange().location)")
+        #expect(host.blocks.count == 3, "no block may materialize when a trailing paragraph exists")
+
+        window.close()
+        NoteWindowBridge.unregister(noteId: note.id)
+    }
+
+    // MARK: - Format overlay resize refresh (Test Group H, 004 修复
+    // 2026-08-14, P0)
+    //
+    // A window resize reflows soft-wrapped text; the selection rect the
+    // contextual format row anchors to must be RECOMPUTED at the new
+    // layout — never the stale pre-resize rect.
+
+    @Test
+    func selectionRectRefreshesAfterResizeReflow() async throws {
+        let env = try makeEnvironment()
+        let coordinator = NoteWindowCoordinator(environment: env)
+        let repo = try #require(env.persistence.noteRepository)
+        let note = Note(lastModifiedDeviceId: Self.deviceId)
+        try await repo.create(note)
+        try await repo.insert(Block(
+            noteId: note.id, kind: .richText, sortKey: 0,
+            payload: .richText(.plain(
+                String(repeating: "The quick brown fox jumps over the lazy dog. ", count: 16)
+            )),
+            lastModifiedDeviceId: Self.deviceId
+        ))
+
+        let host = NoteWindowHostModel(noteId: note.id, environment: env)
+        await host.load()
+        let content = NoteWindowContent(noteId: note.id, host: host, environment: env, coordinator: coordinator)
+        let hosting = NSHostingView(rootView: content)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 700),
+            styleMask: [.titled], backing: .buffered, defer: false
+        )
+        window.isReleasedWhenClosed = false
+        window.contentView = hosting
+        window.makeKeyAndOrderFront(nil)
+        hosting.layoutSubtreeIfNeeded()
+        hosting.displayIfNeeded()
+
+        try await waitUntil {
+            !allTextViews(in: hosting).isEmpty
+        }
+        // The bridge is created in the view's `.task` — wait for it
+        // BEFORE publishing the selection (the coordinator attaches the
+        // bridge on the next update pass).
+        try await waitUntil {
+            EditorSelectionContext.bridges[note.id] != nil
+        }
+        let bridge = try #require(EditorSelectionContext.bridges[note.id], "the bridge must exist after the view's task")
+        let primary = try #require(allTextViews(in: hosting).first)
+
+        // Selection setup can still race the attach pass AND parallel
+        // suites stealing key-window status (the bridge's authority
+        // filter drops non-key publishes) — re-assert the window and
+        // retry until the selection is published (bounded).
+        var published = false
+        for _ in 0..<100 {
+            window.makeKeyAndOrderFront(nil)
+            _ = window.makeFirstResponder(primary)
+            primary.setSelectedRange(NSRange(location: 0, length: 120))
+            primary.delegate?.textViewDidChangeSelection?(Notification(name: NSTextView.didChangeSelectionNotification, object: primary))
+            if bridge.selectionRectInWindow != nil {
+                published = true
+                break
+            }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        guard published else {
+            Issue.record("the selection never published through the bridge")
+            window.close()
+            NoteWindowBridge.unregister(noteId: note.id)
+            return
+        }
+        let wideRect = try #require(bridge.selectionRectInWindow)
+        // usedRect (unfloored layout height — the intrinsic is floored at
+        // the 320pt only-block click target) proves the reflow.
+        let layoutManager = try #require(primary.layoutManager)
+        let container = try #require(primary.textContainer)
+        layoutManager.ensureLayout(for: container)
+        let wideUsed = layoutManager.usedRect(for: container).height
+
+        // Resize the window narrower — the text must reflow. (setFrame +
+        // display drives the layout immediately; setContentSize alone left
+        // the content at its old width in the headless host.)
+        window.setFrame(NSRect(x: 0, y: 0, width: 320, height: 700), display: true)
+        hosting.layoutSubtreeIfNeeded()
+        hosting.displayIfNeeded()
+        try await waitUntil {
+            let current = bridge.selectionRectInWindow
+            return current != nil && current != wideRect
+        }
+        let narrowRect = try #require(bridge.selectionRectInWindow)
+        layoutManager.ensureLayout(for: container)
+        let narrowUsed = layoutManager.usedRect(for: container).height
+        // The republished rect must reflect the NEW layout: `firstRect` is
+        // the range's FIRST line (a single-line rect), so the first line
+        // fragment NARROWS with the window — and the reflow itself must
+        // have wrapped the paragraph into more lines.
+        #expect(narrowRect.maxX < wideRect.maxX - 20,
+                "the selection rect must be recomputed at the new width (\(wideRect.maxX) → \(narrowRect.maxX))")
+        #expect(narrowUsed > wideUsed,
+                "the paragraph must reflow into more lines at 320 (\(wideUsed) → \(narrowUsed), frame \(primary.frame), container \(container.containerSize))")
+
+        window.close()
+        NoteWindowBridge.unregister(noteId: note.id)
+    }
 }

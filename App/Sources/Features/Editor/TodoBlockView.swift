@@ -37,6 +37,10 @@ public struct TodoBlockView: View {
     let selectionBridge: EditorSelectionBridge?
     let undoManager: UndoManager?
     let requestFocus: Bool
+    /// 004 修复 (2026-08-14, P0): caret position forwarded to the todo's
+    /// rich-text editor (tail continuation never targets todos in
+    /// practice; the contract stays uniform).
+    let caretAtEnd: Bool
     let onFocusRequestHandled: () -> Void
     /// 004 修复 (P1-6): focus transitions of the todo text editor — the
     /// host applies the FR-050a empty-block exit (with TodoItem-row undo
@@ -64,6 +68,7 @@ public struct TodoBlockView: View {
         selectionBridge: EditorSelectionBridge? = nil,
         undoManager: UndoManager? = nil,
         requestFocus: Bool = false,
+        caretAtEnd: Bool = false,
         onFocusRequestHandled: @escaping () -> Void = {},
         onFocusChange: @escaping (Bool, Bool) -> Void = { _, _ in },
         todoRevision: Int = 0
@@ -80,6 +85,7 @@ public struct TodoBlockView: View {
         self.selectionBridge = selectionBridge
         self.undoManager = undoManager
         self.requestFocus = requestFocus
+        self.caretAtEnd = caretAtEnd
         self.onFocusRequestHandled = onFocusRequestHandled
         self.onFocusChange = onFocusChange
         self.todoRevision = todoRevision
@@ -87,7 +93,16 @@ public struct TodoBlockView: View {
 
     public var body: some View {
         let isComplete = todoItem?.isComplete ?? false
-        HStack(alignment: .top, spacing: 8) {
+        // Plain values captured by the @Sendable alignmentGuide closures
+        // below (Swift 6: the view's isolated properties cannot be
+        // referenced from them directly).
+        let lineCenter = lineCenterOffset
+        // The todo editor's first-line baseline is DETERMINISTIC (no state
+        // round trip): its text container has zero inset and zero line
+        // fragment padding, so the first line starts at the view's top —
+        // the baseline is exactly the body font's ascender.
+        let baseline = textBaseline
+        HStack(alignment: .firstTextBaseline, spacing: BlockLayoutMetrics.todoMarkerGap) {
             Button {
                 // FR-070/FR-071: persist completion via the repository.
                 if let item = todoItem {
@@ -102,6 +117,21 @@ public struct TodoBlockView: View {
                     .foregroundStyle(isComplete ? Color.accentColor : .secondary)
             }
             .buttonStyle(.plain)
+            // 004 修复 (2026-08-14, P0): THREE separated sizes —
+            // visual marker (the symbol's intrinsic size), the layout
+            // marker COLUMN (fixed gutter width), and the interaction hit
+            // target (the whole column via contentShape). Expanding the
+            // hit target never widens the column, so the todo text
+            // leading (paperInset + column + gap) never drifts.
+            .frame(width: BlockLayoutMetrics.todoMarkerColumnWidth, alignment: .center)
+            .contentShape(Rectangle())
+            // The checkbox's visual center sits on the FIRST line's
+            // vertical center (baseline − (ascender−descender)/2), so a
+            // multi-line todo keeps the marker with its first line —
+            // never the whole row's center.
+            .alignmentGuide(.firstTextBaseline) { d in
+                d.height / 2 + lineCenter
+            }
             .accessibilityLabel(isComplete ? "Mark todo incomplete" : "Mark todo complete")
             .accessibilityValue(isComplete ? "Complete" : "Incomplete")
 
@@ -126,8 +156,12 @@ public struct TodoBlockView: View {
                 isSpecialBlock: true,
                 displayStyling: EditorDisplayStyling(strikethrough: isComplete, secondaryColor: isComplete),
                 requestFocus: requestFocus,
+                caretAtEnd: caretAtEnd,
                 onFocusRequestHandled: onFocusRequestHandled
             )
+            .alignmentGuide(.firstTextBaseline) { _ in
+                baseline
+            }
             .frame(maxWidth: .infinity, alignment: .topLeading)
 
             // 004 修复 (P1-5): ONE hover-gated ellipsis menu replaces the
@@ -164,6 +198,29 @@ public struct TodoBlockView: View {
     private var todoDocument: RichTextDocument {
         if case .todo(let payload) = block.payload { return payload.richText }
         return .empty
+    }
+
+    /// The first line's vertical center distance from its baseline —
+    /// derived from the body font's REAL metrics (ascender/descender),
+    /// never a magic offset (004 修复 2026-08-14, P0).
+    private var lineCenterOffset: CGFloat {
+        let font = bodyFont
+        return (font.ascender - font.descender) / 2
+    }
+
+    /// The todo editor's first-line baseline: its text container carries
+    /// zero inset and zero line-fragment padding, so the first line starts
+    /// at the view's top — the baseline is exactly the body font's
+    /// ascender. Deterministic (no layout-manager state round trip through
+    /// a SwiftUI @State, which positioned the row one pass late).
+    private var textBaseline: CGFloat {
+        bodyFont.ascender
+    }
+
+    /// The todo text's body font (the same resolver the RichTextView
+    /// uses for the note text at `textSize`).
+    private var bodyFont: NSFont {
+        NoteFontResolver.load().font(size: textSize, for: "")
     }
 
     private func commitText(_ document: RichTextDocument) {

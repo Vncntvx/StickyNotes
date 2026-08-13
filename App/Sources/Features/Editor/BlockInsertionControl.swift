@@ -81,32 +81,37 @@ public struct BlockInsertionControl: View {
     }
 
     public var body: some View {
-        if BlockInsertionPolicy.insertionPointContextControlEnabled,
-           visible,
-           !BlockInsertionPolicy.obscuresContent {
-            Menu {
-                Button("Add Todo", action: onInsertTodo)
-                Button("Add Code Block", action: onInsertCode)
-                Divider()
-                Button("Add File Reference…", action: onInsertFileReference)
-                Button("Capture Screenshot…", action: onCaptureScreenshot)
-            } label: {
-                Image(systemName: "plus.circle")
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
-                    .padding(3)
-                    // 003 T064 (FR-060/FR-061): glass MAY apply to genuinely
-                    // custom interactive controls (plan.md §7 Usage Map).
-                    // System glass auto-degrades under Reduce Transparency
-                    // (SC-015); no glass-on-glass; clear glass is never the
-                    // default. Guarded: macOS 26.0+ availability.
-                    .background(GlassUsagePolicy.customInteractiveControlsMayGlass ? AnyView(glassBackground) : AnyView(circleBackground))
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            .help("Insert a block")
-            .accessibilityLabel("Insert block")
+        // 004 修复 (2026-08-14, P0): the control ALWAYS exists at a fixed
+        // size — visibility is opacity + hit testing only, so it never
+        // participates in the document's vertical flow (the host places it
+        // in an overlay): showing/hiding must not move a single frame.
+        let shown = BlockInsertionPolicy.insertionPointContextControlEnabled
+            && visible
+            && !BlockInsertionPolicy.obscuresContent
+        Menu {
+            Button("Add Todo", action: onInsertTodo)
+            Button("Add Code Block", action: onInsertCode)
+            Divider()
+            Button("Add File Reference…", action: onInsertFileReference)
+            Button("Capture Screenshot…", action: onCaptureScreenshot)
+        } label: {
+            Image(systemName: "plus.circle")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .padding(3)
+                // 003 T064 (FR-060/FR-061): glass MAY apply to genuinely
+                // custom interactive controls (plan.md §7 Usage Map).
+                // System glass auto-degrades under Reduce Transparency
+                // (SC-015); no glass-on-glass; clear glass is never the
+                // default. Guarded: macOS 26.0+ availability.
+                .background(GlassUsagePolicy.customInteractiveControlsMayGlass ? AnyView(glassBackground) : AnyView(circleBackground))
         }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .opacity(shown ? 1 : 0)
+        .allowsHitTesting(shown)
+        .help("Insert a block")
+        .accessibilityLabel("Insert block")
     }
 
     /// The glass background (macOS 26.0+ — the deployment floor, so no

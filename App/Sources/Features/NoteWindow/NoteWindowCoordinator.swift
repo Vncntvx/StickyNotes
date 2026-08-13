@@ -674,9 +674,15 @@ public struct NoteWindowContent: View {
                         // fresh insert focuses the new block; todo rows
                         // re-fetch their state on structural undo/redo.
                         undoManager: host.undoManager,
-                        focusRequest: host.pendingFocusBlockId,
+                        focusRequest: host.pendingFocusRequest,
                         onFocusRequestHandled: {
                             host.clearPendingFocusRequest()
+                        },
+                        onContinueDocument: {
+                            // 004 修复 (2026-08-14, P0): the document tail
+                            // was clicked — focus the trailing paragraph or
+                            // materialize a new one after the last block.
+                            Task { await host.continueDocument() }
                         },
                         todoRevision: host.undoRevision
                     )
