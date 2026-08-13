@@ -5,12 +5,8 @@ import Domain
 // MARK: - DatabaseStore (T017)
 //
 // Per plan §Local storage: GRDB `DatabasePool` with WAL mode, bounded busy
-// timeout, short write transactions. The main app owns migrations.
-// Integrity checking, pre-migration backup, interrupted-migration recovery
-// (T022).
-//
-// Per research.md R6: WAL allows concurrent readers + one writer; the
-// bounded busy timeout prevents indefinite waits.
+// timeout, short write transactions. There is no migration chain — a single
+// current schema (see Schema.swift); the store simply opens the pool.
 
 /// The DatabaseStore wraps a GRDB `DatabasePool` configured for the app
 /// sandbox container. It is the single source of truth for all

@@ -18,14 +18,14 @@ truth; optional end-to-end-encrypted synchronization to exactly one WebDAV or
 S3-compatible repository is an additive layer that never blocks local editing.
 Delivery is split into five milestones (M0 prototypes → M1 local core → M2
 system integration → M3 encrypted sync → M4 open-source release) while a single
-coherent data model, migration strategy, canonical JSON format, encryption
+coherent data model, canonical JSON format, encryption
 envelope, and synchronization protocol span all milestones.
 
 ## Technical Context
 
 **Language/Version**: Swift 6.3 (Swift language mode 6, strict concurrency).
 
-**Primary Dependencies**: GRDB.swift (SQLite, migrations, WAL, FTS5); one small
+**Primary Dependencies**: GRDB.swift (SQLite, WAL, FTS5); one small
 audited Argon2id package (see research.md — final package selection deferred;
 see Toolchain note). All
 other capabilities use Apple frameworks and project-owned code (no AWS SDK, no
@@ -38,7 +38,7 @@ key material. GRDB `DatabasePool` with WAL mode.
 
 **Testing**: Swift Testing for most unit/integration tests; XCTest where Apple
 APIs/performance measurement require it; XCUITest for critical UI journeys.
-Dedicated migration, security-vector, provider-contract, sync failure-injection,
+Dedicated security-vector, provider-contract, sync failure-injection,
 and performance test suites.
 
 **Target Platform**: macOS 26 and later (see Toolchain note).
@@ -85,7 +85,7 @@ preserved regardless.
 | I | Focused sticky-notes product | Plan implements only the spec's scope; no accounts/ads/analytics/collab/drawing/PM/backlinks/plugins. Non-goals explicitly carried into plan. | PASS |
 | II | Native macOS & SwiftUI-first | SwiftUI-first; AppKit isolated in SystemBridge; macOS 26 minimum; no cross-platform UI framework. NSTextView fallback only if Phase 0 proves SwiftUI insufficient, behind a protocol. | PASS |
 | III | Local-first & offline-complete | SQLite local DB is source of truth; all core features work offline; auto-save; sync never blocks local writes; no developer backend. | PASS |
-| IV | Explicit, durable, versioned data | GRDB SQLite; UUID IDs; ordered migrations; versioned canonical JSON; project-owned rich-text format; no platform archives; atomic asset writes with SHA-256. | PASS |
+| IV | Explicit, durable, versioned data | GRDB SQLite; UUID IDs; single current schema (no migration chain — pre-release); versioned canonical JSON; project-owned rich-text format; no platform archives; atomic asset writes with SHA-256. | PASS |
 | V | Structured editor integrity | Seamless block model (6 categories); stable todo UUIDs; Markdown as input convenience with single-Undo; title optional; no syntax highlighting/execution. | PASS |
 | VI | Privacy & least privilege | No analytics/telemetry; OSLog with privacy annotations; permissions on-demand only; privacy document in M4. | PASS |
 | VII | E2E encryption by design | Argon2id KEK + random master key + HKDF object keys + AES-GCM + Keychain; no custom crypto; password re-wrap; contextual AAD; fail-closed; documented vectors. | PASS |
@@ -93,7 +93,7 @@ preserved regardless.
 | IX | File references not cloud attachments | References not copies; security-scoped bookmarks device-local; only generic metadata syncs; file content never syncs; explicit move with confirmation. | PASS |
 | X | Consistent, accessible, reversible UX | Menu-bar primary; card grid; one window per note; close≠delete; 30-day Trash; keyboard-first; VoiceOver/Reduce Motion/Increased Contrast; per-note Always-on-Top. | PASS |
 | XI | Performance is a product requirement | Off-main-actor work; structured concurrency + actors; lazy thumbnails; FTS search; performance tests with signposts; measured targets. | PASS |
-| XII | Verification & testing mandatory | Tests part of implementation; migration/editor/security/provider/sync/UI/perf/regression suites; failure injection; no-credentials fixtures. | PASS |
+| XII | Verification & testing mandatory | Tests part of implementation; schema/editor/security/provider/sync/UI/perf/regression suites; failure injection; no-credentials fixtures. | PASS |
 | XIII | Dependency discipline | Only GRDB + one audited Argon2id approved; WebDAV/SigV4/sync/crypto-envelope in project-owned code; documented add-dependency decision process. | PASS |
 | XIV | Spec-driven traceability | Plan derived from spec; Constitution Check here + post-design re-check; spec/contracts versioned; behavior changes update spec+tests together. | PASS |
 
@@ -125,7 +125,7 @@ encryption, data integrity, conflict preservation, or destructive-action safety.
 specs/001-sticky-notes-app/
 ├── plan.md              # This file
 ├── research.md          # Phase 0 output (technical decisions + risks)
-├── data-model.md        # Phase 1 output (entities, migrations, state machines)
+├── data-model.md        # Phase 1 output (entities, schema, state machines)
 ├── quickstart.md        # Phase 1 output (build/run/test validation guide)
 ├── contracts/           # Phase 1 output (versioned JSON schemas + protocols)
 │   ├── note-document.schema.json
@@ -160,7 +160,7 @@ ProjectRoot/
 │       ├── Package.swift
 │       ├── Sources/
 │       │   ├── Domain/          # Foundation-only models & rules
-│       │   ├── Persistence/     # GRDB, migrations, FTS5, repositories
+│       │   ├── Persistence/     # GRDB, single schema, FTS5, repositories
 │       │   ├── EditorCore/      # Block ops, Markdown FSM, canonical conversion
 │       │   ├── AssetStore/      # Atomic asset writes, thumbnails, hashing
 │       │   ├── SecurityCore/    # Vault, KDF, key wrap, AES-GCM envelopes
@@ -321,9 +321,9 @@ decoder actor. All cross-actor handoffs pass `Sendable` value types or
 - GRDB `DatabasePool`, WAL mode, bounded busy timeout of 5 seconds (FR-140a),
   short write transactions. Manual-order sort keys use a 1024 gap with
   renormalization of a contiguous run when any adjacent gap falls below 64,
-  executed within a single transaction (FR-022a). Main app owns migrations.
-  Integrity checking, pre-migration backup, interrupted-migration recovery. A
-  test fixture for every historical schema version.
+  executed within a single transaction (FR-022a). Single current schema — no
+  migration chain, no backup/recovery (pre-release; see data-model.md
+  §Schema).
 
 ### Canonical note representation
 
@@ -843,7 +843,7 @@ bypassed.)
 ## Delivery Milestones
 
 Each milestone preserves a buildable, testable repository. A single coherent
-data model, migration strategy, canonical JSON format, encryption envelope, and
+data model, single schema, canonical JSON format, encryption envelope, and
 synchronization protocol span all milestones (designed in Phase 1; M1/M2 use the
 sync-inert portions, M3 activates sync).
 
@@ -864,7 +864,7 @@ Validate highest-risk assumptions BEFORE broad feature work depends on them:
 
 ### Milestone 1 — Local core
 
-Menu-bar library; independent note windows; persistence + migrations; rich text;
+Menu-bar library; independent note windows; persistence + single schema; rich text;
 todos; code blocks; file references; search; colors/transparency (FR-040a
 canonical hexes, FR-041a 40%–100%/5-pt opacity); Trash including **Empty Trash
 (FR-014b)**; single-note **JSON export/import (FR-031a)**; window placement;
@@ -901,7 +901,7 @@ introduces no violations. Key confirmations (full per-FR detail lives in
 spec.md and research.md R entries):
 
 - Data model separates synchronized vs device-local fields, uses UUIDs +
-  ordered migrations + version lineage; sort keys use the pinned 1024 gap with
+  single schema + version lineage; sort keys use the pinned 1024 gap with
   renormalization at <64 (FR-022a); todo nesting bounded at 6 levels (FR-072a);
   the FR-174 long-offline tombstone reconciliation is reflected in the
   Tombstone lifecycle and OfflineReconciler design (IV, VIII).

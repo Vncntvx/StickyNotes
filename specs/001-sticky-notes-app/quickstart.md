@@ -157,11 +157,12 @@ xcodebuild test \
 > Without the UI-test target the unit/integration suites are unaffected
 > (`-only-testing:AppTests`).
 
-### Migration tests
+### Schema tests
 
-`StickyCore/Tests/PersistenceTests` walks every historical schema fixture
-(`Fixtures/schema_vN.sqlite`) forward to current and asserts row integrity, plus
-an interrupted-migration recovery case (backup restore).
+`StickyCore/Tests/PersistenceTests` asserts the single current schema: all
+tables/indexes/FTS exist, `widgetEligible` is absent, `conflictRecord` is
+created inline, integrity/foreign-keys hold, and `DatabaseBootstrap.open`
+applies the schema on a fresh database without erasing an existing one.
 
 ### Editor tests
 

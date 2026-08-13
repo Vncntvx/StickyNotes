@@ -79,14 +79,12 @@ public struct AppEnvironment: Sendable {
     /// Bootstraps the database and composes the environment (T154).
     ///
     /// Startup sequence per plan §Local storage:
-    /// 1. `MigrationRecovery.recoverFromInterruptedMigration` — restore the
-    ///    pre-migration backup if a previous launch crashed mid-migration.
-    /// 2. Open the `DatabasePool` (WAL, foreign keys, bounded busy timeout).
-    /// 3. Run pending migrations with pre-migration backup + post-migration
-    ///    integrity check (restore-on-failure, never half-migrated).
+    /// 1. Open the `DatabasePool` (WAL, foreign keys, bounded busy timeout).
+    /// 2. Apply the single current schema (no migration chain — see
+    ///    Schema.swift; on a fresh database it creates everything, on an
+    ///    existing one it is a no-op).
     ///
-    /// The app calls this once at launch; a failure surfaces a
-    /// `SchemaCompatibility`-class error and the app refuses to start rather
+    /// The app calls this once at launch; a failure refuses to start rather
     /// than running against an inconsistent database (constitution IV, X).
     ///
     /// FR-014a (clarified 2026-08-07) / T210: the startup path performs NO
@@ -107,12 +105,8 @@ public struct AppEnvironment: Sendable {
 
         let databasePath = baseURL
             .appendingPathComponent(DatabaseBootstrap.databaseFileName).path
-        let backupPath = DatabaseBootstrap.backupPath(forDatabasePath: databasePath)
 
-        let store = try await DatabaseBootstrap.open(
-            databasePath: databasePath,
-            backupPath: backupPath
-        )
+        let store = try await DatabaseBootstrap.open(databasePath: databasePath)
 
         // T293: compose the asset store under the sandbox Application
         // Support directory (originals/thumbnails/app-icons; never in

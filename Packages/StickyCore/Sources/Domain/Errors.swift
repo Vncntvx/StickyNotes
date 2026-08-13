@@ -4,7 +4,7 @@ import Foundation
 //
 // Per plan §Error model. Typed categories: Persistence, EditorConversion,
 // AssetStorage, FileRefAccess, Capture, Permission, Encryption, Credentials,
-// WebDAV, S3, SyncConflict, RemoteCorruption, SchemaCompatibility. Mapped
+// WebDAV, S3, SyncConflict, RemoteCorruption. Mapped
 // to: silent retry / non-blocking status / inline recovery / blocking
 // confirmation (destructive only). User-facing messages localized, no
 // sensitive technical detail; diagnostics sanitized (constitution VI).
@@ -29,7 +29,6 @@ public enum StickyError: Error, Sendable {
     case s3(S3Error)
     case syncConflict(SyncConflictError)
     case remoteCorruption(RemoteCorruptionError)
-    case schemaCompatibility(SchemaCompatibilityError)
 
     /// A stable, sanitized error code suitable for logs and exported
     /// diagnostics. Contains NO note content, paths, or secrets.
@@ -47,7 +46,6 @@ public enum StickyError: Error, Sendable {
         case .s3(let e): return "s3.\(e.sanitizedCode)"
         case .syncConflict(let e): return "syncConflict.\(e.sanitizedCode)"
         case .remoteCorruption(let e): return "remoteCorruption.\(e.sanitizedCode)"
-        case .schemaCompatibility(let e): return "schemaCompatibility.\(e.sanitizedCode)"
         }
     }
 }
@@ -56,10 +54,8 @@ public enum StickyError: Error, Sendable {
 
 public enum PersistenceError: Error, Sendable {
     case databaseOpenFailed
-    case migrationFailed
     case writeConflict            // SQLITE_BUSY
-    case integrityCheckFailed
-    case recoveryFailed
+    case integrityCheckFailed     // SQLITE_CORRUPT / SQLITE_NOTADB
     case recordNotFound
     case invalidPayload
     /// FR-090b: note structured content exceeds `ScaleLimits.maxNoteContentBytes`
@@ -69,10 +65,8 @@ public enum PersistenceError: Error, Sendable {
     public var sanitizedCode: String {
         switch self {
         case .databaseOpenFailed: return "databaseOpenFailed"
-        case .migrationFailed: return "migrationFailed"
         case .writeConflict: return "writeConflict"
         case .integrityCheckFailed: return "integrityCheckFailed"
-        case .recoveryFailed: return "recoveryFailed"
         case .recordNotFound: return "recordNotFound"
         case .invalidPayload: return "invalidPayload"
         case .contentTooLarge: return "contentTooLarge"
@@ -354,18 +348,6 @@ public enum RemoteCorruptionError: Error, Sendable {
         case .manifestInvalid: return "manifestInvalid"
         case .objectHashMismatch: return "objectHashMismatch"
         case .unexpectedObjectLayout: return "unexpectedObjectLayout"
-        }
-    }
-}
-
-/// Schema compatibility errors. Callers (app bootstrap, migration recovery)
-/// fail closed on an unsupported schema version.
-public enum SchemaCompatibilityError: Error, Sendable {
-    case unsupportedSchemaVersion
-
-    public var sanitizedCode: String {
-        switch self {
-        case .unsupportedSchemaVersion: return "unsupportedSchemaVersion"
         }
     }
 }

@@ -4,63 +4,32 @@ import Domain
 
 // MARK: - DatabaseBootstrap (T154)
 //
-// Per plan §Local storage: the main app owns migrations. At startup it must
-// (1) recover from any interrupted migration, (2) open the DatabasePool in
-// WAL mode, and (3) run pending migrations with a pre-migration backup and
-// post-migration integrity check. This bootstrap composes that sequence so
-// the App target wires a single call and the sequence itself is testable in
-// the package (constitution XII — tests are mandatory).
-//
-// (research.md R6; plan §Local storage).
+// Opens the app's SQLite database. There is no migration chain and no
+// backward compatibility (pre-release app): a single schema migration
+// (`InitialSchema`) creates the full current schema on a fresh database and
+// is a no-op on an existing one. This bootstrap composes open + migrate so
+// the App target wires a single call and the sequence is testable in the
+// package (constitution XII — tests are mandatory).
 
-/// Composes interrupted-migration recovery, store opening, and schema
-/// migration for app startup.
+/// Composes store opening and the single schema migration for app startup.
 public enum DatabaseBootstrap {
     /// Sandbox Application Support subpath for the database file.
     public static let databaseFileName = "stickynotes.sqlite"
 
-    /// Backup file used during high-risk migrations. Lives beside the
-    /// database file in the sandbox container.
-    public static func backupPath(forDatabasePath databasePath: String) -> String {
-        databasePath + ".backup"
-    }
-
-    /// Recovers from any interrupted migration, opens the store (WAL,
-    /// foreign keys, bounded busy timeout), and runs all pending migrations.
+    /// Opens the store (WAL, foreign keys, bounded busy timeout) and applies
+    /// the single current schema.
     ///
     /// - Parameters:
     ///   - databasePath: Absolute path to the SQLite file in the sandbox
     ///     container.
-    ///   - backupPath: Absolute path for the pre-migration backup.
     ///   - busyTimeout: SQLITE_BUSY timeout for the pool.
-    /// - Returns: A ready store with the latest schema applied.
-    /// - Throws: `.persistence(.recoveryFailed)` or `.migrationFailed` when
-    ///   recovery/migration fails (never leaves a half-migrated DB behind —
-    ///   the backup is restored on failure).
+    /// - Returns: A ready store with the current schema applied.
     public static func open(
         databasePath: String,
-        backupPath: String,
         busyTimeout: TimeInterval = 5.0
     ) async throws -> DatabaseStore {
-        // 1. Interrupted-migration recovery (T022, T153): if a previous
-        //    launch crashed mid-migration, the backup holds the last known
-        //    good state. Restore it before we try again.
-        try MigrationRecovery.recoverFromInterruptedMigration(
-            databasePath: databasePath,
-            backupPath: backupPath
-        )
-
-        // 2. Open the pool (WAL, foreign keys, bounded busy timeout).
         let store = try DatabaseStore(path: databasePath, busyTimeout: busyTimeout)
-
-        // 3. Pre-migration backup + migrate + post-migration integrity
-        //    check, with restore-on-failure.
-        let migrator = StickyMigrator(
-            migrator: InitialSchema.migrator(),
-            databasePath: databasePath,
-            backupPath: backupPath
-        )
-        try await migrator.migrate(store.dbPool)
+        try InitialSchema.migrator().migrate(store.dbPool)
         return store
     }
 }

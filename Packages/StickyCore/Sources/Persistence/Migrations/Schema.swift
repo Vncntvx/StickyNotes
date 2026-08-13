@@ -2,59 +2,46 @@ import Foundation
 import GRDB
 import Domain
 
-// MARK: - Initial schema migration v1 (T019)
+// MARK: - Database schema (single, non-versioned — no backward compatibility)
 //
-// Per data-model.md §Entities and §Indexes. All entities from the data
-// model are created here in their v1 form. Future migrations are
-// `m0002_*.swift`, `m0003_*.swift`, etc., and each ships with a fixture
-// database under `Tests/PersistenceTests/Fixtures/schema_vN.sqlite`.
+// Per data-model.md §Entities and §Indexes. The app is pre-release (no
+// shipped users), so there is exactly ONE schema: every table, constraint,
+// and index from the data model is created here in its current form. There
+// is NO migration chain, NO historical schema versioning, and NO
+// backup/recovery machinery — a schema change in development simply replaces
+// the database (GRDB's `eraseDatabaseOnSchemaChange`, DEBUG-only, wipes the
+// dev database when this schema body changes; release builds recreate a
+// missing schema on first launch).
 //
-// The `schema_migrations` tracking table is owned by GRDB
-// (`grdb_migrations`); we do not create our own.
-//
-// Historical migration bodies are IMMUTABLE (constitution IV). The
-// `widgetEligible` column created below in v1 is dropped by the v3
-// migration (2026-08-13 widget surface removal) — a fresh database creates
-// it in v1 and drops it in v3; the chain is never rewritten.
-
-// MARK: - Migration identifiers
-
-public enum StickyMigrationId {
-    public static let v1 = "v1_initial_schema"
-    public static let v2 = "v2_conflict_records"
-    public static let v3 = "v3_drop_widget_eligibility"
-}
+// `widgetEligible` was removed here outright (2026-08-13 widget surface
+// removal); `conflictRecord` (formerly its own v2 migration) is created
+// inline.
 
 // MARK: - The migrator
 
-/// Builds the `DatabaseMigrator` with the full ordered schema chain
-/// (v1 → v2 → v3). The main app calls `.migrate(dbPool)` at startup.
+/// Builds the single-migration `DatabaseMigrator`. The main app calls
+/// `.migrate(dbPool)` at startup; on a fresh database the one migration
+/// creates the whole schema, and on an existing database it is a no-op.
 public enum InitialSchema {
     public static func migrator() -> DatabaseMigrator {
         var migrator = DatabaseMigrator()
 
         #if DEBUG
-        // Speed up dev iterations: nuke the DB if a migration's body
-        // changes. NEVER enabled in release (data-loss risk; constitution IV).
+        // Speed up dev iterations: nuke the DB if the schema body changes.
+        // NEVER enabled in release (data-loss risk; constitution IV).
         migrator.eraseDatabaseOnSchemaChange = true
         #endif
 
-        migrator.registerMigration(StickyMigrationId.v1) { db in
-            try createV1Schema(in: db)
-        }
-        migrator.registerMigration(StickyMigrationId.v2) { db in
-            try ConflictRecordSchema.migrateV2(db)
-        }
-        migrator.registerMigration(StickyMigrationId.v3) { db in
-            try WidgetEligibilityRemovalSchema.migrateV3(db)
+        migrator.registerMigration("initial_schema") { db in
+            try createSchema(in: db)
         }
 
         return migrator
     }
 
-    /// Creates the v1 schema: all entities, constraints, and indexes from
-    /// data-model.md.
-    public static func createV1Schema(in db: Database) throws {
+    /// Creates the current schema: all entities, constraints, and indexes
+    /// from data-model.md.
+    public static func createSchema(in db: Database) throws {
         // MARK: Note
         //
         // Created via raw SQL (not GRDB's `db.create(table:)` DSL) so the
@@ -75,7 +62,6 @@ public enum InitialSchema {
                 transparency DOUBLE NOT NULL,
                 textSize INTEGER NOT NULL,
                 alwaysOnTop BOOLEAN NOT NULL,
-                widgetEligible BOOLEAN NOT NULL,
                 coverScreenshotBlockId TEXT REFERENCES block(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED,
                 manualSortKey INTEGER NOT NULL,
                 lifecycleState TEXT NOT NULL,
@@ -277,6 +263,20 @@ public enum InitialSchema {
             t.column("replacedFromVaultLocator", .text)
             t.column("createdAt", .datetime).notNull()
         }
+
+        // MARK: ConflictRecord (device-local sync bookkeeping, US10)
+
+        try db.create(table: "conflictRecord") { t in
+            t.column("originalNoteId", .text).notNull()
+            t.column("localVersionId", .text).notNull()
+            t.column("remoteVersionId", .text).notNull()
+            // The conflict copy that was created for this divergence.
+            t.column("conflictNoteId", .text).notNull()
+            t.column("createdAt", .datetime).notNull()
+            // Deterministic dedup key (plan §Conflict model).
+            t.primaryKey(["originalNoteId", "localVersionId", "remoteVersionId"])
+        }
+        try db.create(index: "conflictRecord_originalNoteId", on: "conflictRecord", columns: ["originalNoteId"])
 
         // MARK: FTS5 notes_fts (T020)
         //

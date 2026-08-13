@@ -472,20 +472,16 @@ unsynchronizedLocalModification ──push──▶ synchronizedVersion
 - `Note(lastModifiedDeviceId)`.
 - FTS5 `notes_fts` on the search columns above.
 
-## Migration strategy
+## Schema
 
-- Ordered, named migrations owned by the main app (`Persistence`).
-- Each migration is a tested function `migrate_vN_vNplus1(_ db)`.
-- A fixture database exists for every historical schema version
-  (`Tests/PersistenceTests/Fixtures/schema_vN.sqlite`), and a migration test
-  walks each fixture forward to current, asserting row integrity.
-- High-risk migrations: back up the DB file before running; on failure, restore
-  backup and report `SchemaCompatibility` error; never leave a half-migrated DB.
-- Interrupted migration recovery: a `schema_migrations` table records applied
-  migrations atomically; an incomplete migration is rolled back via the backup
-  on next launch.
-- Destructive schema replacement is prohibited (Principle IV). Any unavoidable
-  structural change ships with an explicit export + migration + recovery plan.
+- The app is pre-release (no shipped users): there is exactly ONE schema
+  (`Schema.swift`), created fresh on first launch and applied idempotently.
+- NO migration chain, NO historical schema versioning, NO backup/recovery
+  machinery, NO schema-compatibility error surface (all removed 2026-08-13).
+- A schema change in development replaces the database: GRDB's
+  `eraseDatabaseOnSchemaChange` (DEBUG-only) wipes the dev database when the
+  schema body changes; release builds recreate a missing schema on first
+  launch. No user data requires preservation.
 
 ## Asset lifecycle
 

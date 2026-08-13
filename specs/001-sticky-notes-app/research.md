@@ -344,7 +344,7 @@ for concurrent connections within the app process (see R26).
   timelines, previews, placeholders, and snapshots.~~
 
 Withdrawn with the widget surface. The `Note.widgetEligible` field, its schema
-column (dropped by migration v3), and the `WidgetVisibility` rules are all
+column (removed from the single schema 2026-08-13), and the `WidgetVisibility` rules are all
 removed; the privacy guarantee for ordinary surfaces (library, search, sync)
 is unchanged.
 
