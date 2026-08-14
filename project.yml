@@ -66,9 +66,19 @@ targets:
     deploymentTarget: "26.0"
     sources:
       - path: App/Sources
+      # R3.8 (remediation roadmap 2026-08-14): per-file resources — the
+      # previous `type: folder` folder-reference never compiled
+      # Localizable.xcstrings into the bundle (no Localizable.strings was
+      # ever produced; knownRegions also lacked zh-Hans), so all
+      # `String(localized:)` calls silently fell back to their keys.
       - path: App/Resources
-        type: folder
-        buildPhase: resources
+        excludes:
+          - Info.plist
+          - StickyNotes.entitlements
+      - path: App/Resources/Info.plist
+        buildPhase: none
+      - path: App/Resources/StickyNotes.entitlements
+        buildPhase: none
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: local.stickynotes.app
