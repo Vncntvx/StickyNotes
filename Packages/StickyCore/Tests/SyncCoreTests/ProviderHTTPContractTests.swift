@@ -80,7 +80,7 @@ final class MockURLProtocol: URLProtocol {
     private func makeProvider(_ kind: ProviderKind) -> any SyncProviderProtocol {
         switch kind {
         case .webdav:
-            return WebDAVProvider(
+            return try! WebDAVProvider(
                 config: WebDAVConfiguration(
                     baseURL: URL(string: "https://dav.example.test")!,
                     containerPath: "vault/notes",
@@ -90,7 +90,7 @@ final class MockURLProtocol: URLProtocol {
                 session: makeSession()
             )
         case .s3:
-            return S3Provider(
+            return try! S3Provider(
                 config: S3Configuration(
                     endpoint: URL(string: "https://s3.example.test")!,
                     region: "us-east-1",
@@ -218,7 +218,7 @@ final class MockURLProtocol: URLProtocol {
         // 用虚拟主机配置重建（pathStyle: false）
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [MockURLProtocol.self]
-        let s3 = S3Provider(
+        let s3 = try! S3Provider(
             config: S3Configuration(
                 endpoint: URL(string: "https://s3.example.test")!,
                 region: "us-east-1",

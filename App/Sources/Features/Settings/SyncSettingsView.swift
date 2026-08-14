@@ -783,6 +783,15 @@ private struct SyncConfigureSheet: View {
             }
             .textFieldStyle(.roundedBorder)
 
+            // R1.5 (remediation-phase1 T022): HTTPS-only enforcement hint —
+            // the providers reject non-HTTPS endpoints at construction
+            // (constitution VIII), so surface the requirement up front.
+            if isEndpointHTTPSRequiredAndViolated {
+                Label(String(localized: "Sync requires an https:// URL — credentials travel over this connection."), systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.yellow)
+            }
+
             if mode == .join {
                 Divider()
 
@@ -934,6 +943,17 @@ private struct SyncConfigureSheet: View {
     private func isLocatorFormatValid(_ locator: String) -> Bool {
         let trimmed = locator.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.count == 32 && trimmed.allSatisfy { $0.isHexDigit }
+    }
+
+    /// R1.5 (remediation-phase1 T022): true when the user typed a non-empty
+    /// endpoint whose scheme is not https — the providers reject it at
+    /// construction (constitution VIII), so the form surfaces the
+    /// requirement up front.
+    private var isEndpointHTTPSRequiredAndViolated: Bool {
+        let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        guard let url = URL(string: trimmed) else { return true }  // malformed → warn
+        return url.scheme?.lowercased() != "https"
     }
 
     /// The provider fields needed before a scan/join can run.

@@ -24,16 +24,12 @@ public struct WebDAVConfiguration: Sendable {
     /// Optional basic-auth credentials (resolved from Keychain by the app).
     public let username: String?
     public let password: String?
-    /// Advanced self-signed trust: pinned public-key fingerprint or
-    /// certificate data (research.md R13).
-    public let pinnedFingerprint: String?
 
-    public init(baseURL: URL, containerPath: String, username: String? = nil, password: String? = nil, pinnedFingerprint: String? = nil) {
+    public init(baseURL: URL, containerPath: String, username: String? = nil, password: String? = nil) {
         self.baseURL = baseURL
         self.containerPath = containerPath
         self.username = username
         self.password = password
-        self.pinnedFingerprint = pinnedFingerprint
     }
 }
 
@@ -43,7 +39,14 @@ public final class WebDAVProvider: SyncProviderProtocol, @unchecked Sendable {
     private let config: WebDAVConfiguration
     private let session: URLSession
 
-    public init(config: WebDAVConfiguration, session: URLSession? = nil) {
+    /// - Throws: `StickyError.credentials(.invalidEndpoint)` when the
+    ///   base URL is not HTTPS. Constitution VIII: sync repositories are
+    ///   HTTPS-only — enforced at construction (fail fast, never at the
+    ///   first network request).
+    public init(config: WebDAVConfiguration, session: URLSession? = nil) throws {
+        guard config.baseURL.scheme?.lowercased() == "https" else {
+            throw StickyError.credentials(.invalidEndpoint)
+        }
         self.config = config
         self.session = session ?? URLSession(configuration: .ephemeral)
     }

@@ -63,7 +63,7 @@ import SyncCore
             throw URLError(.badURL)
         }
         // A unique container per run keeps parallel CI lanes isolated.
-        let provider = WebDAVProvider(
+        let provider = try WebDAVProvider(
             config: WebDAVConfiguration(
                 baseURL: url,
                 containerPath: "sticky-compat-\(UUID().uuidString)",
@@ -83,7 +83,7 @@ import SyncCore
         guard let endpoint = URL(string: endpointString) else {
             throw URLError(.badURL)
         }
-        let provider = S3Provider(
+        let provider = try S3Provider(
             config: S3Configuration(
                 endpoint: endpoint,
                 region: ProcessInfo.processInfo.environment["STICKY_S3_TEST_REGION"] ?? "us-east-1",

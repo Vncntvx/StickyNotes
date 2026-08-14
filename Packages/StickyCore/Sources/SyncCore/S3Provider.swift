@@ -60,7 +60,14 @@ public final class S3Provider: SyncProviderProtocol, @unchecked Sendable {
     private let session: URLSession
     private let signer: SigV4Signer
 
-    public init(config: S3Configuration, session: URLSession? = nil) {
+    /// - Throws: `StickyError.credentials(.invalidEndpoint)` when the
+    ///   endpoint is not HTTPS. Constitution VIII: sync repositories are
+    ///   HTTPS-only — enforced at construction (fail fast, never at the
+    ///   first network request).
+    public init(config: S3Configuration, session: URLSession? = nil) throws {
+        guard config.endpoint.scheme?.lowercased() == "https" else {
+            throw StickyError.credentials(.invalidEndpoint)
+        }
         self.config = config
         self.session = session ?? URLSession(configuration: .ephemeral)
         self.signer = SigV4Signer(

@@ -3,26 +3,6 @@ import AppKit
 import Domain
 import EditorCore
 
-// MARK: - DiagnoseLog (临时诊断, 2026-08-14)
-//
-// 真实环境断点排查：统一日志在此环境读不到（log show 权限受限），诊断
-// 打点改走沙盒容器内文件（NSTemporaryDirectory），排查完移除。
-
-enum DiagnoseLog {
-    private static let path = NSTemporaryDirectory() + "sticky-diagnose.log"
-
-    static func log(_ message: String) {
-        let line = message + "\n"
-        if let handle = FileHandle(forWritingAtPath: path) {
-            handle.seekToEndOfFile()
-            handle.write(line.data(using: .utf8)!)
-            try? handle.close()
-        } else {
-            try? line.data(using: .utf8)?.write(to: URL(fileURLWithPath: path))
-        }
-    }
-}
-
 // MARK: - EditorDisplayStyling (004 修复, 2026-08-13)
 //
 // Display-only styling for a block editor (todo completion): applied over
@@ -680,12 +660,10 @@ public struct RichTextView: NSViewRepresentable {
         private var focusAttempts = 0
 
         func requestFocusIfNeeded(_ textView: NSTextView) {
-            DiagnoseLog.log("FOCUS enter request=\(parent.requestFocus) handled=\(didHandleFocusRequest) window=\(textView.window != nil)")
             guard parent.requestFocus, !didHandleFocusRequest else { return }
             if let window = textView.window {
                 didHandleFocusRequest = true
-                let ok = window.makeFirstResponder(textView)
-                DiagnoseLog.log("FOCUS made ok=\(ok) firstResponder=\(String(describing: window.firstResponder))")
+                _ = window.makeFirstResponder(textView)
                 applyFocusCaret(to: textView)
                 parent.onFocusRequestHandled()
                 return
@@ -1416,17 +1394,14 @@ class IntrinsicSizingTextView: NSTextView {
     /// 2026-08-14 (Q1-A): 拖选越过本块边界 → 跨块拖选（源块钉住、目标
     /// 块随拖入点、中间块全选）。拖回本块返回 false，默认拖选恢复。
     override func mouseDown(with event: NSEvent) {
-        DiagnoseLog.log("DRAG mouseDown hit=\(String(describing: self))")
         super.mouseDown(with: event)
     }
 
     override func mouseDragged(with event: NSEvent) {
-        DiagnoseLog.log("DRAG mouseDragged entered bounds=\(bounds) loc=\(convert(event.locationInWindow, from: nil)) handler=\(blockKeyHandler != nil)")
         if let handler = blockKeyHandler,
            MainActor.assumeIsolated({ handler.handleCrossBlockDrag(event: event) }) {
             return
         }
-        DiagnoseLog.log("DRAG mouseDragged default path")
         super.mouseDragged(with: event)
     }
 }

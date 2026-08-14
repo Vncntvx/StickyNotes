@@ -95,7 +95,6 @@ enum CrossBlockDragRouter {
         bridge: EditorSelectionBridge
     ) -> Bool {
         guard let window = source.window else {
-            DiagnoseLog.log("DRAG no-window")
             return false
         }
         let location = source.convert(event.locationInWindow, from: nil)
@@ -107,14 +106,8 @@ enum CrossBlockDragRouter {
                 $0.textView.convert(event.locationInWindow, from: nil)
             )
         }) else {
-            let detail = candidates.map { entry in
-                let p = entry.textView.convert(event.locationInWindow, from: nil)
-                return "\(entry.blockId.uuidString.prefix(4)):p=\(p)b=\(entry.textView.bounds)"
-            }.joined(separator: " ")
-            DiagnoseLog.log("DRAG no-target candidates=\(candidates.count) srcBounds=\(source.bounds) \(detail)")
             return false
         }
-        DiagnoseLog.log("DRAG takeover source=\(sourceBlockId?.uuidString.prefix(4) ?? "?") target=\(target.blockId.uuidString.prefix(4))")
 
         // Window base coordinates are NOT flipped: a larger minY sits
         // HIGHER on screen — the target is below the source when its minY

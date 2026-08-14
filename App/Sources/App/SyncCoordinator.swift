@@ -682,7 +682,7 @@ public final class SyncCoordinator {
                 prefix: configuration.providerConfig.prefix,
                 vaultLocator: configuration.vaultLocator
             )
-            return WebDAVProvider(config: WebDAVConfiguration(
+            return try WebDAVProvider(config: WebDAVConfiguration(
                 baseURL: url,
                 containerPath: containerPath,
                 username: credentials.username,
@@ -700,7 +700,7 @@ public final class SyncCoordinator {
                 prefix: configuration.providerConfig.prefix,
                 vaultLocator: configuration.vaultLocator
             )
-            return S3Provider(config: S3Configuration(
+            return try S3Provider(config: S3Configuration(
                 endpoint: url,
                 region: configuration.providerConfig.region ?? "us-east-1",
                 bucket: bucket,

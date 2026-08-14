@@ -3,6 +3,7 @@ import Foundation
 import Domain
 import Persistence
 import AppKit
+import os
 @testable import StickyNotes
 
 // MARK: - Editor + appearance persistence tests (T281, US1/US3)
@@ -157,6 +158,91 @@ import AppKit
         #expect(!mayRemove, "previously-content note MUST NOT be auto-deleted when empty (FR-013/FR-012a)")
     }
 
+    // MARK: - R1.1 race test infrastructure (remediation-phase1 T005)
+    //
+    // The removed-block resurrection race (emptyBlockRemovalPersists failed
+    // intermittently under parallel full-suite load, verified 2026-08-14):
+    // two consecutive structural saves overlap because `updateBlocks`
+    // overwrites `pendingEditTask` without chaining, and `persistBlocks`
+    // diffs against the DB non-atomically (fetch → delete/insert). When the
+    // OLDER snapshot's diff lands after the NEWER save completed, the older
+    // diff re-inserts the block the newer save deleted.
+    //
+    // Red-phase evidence: with the gate holding the first save while the
+    // second completes, the pre-fix code failed deterministically in 0.125s
+    // (fetched == [first, second] — the deleted block was resurrected).
+    //
+    // Post-fix the saves are SERIALIZED (chained tasks), so the same gate
+    // construction deadlocks by design. The test therefore verifies the
+    // serialization contract itself: while the first save is held at the
+    // gate, `flush()` must NOT complete (the second save waits for the
+    // first); after release, the DB must contain only the surviving block.
+
+    /// A one-shot async gate: the first caller suspends until `open()`
+    /// resumes it; every later caller passes through immediately.
+    /// (Swift 6 strict concurrency: state guarded by OSAllocatedUnfairLock —
+    /// NSLock is unavailable from async contexts.)
+    private final class AsyncGate: @unchecked Sendable {
+        private struct State {
+            var continuation: CheckedContinuation<Void, Never>?
+            var isOpen = false
+            var firstWaiterPending = false
+        }
+
+        private let lock = OSAllocatedUnfairLock(initialState: State())
+
+        /// Suspends ONLY the first caller; every subsequent caller passes
+        /// through immediately.
+        func waitFirstOnly() async {
+            let shouldSuspend = lock.withLock { state in
+                if state.isOpen || state.firstWaiterPending { return false }
+                state.firstWaiterPending = true
+                return true
+            }
+            guard shouldSuspend else { return }
+            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                lock.withLock { state in
+                    if state.isOpen {
+                        cont.resume()
+                    } else {
+                        state.continuation = cont
+                    }
+                }
+            }
+        }
+
+        func open() {
+            let cont = lock.withLock { state -> CheckedContinuation<Void, Never>? in
+                state.isOpen = true
+                let c = state.continuation
+                state.continuation = nil
+                return c
+            }
+            cont?.resume()
+        }
+    }
+
+    /// A thread-safe completion flag with a bounded wait.
+    private final class AsyncFlag: @unchecked Sendable {
+        private let lock = OSAllocatedUnfairLock(initialState: false)
+
+        var isSignaled: Bool { lock.withLock { $0 } }
+
+        func signal() {
+            lock.withLock { $0 = true }
+        }
+
+        /// Returns true when signaled within `timeout`, false on timeout.
+        func waitUntilSignaled(timeout: TimeInterval) async -> Bool {
+            let deadline = Date().addingTimeInterval(timeout)
+            while Date() < deadline {
+                if isSignaled { return true }
+                try? await Task.sleep(nanoseconds: 10_000_000)
+            }
+            return isSignaled
+        }
+    }
+
     @Test
     func emptyBlockRemovalPersists() async throws {
         // Deleting a block through the host removes it from the database
@@ -167,16 +253,39 @@ import AppKit
             Issue.record("createBlankNote failed")
             return
         }
-        let host = NoteWindowHostModel(noteId: noteId, environment: env)
+        // R1.1 (T005): hold the FIRST structural save at the gate. The
+        // second save (and therefore `flush()`) must wait for it.
+        let gate = AsyncGate()
+        let flushCompleted = AsyncFlag()
+        let host = NoteWindowHostModel(noteId: noteId, environment: env, saveGate: { await gate.waitFirstOnly() })
         await host.load()
         let first = makeRichTextBlock(noteId: noteId, text: "keep")
         let second = makeRichTextBlock(noteId: noteId, text: "remove me")
         host.updateBlocks([first, second], isStructural: true)
+        // Let the first save task start and suspend at the gate.
+        await Task.yield()
+        await Task.yield()
+        await Task.yield()
 
         // The user deletes the second block (cursor-exit merge per FR-050a).
         host.updateBlocks([first], isStructural: true)
-        await host.flush()
+        let flushTask = Task {
+            await host.flush()
+            flushCompleted.signal()
+        }
+
+        // R1.1 serialization contract: while the first save is held, flush
+        // MUST NOT complete — the second save chains behind the first.
+        let finishedEarly = await flushCompleted.waitUntilSignaled(timeout: 0.5)
+        #expect(finishedEarly == false,
+                "R1.1: flush must wait for the prior save (saves are serialized per note)")
+
+        // Release the first save, then verify the final DB state: the
+        // second (newest) save diffs against the state the first produced
+        // and removes the deleted block.
+        gate.open()
+        await flushTask.value
         let fetched = try await env.persistence.noteRepository!.fetchBlocks(noteId: noteId)
-        #expect(fetched.map(\.id) == [first.id], "the removed block is deleted from the database")
+        #expect(fetched.map(\.id) == [first.id], "the removed block is deleted from the database (R1.1: stale snapshot must not resurrect it)")
     }
 }

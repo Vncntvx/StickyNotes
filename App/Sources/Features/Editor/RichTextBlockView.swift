@@ -229,7 +229,6 @@ public struct RichTextBlockView: View {
         // 004 修复: a fresh insertion-focus request becomes the pending
         // focus consumed by the new block's editor.
         .onChange(of: focusRequest) { _, newValue in
-            DiagnoseLog.log("FOCUS view-change block=\(newValue?.blockId.uuidString.prefix(4) ?? "nil") pos=\(String(describing: newValue?.position))")
             pendingFocus = newValue
         }
         // 004 T037: the selection bridge (per window, @State — created

@@ -159,4 +159,44 @@ import Domain
         await mgr.tick()
         #expect(recorder.calls.isEmpty)
     }
+
+    // MARK: - R1.1 token contract (remediation-phase1 T006)
+    //
+    // The revision-token contract the App save sink relies on (stale-write
+    // protection): every accepted edit advances the token monotonically, and
+    // every save the manager performs carries the CURRENT token — so the
+    // sink can drop any write whose token is older than the latest accepted
+    // edit without consulting the manager.
+
+    @Test
+    func revisionTokensAreMonotonicAndSavingsCarryCurrentToken() async throws {
+        let clock = FakeClock(Date(timeIntervalSince1970: 0))
+        let recorder = SaveRecorder()
+        let mgr = makeManager(noteId: UUID(), deviceId: UUID(), debounce: 0.3, clock: clock, recorder: recorder)
+
+        // Debounced edit #1 (token N).
+        await mgr.textEdited(blocks: [Block(noteId: mgr.noteId, kind: .richText, sortKey: 0, payload: .richText(.plain("A")), lastModifiedDeviceId: UUID())])
+        // Structural save #2 (token N+1) — immediate.
+        await mgr.structuralChange(blocks: [Block(noteId: mgr.noteId, kind: .richText, sortKey: 0, payload: .richText(.plain("B")), lastModifiedDeviceId: UUID())])
+        // Debounced edit #3 (token N+2).
+        await mgr.textEdited(blocks: [Block(noteId: mgr.noteId, kind: .richText, sortKey: 0, payload: .richText(.plain("C")), lastModifiedDeviceId: UUID())])
+        clock.advance(0.31)
+        await mgr.tick()  // flushes edit #3 with its token
+
+        #expect(recorder.calls.count == 2, "structural + debounced flush")
+        // Token monotonicity across the recorded saves.
+        #expect(recorder.calls[0].token < recorder.calls[1].token,
+                "save tokens must be strictly increasing (stale-write protection contract)")
+        // The manager must never hand the sink a token older than its own
+        // latest accepted edit — the second save carries the newest token.
+        let lastToken = recorder.calls.map(\.token).max()!
+        #expect(recorder.calls[1].token == lastToken)
+        // Content matches the corresponding revisions.
+        func text(_ block: Block) -> String {
+            if case .richText(let doc) = block.payload { return doc.text }
+            return ""
+        }
+        #expect(text(recorder.calls[0].blocks[0]) == "B")
+        #expect(text(recorder.calls[1].blocks[0]) == "C")
+    }
 }

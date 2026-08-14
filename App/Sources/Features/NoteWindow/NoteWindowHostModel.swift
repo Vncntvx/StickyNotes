@@ -51,17 +51,33 @@ public final class NoteWindowHostModel {
     /// debounced edit scheduled from the main actor cannot race the flush
     /// (the edit is always recorded before the flush hop to the actor).
     private var pendingEditTask: Task<Void, Never>?
+    /// R1.1 (remediation-phase1 T005/T007): test-injectable pre-save gate.
+    /// When non-nil, every scheduled save task awaits it before touching the
+    /// autosave manager. Production passes nil. Used by the deterministic
+    /// race test (EditorPersistenceTests.emptyBlockRemovalPersists) to hold
+    /// the first structural save while the second completes.
+    private let saveGate: (@Sendable () async -> Void)?
     private var hasEverHadMeaningfulContent = false
     /// 004 修复: serializes undo/redo restore effects — a rapid ⌘Z/⌘⇧Z
     /// sequence must apply its persistence effects in submission order.
     private var pendingUndoTask: Task<Void, Never>?
 
-    public init(noteId: UUID, environment: AppEnvironment) {
+    public init(
+        noteId: UUID,
+        environment: AppEnvironment,
+        saveGate: (@Sendable () async -> Void)? = nil
+    ) {
         self.noteId = noteId
         self.environment = environment
+        self.saveGate = saveGate
         let deviceId = DeviceIdentity.current.id
         // The save sink runs on the AutoSaveDraftManager actor (off the main
         // actor). It captures the Sendable environment + note id, never self.
+        // R1.1 (T007): the revision token is deliberately not consumed here —
+        // save ordering is guaranteed by the host's chained task queue, and
+        // stale-debounced-write protection lives in the manager (tick's
+        // token check, contract-tested in AutoSaveTests). The token is
+        // still received so the sink signature stays manager-compatible.
         self.autosave = AutoSaveDraftManager(noteId: noteId, deviceId: deviceId) { [environment] noteId, _, blocks in
             await Self.persistBlocks(blocks, noteId: noteId, environment: environment)
         }
@@ -146,7 +162,19 @@ public final class NoteWindowHostModel {
             hasEverHadMeaningfulContent = true
         }
         let snapshot = newBlocks
+        // R1.1 (remediation-phase1 T007): chain the new save task behind the
+        // previous one. Before this fix, overwriting `pendingEditTask`
+        // orphaned the prior task, and two overlapping `persistBlocks`
+        // invocations (each fetch→diff→write, non-atomic) could interleave —
+        // an older snapshot's diff landing after a newer save resurrected
+        // deleted blocks (verified 2026-08-14: EditorPersistenceTests
+        // emptyBlockRemovalPersists failed intermittently under parallel
+        // load). Chaining serializes saves per note so the newest snapshot
+        // always diffs against the DB state the previous save produced.
+        let previous = pendingEditTask
         pendingEditTask = Task {
+            await saveGate?()
+            await previous?.value
             if isStructural {
                 await autosave.structuralChange(blocks: snapshot)
             } else {
@@ -516,7 +544,6 @@ public final class NoteWindowHostModel {
             restoreNew: { [weak self] in self?.updateBlocks(newBlocks, isStructural: true) }
         )
         pendingFocusRequest = EditorFocusRequest(blockId: blockId, position: position)
-        DiagnoseLog.log("FOCUS host-set block=\(blockId.uuidString.prefix(4)) pos=\(String(describing: position))")
         await flush()
         return blockId
     }

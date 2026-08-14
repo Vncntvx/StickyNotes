@@ -77,6 +77,81 @@ jobs:
         working-directory: Packages/StickyCore
         run: swift test --parallel
 
+  # Roadmap G1/G3 (remediation-phase1 T001/T002/T003): 拦截"测试自证"空断言与
+  # 发布版临时调试物。当前存量违规已由 R3.10/R1.2 批次清理，门控从挂接日起生效。
+  code-quality-gates:
+    name: Code-quality gates (empty assertions + debug artifacts)
+    runs-on: macos-26
+    needs: resolve
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: G1 — no bare #expect(true)
+        run: ./scripts/check-empty-assertions.sh
+      - name: G3 — no temp-file debug artifacts
+        run: ./scripts/check-debug-artifacts.sh
+
+  # Roadmap G4 (remediation-phase1 T004): AppTests 全量并行复跑 2 轮 + zh-Hans
+  # locale job（拦截负载相关竞态与 locale 硬编码断言）。
+  app-tests:
+    name: AppTests (parallel run 1)
+    runs-on: macos-26
+    needs: build
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -switch /Applications/Xcode_$XCODE_VERSION.app
+      - name: AppTests — run 1 (parallel)
+        run: |
+          xcodebuild test \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -destination 'platform=macOS' \
+            -only-testing:AppTests \
+            CODE_SIGNING_ALLOWED="$CODE_SIGNING_ALLOWED" \
+            | xcpretty
+
+  app-tests-2:
+    name: AppTests (parallel run 2)
+    runs-on: macos-26
+    needs: build
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -switch /Applications/Xcode_$XCODE_VERSION.app
+      - name: AppTests — run 2 (parallel)
+        run: |
+          xcodebuild test \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -destination 'platform=macOS' \
+            -only-testing:AppTests \
+            CODE_SIGNING_ALLOWED="$CODE_SIGNING_ALLOWED" \
+            | xcpretty
+
+  app-tests-zh:
+    name: AppTests (zh-Hans locale)
+    runs-on: macos-26
+    needs: build
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -switch /Applications/Xcode_$XCODE_VERSION.app
+      - name: AppTests — zh-Hans locale
+        run: |
+          xcodebuild test \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -destination 'platform=macOS' \
+            -only-testing:AppTests \
+            -testLanguage zh-Hans \
+            CODE_SIGNING_ALLOWED="$CODE_SIGNING_ALLOWED" \
+            | xcpretty
+
+
   migration-tests:
     name: Migration + schema integrity tests
     runs-on: macos-26

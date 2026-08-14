@@ -11,11 +11,19 @@ import SwiftUI
 struct LibrarySearchFieldTests {
 
     @Test func specConfiguresNativeSearchField() {
-        #expect(LibrarySearchFieldSpec.placeholder == "Search notes")
+        // R3.10 (remediation-phase1 T004 bundled fix, 2026-08-15): the
+        // placeholder is LOCALIZED (String(localized:)) — the previous
+        // `== "Search notes"` assertion was locale-dependent and failed on
+        // zh-Hans systems (CI zh job regression, verified 2026-08-14).
+        // The locale-neutral contract: the spec placeholder is never empty
+        // and the field is configured from the spec constant.
+        #expect(!LibrarySearchFieldSpec.placeholder.isEmpty,
+                "search placeholder must be non-empty in every locale (FR-003)")
         #expect(LibrarySearchFieldSpec.sendsSearchStringImmediately == false,
                 "text must flow through the delegate so the scene keeps its debounce-free reload contract (FR-024a)")
     }
 
+    @MainActor
     @Test func delegateWritesTypingToBinding() {
         var text = ""
         let coordinator = LibrarySearchField.Coordinator(
