@@ -193,7 +193,7 @@ public struct SyncSettingsView: View {
                 } label: {
                     Label("Sync vault is locked", systemImage: "lock.fill")
                 }
-                Text("Unlock to resume syncing. Your notes on this Mac are still available.")
+                Text("Unlock the vault to sync manually or resume automatic sync. Your notes on this Mac are still available.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -293,8 +293,12 @@ public struct SyncSettingsView: View {
                 : "Automatic sync starts once the vault is unlocked on this Mac.")
 
             // FR-152 (clarified 2026-08-08): user-selectable strategy —
-            // change-only or a fixed periodic interval.
-            Picker("Sync frequency", selection: Binding(
+            // change-only or a fixed periodic interval. Rev 3 (T185): the
+            // row is named "Periodic sync" (the picker axis) with change-only
+            // shown as "Off"; the schedule is a device-local preference, so
+            // a LOCKED vault does not disable it — only the master switch
+            // above does (FR-053 Rev 3).
+            Picker("Periodic sync", selection: Binding(
                 get: { syncCoordinator?.autoSyncPolicy ?? .default },
                 set: { syncCoordinator?.setAutoSyncPolicy($0) }
             )) {
@@ -303,7 +307,7 @@ public struct SyncSettingsView: View {
                 }
             }
             .pickerStyle(.menu)
-            .disabled(!(syncCoordinator?.autoSyncEnabled ?? false) || !isVaultUnlocked)
+            .disabled(!(syncCoordinator?.autoSyncEnabled ?? false))
             .help("When automatic sync is on: sync after local changes only, or also on a fixed interval")
 
             // Polish round 2/3: describe the behavior WHEN enabled. The

@@ -136,7 +136,9 @@ public enum AutoSyncPolicy: String, CaseIterable, Sendable {
 
     public var displayName: String {
         switch self {
-        case .changeOnly: return String(localized: "After changes only")
+        // Rev 3 (T185): on the "Periodic sync" axis, change-only IS "Off" —
+        // the picker label names the axis (periodic), not the strategy.
+        case .changeOnly: return String(localized: "Off")
         case .every5: return String(localized: "Every 5 minutes")
         case .every15: return String(localized: "Every 15 minutes")
         case .every30: return String(localized: "Every 30 minutes")
