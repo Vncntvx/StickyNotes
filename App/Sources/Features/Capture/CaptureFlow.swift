@@ -42,13 +42,20 @@ public enum CaptureFlow {
     /// the chosen content (prototype-verified pattern: active + observer +
     /// present). The `SCContentFilter` never crosses the continuation —
     /// the capture happens inside the observer, only the PNG `Data`
-    /// (Sendable) is handed back.
+    /// (Sendable) is handed back. Capture errors propagate (R1.3,
+    /// remediation-phase1 T014): a failed capture is a FAILURE, never an
+    /// empty `Data` that would be stored as a corrupt screenshot.
     private static func presentWindowPicker() async throws -> Data {
         try await withCheckedThrowingContinuation { continuation in
             let picker = SCContentSharingPicker.shared
             picker.isActive = true
-            let observer = WindowPickerObserver { data in
-                continuation.resume(returning: data)
+            let observer = WindowPickerObserver { result in
+                switch result {
+                case .success(let data):
+                    continuation.resume(returning: data)
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
             } onCancel: {
                 continuation.resume(throwing: StickyError.capture(.regionSelectionCanceled))
             }
@@ -69,12 +76,12 @@ public enum CaptureFlow {
 /// (no retained stream, FR-092). Nonisolated conformance (the picker
 /// callback thread); the filter never crosses actor boundaries.
 private final class WindowPickerObserver: NSObject, SCContentSharingPickerObserver {
-    private let onData: @Sendable (Data) -> Void
+    private let onResult: @Sendable (Result<Data, Error>) -> Void
     private let onCancel: @Sendable () -> Void
     private let state = OSAllocatedUnfairLock(initialState: false)
 
-    init(onData: @escaping @Sendable (Data) -> Void, onCancel: @escaping @Sendable () -> Void) {
-        self.onData = onData
+    init(onResult: @escaping @Sendable (Result<Data, Error>) -> Void, onCancel: @escaping @Sendable () -> Void) {
+        self.onResult = onResult
         self.onCancel = onCancel
     }
 
@@ -82,7 +89,7 @@ private final class WindowPickerObserver: NSObject, SCContentSharingPickerObserv
         guard claimOnce() else { return }
         picker.isActive = false
         picker.remove(self)
-        let sink = onData
+        let sink = onResult
         // SCContentFilter is not Sendable; box it so the async capture can
         // consume it without crossing an isolation boundary unsafely (the
         // picker callback is nonisolated; the box is consumed once here).
@@ -90,9 +97,11 @@ private final class WindowPickerObserver: NSObject, SCContentSharingPickerObserv
         Task {
             do {
                 let png = try await WindowCapture.captureSingleFrame(contentFilter: box.filter)
-                sink(png)
+                sink(.success(png))
             } catch {
-                sink(Data())
+                // R1.3 (T014): propagate the failure — the caller's
+                // fail-closed path rejects it (no partial note/asset).
+                sink(.failure(error))
             }
         }
     }

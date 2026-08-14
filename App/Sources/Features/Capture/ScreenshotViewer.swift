@@ -206,7 +206,17 @@ public struct ScreenshotViewer: View {
         }
         // FR-094a: the 256px thumbnail participates below 100% zoom; the
         // original at ≥100%. Never decode the original for grid surfaces.
-        let assetId = zoom < 1.0 ? payload.thumbnailAssetId : payload.originalAssetId
+        // R1.3 (remediation-phase1 T014): the thumbnail may be absent
+        // (generation failed, SC-008 — never fall back to the original as
+        // the thumbnail). In the explicit viewer a missing thumbnail falls
+        // back to the original (the viewer is a full-resolution surface,
+        // not the card grid).
+        let assetId: UUID
+        if zoom < 1.0, let thumbnail = payload.thumbnailAssetId {
+            assetId = thumbnail
+        } else {
+            assetId = payload.originalAssetId
+        }
         guard let data = try? await imageProvider(assetId) else {
             image = nil
             return

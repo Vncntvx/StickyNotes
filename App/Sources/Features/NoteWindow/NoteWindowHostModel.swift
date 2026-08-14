@@ -1063,6 +1063,11 @@ public final class NoteWindowHostModel {
         guard let assetStore = environment.assets.store else { return false }
         do {
             let png = try await dataProvider()
+            // R1.3 (remediation-phase1 T014): empty data is a FAILED capture
+            // (the pre-fix CaptureFlow swallowed errors into `Data()` and
+            // the empty PNG was stored as a "successful" screenshot). Reject
+            // it before any asset/block mutation — fail closed (T303).
+            guard !png.isEmpty else { return false }
             let (original, thumbnail) = try await assetStore.importScreenshot(originalData: png, contentType: "public.png")
             let blockId = UUID()
             let previous = blocks
@@ -1074,7 +1079,12 @@ public final class NoteWindowHostModel {
                     sortKey: sortKey,
                     payload: .screenshot(ScreenshotPayload(
                         originalAssetId: original.id,
-                        thumbnailAssetId: thumbnail?.id ?? original.id,
+                        // R1.3 (T014, SC-008): a failed thumbnail stays
+                        // ABSENT — never fall back to the full-resolution
+                        // original as the thumbnail (the card grid must
+                        // never decode an original). The UI renders a
+                        // degraded placeholder instead.
+                        thumbnailAssetId: thumbnail?.id,
                         applicationName: nil,
                         windowTitle: nil,
                         caption: nil,
@@ -1121,7 +1131,11 @@ public final class NoteWindowHostModel {
                     sortKey: sortKey,
                     payload: .image(EmbeddedImagePayload(
                         originalAssetId: original.id,
-                        thumbnailAssetId: thumbnail?.id ?? original.id,
+                        // R1.3 (T014, SC-008): a failed thumbnail stays
+                        // ABSENT — never fall back to the full-resolution
+                        // original (the card grid must never decode an
+                        // original).
+                        thumbnailAssetId: thumbnail?.id,
                         caption: nil
                     )),
                     lastModifiedDeviceId: DeviceIdentity.current.id
