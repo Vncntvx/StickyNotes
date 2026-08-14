@@ -48,6 +48,19 @@ public struct RichTextBlockView: View {
     /// through the host so the cascade-deleted TodoItem row restores in the
     /// same undo group as the block.
     let onEmptyTodoExit: (UUID) async -> Void
+    /// 2026-08-14 (Q2-A/Q3-B): empty-block deletion via the DELETE key —
+    /// routed through the host (`deleteEmptyBlockOnKey`: cascades the
+    /// TodoItem row, moves focus to the next block's start).
+    let onDeleteEmptyBlockKey: (UUID) async -> Void
+    /// 2026-08-14 (Q4-A): first-character Backspace merges the block into
+    /// the previous one (host `mergeBlockIntoPrevious`).
+    let onMergeBlock: (UUID) async -> Void
+    /// 2026-08-14 (Q5-A/Q6-B): todo-tail Return — insert an empty paragraph
+    /// block AFTER the todo (host `insertRichTextBlock(.afterBlock)`).
+    let onInsertParagraphAfterBlock: (UUID) async -> Void
+    /// 2026-08-14: 跨块模式下 Backspace/Delete → host 的跨块删除
+    /// （deleteSpanningSelection，单 undo 组 + 焦点末块）。
+    let onDeleteSpanningSelection: (CrossBlockSelection) async -> Void
     /// 004 修复 (第二轮): the code block's delete affordance (the hover
     /// ellipsis menu) — routed through the host's structural deletion (ONE
     /// undo group, FR-141a immediate persist).
@@ -119,6 +132,10 @@ public struct RichTextBlockView: View {
         onOutdentTodo: @escaping (UUID) async -> Void = { _ in },
         onMoveTodo: @escaping (UUID, Int) async -> Void = { _, _ in },
         onEmptyTodoExit: @escaping (UUID) async -> Void = { _ in },
+        onDeleteEmptyBlockKey: @escaping (UUID) async -> Void = { _ in },
+        onMergeBlock: @escaping (UUID) async -> Void = { _ in },
+        onInsertParagraphAfterBlock: @escaping (UUID) async -> Void = { _ in },
+        onDeleteSpanningSelection: @escaping (CrossBlockSelection) async -> Void = { _ in },
         onDeleteCode: @escaping (UUID) async -> Void = { _ in },
         onFileAction: @escaping (UUID, FileReferenceAction) async -> Void = { _, _ in },
         onSetCover: @escaping (UUID?, Bool) async -> Void = { _, _ in },
@@ -148,6 +165,10 @@ public struct RichTextBlockView: View {
         self.onOutdentTodo = onOutdentTodo
         self.onMoveTodo = onMoveTodo
         self.onEmptyTodoExit = onEmptyTodoExit
+        self.onDeleteEmptyBlockKey = onDeleteEmptyBlockKey
+        self.onMergeBlock = onMergeBlock
+        self.onInsertParagraphAfterBlock = onInsertParagraphAfterBlock
+        self.onDeleteSpanningSelection = onDeleteSpanningSelection
         self.onDeleteCode = onDeleteCode
         self.onFileAction = onFileAction
         self.onSetCover = onSetCover
@@ -201,6 +222,7 @@ public struct RichTextBlockView: View {
         // 004 修复: a fresh insertion-focus request becomes the pending
         // focus consumed by the new block's editor.
         .onChange(of: focusRequest) { _, newValue in
+            DiagnoseLog.log("FOCUS view-change block=\(newValue?.blockId.uuidString.prefix(4) ?? "nil") pos=\(String(describing: newValue?.position))")
             pendingFocus = newValue
         }
         // 004 T037: the selection bridge (per window, @State — created
@@ -364,6 +386,26 @@ public struct RichTextBlockView: View {
                     guard !focused, !hasMarkedText else { return }
                     Task { await onEmptyTodoExit(block.id) }
                 },
+                onDeleteEmptyBlock: {
+                    Task { await onDeleteEmptyBlockKey(block.id) }
+                },
+                onMergeIntoPrevious: {
+                    Task { await onMergeBlock(block.id) }
+                },
+                onInsertParagraphAfterSelf: {
+                    Task { await onInsertParagraphAfterBlock(block.id) }
+                },
+                onSelectAllInNote: {
+                    // Q8-B: ⌘A in a rich-text block selects the WHOLE note.
+                    guard let bridge = selectionBridge else { return }
+                    bridge.selectAll(blocks: blocks, focusedBlockId: block.id)
+                },
+                onDeleteSpanningSelection: {
+                    // 跨块模式下 Backspace/Delete → host 跨块删除。
+                    guard let bridge = selectionBridge,
+                          let selection = bridge.crossBlockSelection else { return }
+                    Task { await onDeleteSpanningSelection(selection) }
+                },
                 todoRevision: todoRevision
             )
         case .code:
@@ -391,6 +433,12 @@ public struct RichTextBlockView: View {
                               hasIMEComposition: false
                           ) else { return }
                     onStructuralBlocksChanged(updated)
+                },
+                onDeleteEmptyBlock: {
+                    Task { await onDeleteEmptyBlockKey(block.id) }
+                },
+                onMergeIntoPrevious: {
+                    Task { await onMergeBlock(block.id) }
                 }
             )
         case .fileRef:
@@ -480,7 +528,24 @@ public struct RichTextBlockView: View {
                 collapsesBottomInset: hasBlocksBelow,
                 requestFocus: pendingFocus?.blockId == block.id,
                 caretAtEnd: pendingFocus?.position == .end,
-                onFocusRequestHandled: handleFocusRequest
+                onFocusRequestHandled: handleFocusRequest,
+                onDeleteEmptyBlock: {
+                    Task { await onDeleteEmptyBlockKey(block.id) }
+                },
+                onMergeIntoPrevious: {
+                    Task { await onMergeBlock(block.id) }
+                },
+                onSelectAllInNote: {
+                    // Q8-B: ⌘A in a rich-text block selects the WHOLE note.
+                    guard let bridge = selectionBridge else { return }
+                    bridge.selectAll(blocks: blocks, focusedBlockId: block.id)
+                },
+                onDeleteSpanningSelection: {
+                    // 跨块模式下 Backspace/Delete → host 跨块删除。
+                    guard let bridge = selectionBridge,
+                          let selection = bridge.crossBlockSelection else { return }
+                    Task { await onDeleteSpanningSelection(selection) }
+                }
             )
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }

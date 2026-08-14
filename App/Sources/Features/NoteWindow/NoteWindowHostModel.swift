@@ -522,6 +522,7 @@ public final class NoteWindowHostModel {
             restoreNew: { [weak self] in self?.updateBlocks(newBlocks, isStructural: true) }
         )
         pendingFocusRequest = EditorFocusRequest(blockId: blockId, position: position)
+        DiagnoseLog.log("FOCUS host-set block=\(blockId.uuidString.prefix(4)) pos=\(String(describing: position))")
         await flush()
         return blockId
     }
@@ -639,6 +640,128 @@ public final class NoteWindowHostModel {
             }
         } catch {
             // silent (FR-141b: background/structural ops give no toast)
+        }
+    }
+
+    // MARK: - Block merge into previous (2026-08-14)
+
+    /// 块首 Backspace 的"并入上一块"：非空块（todo/code/正文）的文本接到
+    /// 上一块末尾（`BlockMergeOperation.mergingIntoPrevious` 纯函数），本块
+    /// 移除。本块为 todo 时其 TodoItem 行与块列表在同一个 undo 组往返
+    /// （FK 级联，仿 `removeEmptiedTodoBlock`）；有子 todo 的 todo 不合并
+    /// （与 FR-050a 的 children 守卫一致）。焦点去上一块末尾（Q4-A 决策）。
+    public func mergeBlockIntoPrevious(blockId: UUID) async {
+        let ordered = NoteWindowDerivations.orderedBlocks(blocks)
+        guard let idx = ordered.firstIndex(where: { $0.id == blockId }),
+              idx > 0 else { return }
+        let previous = ordered[idx - 1]
+        guard let merged = BlockMergeOperation.mergingIntoPrevious(blocks: ordered, index: idx) else { return }
+        let todoRepo = environment.persistence.todoRepository
+        let removedItem: TodoItem? = (try? await todoRepo?.fetchTodo(blockId: blockId)) ?? nil
+        if let removedItem {
+            // A todo with children stays — its row's cascade would orphan
+            // the children (same guard as removeEmptiedTodoBlock).
+            let all = (try? await todoRepo?.fetchTodos(noteId: noteId)) ?? []
+            guard !all.contains(where: { $0.parentTodoId == removedItem.id }) else { return }
+            try? await todoRepo?.delete(id: blockId)
+        }
+        let previousBlocks = blocks
+        updateBlocks(merged, isStructural: true)
+        registerStructuralUndo(
+            restoreOld: { [weak self] in
+                guard let self else { return }
+                self.updateBlocks(previousBlocks, isStructural: true)
+                await self.flush()
+                if let removedItem, let repo = self.environment.persistence.todoRepository {
+                    try? await repo.insert(removedItem)
+                }
+            },
+            restoreNew: { [weak self] in
+                guard let self else { return }
+                self.updateBlocks(merged, isStructural: true)
+                await self.flush()
+                if removedItem != nil, let repo = self.environment.persistence.todoRepository {
+                    try? await repo.delete(id: blockId)
+                }
+            }
+        )
+        pendingFocusRequest = EditorFocusRequest(blockId: previous.id, position: .end)
+        await flush()
+    }
+
+    /// FR-054 跨块选区删除的 host 接线（2026-08-14）：删除选中字符、空块
+    /// 按 FR-050a 并掉；被删 todo 块的 TodoItem 行级联（FK）；单 undo 组
+    /// 恢复；焦点去剩余末块开头。
+    public func applySpanningDeletion(selection: CrossBlockSelection) async {
+        let ordered = NoteWindowDerivations.orderedBlocks(blocks)
+        let updated = EditorAppBridge.deleteSpanningSelection(
+            blocks: ordered,
+            selection: selection,
+            noteId: noteId,
+            deviceId: DeviceIdentity.current.id
+        )
+        guard updated != blocks else { return }
+        let todoRepo = environment.persistence.todoRepository
+        var removedTodoItems: [(blockId: UUID, item: TodoItem?)] = []
+        for block in ordered {
+            guard case .todo = block.payload,
+                  !updated.contains(where: { $0.id == block.id }) else { continue }
+            let item: TodoItem? = (try? await todoRepo?.fetchTodo(blockId: block.id)) ?? nil
+            removedTodoItems.append((block.id, item))
+            if item != nil { try? await todoRepo?.delete(id: block.id) }
+        }
+        let previousBlocks = blocks
+        updateBlocks(updated, isStructural: true)
+        registerStructuralUndo(
+            restoreOld: { [weak self] in
+                guard let self else { return }
+                self.updateBlocks(previousBlocks, isStructural: true)
+                await self.flush()
+                for entry in removedTodoItems {
+                    if let item = entry.item, let repo = self.environment.persistence.todoRepository {
+                        try? await repo.insert(item)
+                    }
+                }
+            },
+            restoreNew: { [weak self] in
+                guard let self else { return }
+                self.updateBlocks(updated, isStructural: true)
+                await self.flush()
+                for entry in removedTodoItems {
+                    if let repo = self.environment.persistence.todoRepository {
+                        try? await repo.delete(id: entry.blockId)
+                    }
+                }
+            }
+        )
+        if let last = updated.last {
+            pendingFocusRequest = EditorFocusRequest(blockId: last.id, position: .start)
+        }
+        await flush()
+    }
+
+    /// 2026-08-14 (Q2-A/Q3-B): 空块按键删除——todo 走 `removeEmptiedTodoBlock`
+    /// （TodoItem 行级联），正文/code 走 FR-050a 视图级路径的 host 版
+    /// （单 undo 组）；删除成功后焦点去下一块开头。最后一块（keepFinalBlock）
+    /// 与 IME 组合（FR-063）时 no-op。
+    public func deleteEmptyBlockOnKey(blockId: UUID) async {
+        let ordered = NoteWindowDerivations.orderedBlocks(blocks)
+        guard let idx = ordered.firstIndex(where: { $0.id == blockId }) else { return }
+        // The NEXT block is resolved BEFORE the removal (index shifts).
+        let next = ordered.indices.contains(idx + 1) ? ordered[idx + 1] : nil
+        if case .todo = ordered[idx].payload {
+            await removeEmptiedTodoBlock(blockId: blockId)
+        } else if let updated = EditorAppBridge.applyEmptyBlockRemoval(
+            blocks: ordered,
+            emptiedBlockIndex: idx,
+            hasIMEComposition: false
+        ) {
+            updateBlocksStructural(updated)
+            await flush()
+        }
+        guard !blocks.contains(where: { $0.id == blockId }) else { return }
+        if let next {
+            pendingFocusRequest = EditorFocusRequest(blockId: next.id, position: .start)
         }
     }
 

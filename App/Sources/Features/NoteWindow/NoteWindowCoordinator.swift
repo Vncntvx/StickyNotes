@@ -645,6 +645,28 @@ public struct NoteWindowContent: View {
                             // round-trips with the block in one undo group.
                             await host.removeEmptiedTodoBlock(blockId: blockId)
                         },
+                        onDeleteEmptyBlockKey: { blockId in
+                            // 2026-08-14 (Q2-A/Q3-B): DELETE key on an empty
+                            // block — host-side removal + focus to the next
+                            // block's start.
+                            await host.deleteEmptyBlockOnKey(blockId: blockId)
+                        },
+                        onMergeBlock: { blockId in
+                            // 2026-08-14 (Q4-A): first-character Backspace —
+                            // merge the block's text into its predecessor.
+                            await host.mergeBlockIntoPrevious(blockId: blockId)
+                        },
+                        onInsertParagraphAfterBlock: { blockId in
+                            // 2026-08-14 (Q5-A/Q6-B): todo-tail Return —
+                            // materialize an empty paragraph right after the
+                            // todo (between consecutive todos).
+                            await host.insertRichTextBlock(target: .afterBlock(blockId: blockId))
+                        },
+                        onDeleteSpanningSelection: { selection in
+                            // 2026-08-14: 跨块模式下 Backspace/Delete — host
+                            // 跨块删除（单 undo 组 + 焦点末块）。
+                            await host.applySpanningDeletion(selection: selection)
+                        },
                         onDeleteCode: { blockId in
                             // 004 修复 (第二轮): the code block's hover-menu
                             // Delete — host-side structural deletion (ONE

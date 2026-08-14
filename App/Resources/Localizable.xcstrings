@@ -6749,6 +6749,23 @@
           }
         }
       }
+    },
+    "Insert Paragraph": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Insert Paragraph"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "插入正文段落"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

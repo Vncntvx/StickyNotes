@@ -1,5 +1,6 @@
 import AppKit
 import Domain
+import EditorCore
 
 // MARK: - NoteToolbarSpec (004 FR-015c/Q3, contracts §2)
 
@@ -205,6 +206,35 @@ public enum NoteWindowDerivations {
                 ? $0.sortKey < $1.sortKey
                 : $0.id.uuidString < $1.id.uuidString
         }
+    }
+
+    /// 2026-08-14: 构造"整篇全选"的跨块选区——每块全文 scalar range，
+    /// 尾部空块（padding paragraph）不入选区（FR-054 既有规则）。
+    public static func crossBlockSelectionCoveringAll(blocks: [Block]) -> CrossBlockSelection {
+        let ordered = orderedBlocks(blocks)
+        var selections: [(blockId: UUID, range: Range<Int>)] = []
+        for (index, block) in ordered.enumerated() {
+            if CrossBlockSelectionCore.isTrailingPaddingParagraph(blocks: ordered, index: index) { continue }
+            let count = CrossBlockSelectionCore.blockText(block).unicodeScalars.count
+            if count > 0 {
+                selections.append((blockId: block.id, range: 0..<count))
+            }
+        }
+        return CrossBlockSelection(selections: selections)
+    }
+
+    /// 2026-08-14: scalar range → UTF-16 NSRange（⌘A 跨块全选设置每块
+    /// selectedRange 用——canonical 偏移是 scalar，NSTextView 是 UTF-16）。
+    public static func utf16Range(fromScalarRange range: Range<Int>, in text: String) -> NSRange {
+        let scalars = Array(text.unicodeScalars)
+        let clampedLower = min(max(range.lowerBound, 0), scalars.count)
+        let clampedUpper = min(max(range.upperBound, clampedLower), scalars.count)
+        func utf16Length(ofPrefix prefixCount: Int) -> Int {
+            scalars.prefix(prefixCount).reduce(0) { $0 + String($1).utf16.count }
+        }
+        let start = utf16Length(ofPrefix: clampedLower)
+        let end = utf16Length(ofPrefix: clampedUpper)
+        return NSRange(location: start, length: end - start)
     }
 
     // MARK: Insertion target resolution (004 FR-010/Q4, contracts §5)

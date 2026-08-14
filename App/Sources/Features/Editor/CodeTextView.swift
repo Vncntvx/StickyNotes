@@ -30,6 +30,11 @@ public struct CodeTextView: NSViewRepresentable {
     /// `(focused, hasMarkedText)` contract so the FR-050a empty-block
     /// exit applies to code blocks too (FR-063 IME guard included).
     let onFocusChange: (Bool, Bool) -> Void
+    /// 2026-08-14: 空块按键删除（Backspace/Delete）——视图层路由到 host
+    /// 的 `deleteEmptyBlockOnKey`（含焦点下一块）。
+    let onDeleteEmptyBlock: (() -> Void)?
+    /// 2026-08-14: 非空块块首 Backspace 的"并入上一块"（Q4-A 决策）。
+    let onMergeIntoPrevious: (() -> Void)?
 
     public init(
         text: String,
@@ -40,7 +45,9 @@ public struct CodeTextView: NSViewRepresentable {
         requestFocus: Bool = false,
         caretAtEnd: Bool = false,
         onFocusRequestHandled: @escaping () -> Void = {},
-        onFocusChange: @escaping (Bool, Bool) -> Void = { _, _ in }
+        onFocusChange: @escaping (Bool, Bool) -> Void = { _, _ in },
+        onDeleteEmptyBlock: (() -> Void)? = nil,
+        onMergeIntoPrevious: (() -> Void)? = nil
     ) {
         self.text = text
         self.onCommit = onCommit
@@ -51,6 +58,8 @@ public struct CodeTextView: NSViewRepresentable {
         self.caretAtEnd = caretAtEnd
         self.onFocusRequestHandled = onFocusRequestHandled
         self.onFocusChange = onFocusChange
+        self.onDeleteEmptyBlock = onDeleteEmptyBlock
+        self.onMergeIntoPrevious = onMergeIntoPrevious
     }
 
     public func makeCoordinator() -> Coordinator {
@@ -68,6 +77,8 @@ public struct CodeTextView: NSViewRepresentable {
         textView.textContainerInset = NSSize(width: 0, height: 4)
         textView.textContainer?.lineFragmentPadding = 0
         textView.delegate = context.coordinator
+        // 2026-08-14: 块级按键（空块删除/块首合并）由 Coordinator 裁决。
+        textView.blockKeyHandler = context.coordinator
         textView.autoresizingMask = [.width]
         context.coordinator.push(text: text, to: textView)
         return textView
@@ -97,7 +108,7 @@ public struct CodeTextView: NSViewRepresentable {
     // MARK: - Coordinator
 
     @MainActor
-    public final class Coordinator: NSObject, NSTextViewDelegate {
+    public final class Coordinator: NSObject, NSTextViewDelegate, BlockKeyCommandHandling {
         var parent: CodeTextView
         private var isPushing = false
         private weak var liveTextView: NSTextView?
@@ -115,6 +126,7 @@ public struct CodeTextView: NSViewRepresentable {
         deinit {
             MainActor.assumeIsolated {
                 keyStateObservers.forEach(NotificationCenter.default.removeObserver)
+                if let blockId = parent.blockId { EditorRegistry.unregister(blockId) }
             }
         }
 
@@ -126,6 +138,8 @@ public struct CodeTextView: NSViewRepresentable {
 
         func attach(_ textView: NSTextView) {
             liveTextView = textView
+            // 2026-08-14: 注册到跨块操作注册表（⌘A 整篇全选/跨块删除）。
+            if let blockId = parent.blockId { EditorRegistry.register(textView, for: blockId) }
             observeKeyState(of: textView.window)
             publishSelection(from: textView)
         }
@@ -233,6 +247,52 @@ public struct CodeTextView: NSViewRepresentable {
         private func applyFocusCaret(to textView: NSTextView) {
             let location = parent.caretAtEnd ? (textView.string as NSString).length : 0
             textView.setSelectedRange(NSRange(location: location, length: 0))
+        }
+
+        // MARK: - Block key commands (2026-08-14)
+
+        /// Backspace：空块任意位置 → 删除块（Q2-A）；非空块块首（无选中）
+        /// → 并入上一块（Q4-A）；其余保持默认文本删除。IME 组合期间不
+        /// 拦截（FR-063）。
+        func handleDeleteBackward() -> Bool {
+            guard let textView = liveTextView, !textView.hasMarkedText() else { return false }
+            if parent.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                parent.onDeleteEmptyBlock?()
+                return true
+            }
+            let selection = textView.selectedRange()
+            guard selection.length == 0, selection.location == 0 else { return false }
+            parent.onMergeIntoPrevious?()
+            return true
+        }
+
+        /// Delete（fn+delete）：仅空块任意位置删除块（Q2-A）；非空块不
+        /// 拦截（块首 Delete 是普通前向删除）。
+        func handleDeleteForward() -> Bool {
+            guard let textView = liveTextView, !textView.hasMarkedText() else { return false }
+            guard parent.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+            parent.onDeleteEmptyBlock?()
+            return true
+        }
+
+        /// Q10-B: code 块尾 Return 保持换行（多行代码零障碍）；块间插入
+        /// 走 `+` 按钮菜单。
+        func handleInsertNewline(shift: Bool) -> Bool { false }
+
+        /// 跨块替换仅富文本编辑器参与——code 块不拦截字符输入。
+        func handleTypingReplacement(character: String?) -> Bool { false }
+
+        /// 2026-08-14 (Q1-A): 拖选越过本块边界 → 跨块拖选（code 文本同样
+        /// 参与跨块选区）。
+        func handleCrossBlockDrag(event: NSEvent) -> Bool {
+            guard let textView = liveTextView,
+                  let bridge = parent.selectionBridge else { return false }
+            return CrossBlockDragRouter.handleDrag(
+                event: event,
+                from: textView,
+                sourceBlockId: parent.blockId,
+                bridge: bridge
+            )
         }
 
         private func observeKeyState(of window: NSWindow?) {

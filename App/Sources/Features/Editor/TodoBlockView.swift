@@ -67,6 +67,19 @@ public struct TodoBlockView: View {
     /// host applies the FR-050a empty-block exit (with TodoItem-row undo
     /// integrity).
     let onFocusChange: (Bool, Bool) -> Void
+    /// 2026-08-14 (Q2-A/Q3-B): DELETE key on an empty todo — host-side
+    /// removal (TodoItem-row cascade) + focus to the next block's start.
+    let onDeleteEmptyBlock: (() -> Void)?
+    /// 2026-08-14 (Q4-A): first-character Backspace merges the todo into
+    /// the previous block.
+    let onMergeIntoPrevious: (() -> Void)?
+    /// 2026-08-14 (Q5-A/Q6-B): todo-tail Return → insert an empty paragraph
+    /// block after this todo.
+    let onInsertParagraphAfterSelf: (() -> Void)?
+    /// 2026-08-14 (Q8-B): ⌘A in the todo editor selects the whole note.
+    let onSelectAllInNote: (() -> Void)?
+    /// 2026-08-14: 跨块模式下 Backspace/Delete → host 跨块删除。
+    let onDeleteSpanningSelection: (() -> Void)?
     /// 004 修复: host undo/redo revision — re-fetches the TodoItem so the
     /// checkbox follows structural undo/redo.
     let todoRevision: Int
@@ -98,6 +111,11 @@ public struct TodoBlockView: View {
         caretAtEnd: Bool = false,
         onFocusRequestHandled: @escaping () -> Void = {},
         onFocusChange: @escaping (Bool, Bool) -> Void = { _, _ in },
+        onDeleteEmptyBlock: (() -> Void)? = nil,
+        onMergeIntoPrevious: (() -> Void)? = nil,
+        onInsertParagraphAfterSelf: (() -> Void)? = nil,
+        onSelectAllInNote: (() -> Void)? = nil,
+        onDeleteSpanningSelection: (() -> Void)? = nil,
         todoRevision: Int = 0
     ) {
         self.block = block
@@ -115,6 +133,11 @@ public struct TodoBlockView: View {
         self.caretAtEnd = caretAtEnd
         self.onFocusRequestHandled = onFocusRequestHandled
         self.onFocusChange = onFocusChange
+        self.onDeleteEmptyBlock = onDeleteEmptyBlock
+        self.onMergeIntoPrevious = onMergeIntoPrevious
+        self.onInsertParagraphAfterSelf = onInsertParagraphAfterSelf
+        self.onSelectAllInNote = onSelectAllInNote
+        self.onDeleteSpanningSelection = onDeleteSpanningSelection
         self.todoRevision = todoRevision
         // 004 修复 (2026-08-14, P1): the first-frame seed — the nominal
         // body font's line center (ascender−descender)/2. PR1: the seed and
@@ -201,7 +224,12 @@ public struct TodoBlockView: View {
                 },
                 requestFocus: requestFocus,
                 caretAtEnd: caretAtEnd,
-                onFocusRequestHandled: onFocusRequestHandled
+                onFocusRequestHandled: onFocusRequestHandled,
+                onDeleteEmptyBlock: onDeleteEmptyBlock,
+                onMergeIntoPrevious: onMergeIntoPrevious,
+                onInsertParagraphAfterSelf: onInsertParagraphAfterSelf,
+                onSelectAllInNote: onSelectAllInNote,
+                onDeleteSpanningSelection: onDeleteSpanningSelection
             )
             // Pin the vertical size to the editor's intrinsic — the row
             // proposes its full height (marker hit frame + alignment

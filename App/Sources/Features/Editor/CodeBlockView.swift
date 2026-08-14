@@ -35,6 +35,12 @@ public struct CodeBlockView: View {
     /// 004 修复 (P1-6): focus transitions of the code editor (FR-050a
     /// empty-block exit).
     let onFocusChange: (Bool, Bool) -> Void
+    /// 2026-08-14 (Q2-A/Q3-B): DELETE key on an empty code block —
+    /// host-side removal + focus to the next block's start.
+    let onDeleteEmptyBlock: (() -> Void)?
+    /// 2026-08-14 (Q4-A): first-character Backspace merges the code block
+    /// into the previous block.
+    let onMergeIntoPrevious: (() -> Void)?
 
     // 004 修复 (第二轮): the delete menu is hover-gated (the TodoBlockView
     // pattern) — the slot stays reserved so the card width never jumps.
@@ -49,7 +55,9 @@ public struct CodeBlockView: View {
         requestFocus: Bool = false,
         caretAtEnd: Bool = false,
         onFocusRequestHandled: @escaping () -> Void = {},
-        onFocusChange: @escaping (Bool, Bool) -> Void = { _, _ in }
+        onFocusChange: @escaping (Bool, Bool) -> Void = { _, _ in },
+        onDeleteEmptyBlock: (() -> Void)? = nil,
+        onMergeIntoPrevious: (() -> Void)? = nil
     ) {
         self.block = block
         self.onChanged = onChanged
@@ -60,6 +68,8 @@ public struct CodeBlockView: View {
         self.caretAtEnd = caretAtEnd
         self.onFocusRequestHandled = onFocusRequestHandled
         self.onFocusChange = onFocusChange
+        self.onDeleteEmptyBlock = onDeleteEmptyBlock
+        self.onMergeIntoPrevious = onMergeIntoPrevious
     }
 
     public var body: some View {
@@ -81,7 +91,9 @@ public struct CodeBlockView: View {
                     requestFocus: requestFocus,
                     caretAtEnd: caretAtEnd,
                     onFocusRequestHandled: onFocusRequestHandled,
-                    onFocusChange: onFocusChange
+                    onFocusChange: onFocusChange,
+                    onDeleteEmptyBlock: onDeleteEmptyBlock,
+                    onMergeIntoPrevious: onMergeIntoPrevious
                 )
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Button {

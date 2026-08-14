@@ -3,6 +3,26 @@ import AppKit
 import Domain
 import EditorCore
 
+// MARK: - DiagnoseLog (临时诊断, 2026-08-14)
+//
+// 真实环境断点排查：统一日志在此环境读不到（log show 权限受限），诊断
+// 打点改走沙盒容器内文件（NSTemporaryDirectory），排查完移除。
+
+enum DiagnoseLog {
+    private static let path = NSTemporaryDirectory() + "sticky-diagnose.log"
+
+    static func log(_ message: String) {
+        let line = message + "\n"
+        if let handle = FileHandle(forWritingAtPath: path) {
+            handle.seekToEndOfFile()
+            handle.write(line.data(using: .utf8)!)
+            try? handle.close()
+        } else {
+            try? line.data(using: .utf8)?.write(to: URL(fileURLWithPath: path))
+        }
+    }
+}
+
 // MARK: - EditorDisplayStyling (004 修复, 2026-08-13)
 //
 // Display-only styling for a block editor (todo completion): applied over
@@ -83,10 +103,8 @@ public struct RichTextView: NSViewRepresentable {
     /// 004 T037: the block id backing this editor (insertion-target
     /// resolution).
     let richTextBlockId: UUID?
-    /// 004 修复: the window-level shared UndoManager — every block editor
     /// (primary/trailing/todo) uses it so ⌘Z/⌘⇧Z span the whole note.
     let undoManager: UndoManager?
-    /// 004 修复: the editor's minimum height — the primary paper keeps the
     /// 320pt minimum; trailing/todo editors pass 0 (content-sized, so an
     /// inserted block no longer renders a second 320pt paper).
     let minimumHeight: CGFloat?
@@ -100,14 +118,11 @@ public struct RichTextView: NSViewRepresentable {
     /// inset once blocks follow it (NotePaperTextView.collapsesBottomInset)
     /// — the dead paper under the last ink line disappears.
     let collapsesBottomInset: Bool
-    /// 004 修复: special-block editor (todo text) — publishes its
     /// focusedSpecialBlockId so insertion targets `.afterBlock` (FR-010).
     let isSpecialBlock: Bool
-    /// 004 修复: display-only styling (todo completion strikethrough +
     /// secondary color) — applied visually, excluded from the canonical
     /// round trip.
     let displayStyling: EditorDisplayStyling?
-    /// 004 修复 (2026-08-14, P1): publishes the FIRST LINE's typographic
     /// center (line-fragment midY in view coordinates — real TextKit
     /// geometry, not nominal font metrics) — the todo row's marker
     /// visual center aligns to it.
@@ -121,6 +136,20 @@ public struct RichTextView: NSViewRepresentable {
     /// continuation), `.start` is the insertion default.
     let caretAtEnd: Bool
     let onFocusRequestHandled: () -> Void
+    /// 2026-08-14: 空块按键删除（Backspace/Delete）——视图层路由到 host 的
+    /// `deleteEmptyBlockOnKey`（含焦点下一块）。
+    let onDeleteEmptyBlock: (() -> Void)?
+    /// 2026-08-14: 非空块块首 Backspace 的"并入上一块"（Q4-A 决策）。
+    let onMergeIntoPrevious: (() -> Void)?
+    /// 2026-08-14 (Q5-A/Q6-B): todo 块尾 Return → 在该块之后插入空正文块。
+    /// 仅特殊块（todo）编辑器会触发。
+    let onInsertParagraphAfterSelf: (() -> Void)?
+    /// 2026-08-14 (Q8-B): ⌘A（selectAll）→ 整篇全选（跨块模式）。code
+    /// 编辑器不设置（块内全选保留）。
+    let onSelectAllInNote: (() -> Void)?
+    /// 2026-08-14: 跨块模式下 Backspace/Delete → host 的跨块删除
+    /// （deleteSpanningSelection，单 undo 组 + 焦点末块）。
+    let onDeleteSpanningSelection: (() -> Void)?
 
     public init(
         document: RichTextDocument,
@@ -138,7 +167,12 @@ public struct RichTextView: NSViewRepresentable {
         onFirstLineTypographicCenter: ((CGFloat) -> Void)? = nil,
         requestFocus: Bool = false,
         caretAtEnd: Bool = false,
-        onFocusRequestHandled: @escaping () -> Void = {}
+        onFocusRequestHandled: @escaping () -> Void = {},
+        onDeleteEmptyBlock: (() -> Void)? = nil,
+        onMergeIntoPrevious: (() -> Void)? = nil,
+        onInsertParagraphAfterSelf: (() -> Void)? = nil,
+        onSelectAllInNote: (() -> Void)? = nil,
+        onDeleteSpanningSelection: (() -> Void)? = nil
     ) {
         self.document = document
         self.editorTypography = editorTypography
@@ -156,6 +190,11 @@ public struct RichTextView: NSViewRepresentable {
         self.requestFocus = requestFocus
         self.caretAtEnd = caretAtEnd
         self.onFocusRequestHandled = onFocusRequestHandled
+        self.onDeleteEmptyBlock = onDeleteEmptyBlock
+        self.onMergeIntoPrevious = onMergeIntoPrevious
+        self.onInsertParagraphAfterSelf = onInsertParagraphAfterSelf
+        self.onSelectAllInNote = onSelectAllInNote
+        self.onDeleteSpanningSelection = onDeleteSpanningSelection
     }
 
     public func makeCoordinator() -> Coordinator {
@@ -192,6 +231,13 @@ public struct RichTextView: NSViewRepresentable {
         let resolver = NoteFontResolver(preference: editorTypography.fontPreference)
         textView.font = resolver.font(size: editorTypography.textSize, for: "")
         textView.delegate = context.coordinator
+        // 2026-08-14: 块级按键（空块删除/块首合并）由 Coordinator 裁决。
+        textView.blockKeyHandler = context.coordinator
+        // 2026-08-14 (⌘A, Q8-B): 富文本块（正文/todo）⌘A = 整篇全选。
+        let coordinator = context.coordinator
+        textView.onSelectAll = { [weak coordinator] in
+            coordinator?.selectAllInNote()
+        }
         // PR2: the storage's didProcessEditing reports the EXACT character
         // edit range (the typing normalization consumes it) — the
         // coordinator observes the storage here.
@@ -301,7 +347,7 @@ public struct RichTextView: NSViewRepresentable {
     // MARK: - Coordinator
 
     @MainActor
-    public final class Coordinator: NSObject, NSTextViewDelegate {
+    public final class Coordinator: NSObject, NSTextViewDelegate, BlockKeyCommandHandling {
         var parent: RichTextView
         /// Plan B (2026-08-14): a cached layout manager for line-height
         /// METRICS ONLY — never attached to a text storage. MainActor-only
@@ -346,6 +392,7 @@ public struct RichTextView: NSViewRepresentable {
         deinit {
             MainActor.assumeIsolated {
                 keyStateObservers.forEach(NotificationCenter.default.removeObserver)
+                if let liveBlockId { EditorRegistry.unregister(liveBlockId) }
             }
         }
 
@@ -501,6 +548,8 @@ public struct RichTextView: NSViewRepresentable {
             liveTextView = textView
             liveBridge = bridge
             liveBlockId = blockId
+            // 2026-08-14: 注册到跨块操作注册表（⌘A/跨块格式/删除定位）。
+            if let blockId { EditorRegistry.register(textView, for: blockId) }
             observeKeyState(of: textView.window)
             if bridge != nil {
                 publishSelection(from: textView)
@@ -631,10 +680,12 @@ public struct RichTextView: NSViewRepresentable {
         private var focusAttempts = 0
 
         func requestFocusIfNeeded(_ textView: NSTextView) {
+            DiagnoseLog.log("FOCUS enter request=\(parent.requestFocus) handled=\(didHandleFocusRequest) window=\(textView.window != nil)")
             guard parent.requestFocus, !didHandleFocusRequest else { return }
             if let window = textView.window {
                 didHandleFocusRequest = true
-                window.makeFirstResponder(textView)
+                let ok = window.makeFirstResponder(textView)
+                DiagnoseLog.log("FOCUS made ok=\(ok) firstResponder=\(String(describing: window.firstResponder))")
                 applyFocusCaret(to: textView)
                 parent.onFocusRequestHandled()
                 return
@@ -661,6 +712,101 @@ public struct RichTextView: NSViewRepresentable {
         private func applyFocusCaret(to textView: NSTextView) {
             let location = parent.caretAtEnd ? (textView.string as NSString).length : 0
             textView.setSelectedRange(NSRange(location: location, length: 0))
+        }
+
+        // MARK: - Block key commands (2026-08-14)
+
+        /// Backspace：跨块模式下 → host 跨块删除；空块任意位置 → 删除块
+        /// （Q2-A）；非空块块首（无选中）→ 并入上一块（Q4-A）；其余保持
+        /// 默认文本删除。IME 组合期间不拦截（FR-063）。
+        func handleDeleteBackward() -> Bool {
+            guard let textView = liveTextView, !textView.hasMarkedText() else { return false }
+            if let bridge = liveBridge, bridge.crossBlockSelection != nil {
+                parent.onDeleteSpanningSelection?()
+                return true
+            }
+            if Self.isDocumentEmpty(parent.document) {
+                parent.onDeleteEmptyBlock?()
+                return true
+            }
+            let selection = textView.selectedRange()
+            guard selection.length == 0, selection.location == 0 else { return false }
+            parent.onMergeIntoPrevious?()
+            return true
+        }
+
+        /// Delete（fn+delete）：跨块模式下 → host 跨块删除；仅空块任意
+        /// 位置删除块（Q2-A）；非空块不拦截（块首 Delete 是普通前向删除）。
+        func handleDeleteForward() -> Bool {
+            guard let textView = liveTextView, !textView.hasMarkedText() else { return false }
+            if let bridge = liveBridge, bridge.crossBlockSelection != nil {
+                parent.onDeleteSpanningSelection?()
+                return true
+            }
+            guard Self.isDocumentEmpty(parent.document) else { return false }
+            parent.onDeleteEmptyBlock?()
+            return true
+        }
+
+        /// 2026-08-14: 跨块模式下输入可打印字符 = 替换跨块选区——聚焦块
+        /// 收字符（替换其选中文本），其他块同步删空其选中文本（各块各自
+        /// commit + NSTextView undo）。替换期间抑制"选区变化退出跨块模式"
+        /// （每块 replaceCharacters 的 didChangeSelection 会误触发折叠），
+        /// 替换完成后一次退出并折叠。返回 true 表示已消费。
+        func handleTypingReplacement(character: String?) -> Bool {
+            guard let bridge = liveBridge, bridge.crossBlockSelection != nil else { return false }
+            guard let textView = liveTextView, !textView.hasMarkedText() else { return false }
+            guard let character, !character.isEmpty,
+                  !character.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
+                return false
+            }
+            bridge.withCrossBlockSuppression {
+                for entry in bridge.crossBlockSelection!.selections {
+                    guard let editor = EditorRegistry.textView(for: entry.blockId),
+                          editor !== textView else { continue }
+                    editor.replaceCharacters(in: editor.selectedRange(), with: "")
+                }
+                textView.replaceCharacters(in: textView.selectedRange(), with: character)
+            }
+            // The selection was consumed — exit the mode and collapse the
+            // other editors' lingering highlights.
+            publishSelection(from: textView, source: "typingReplacement", isSelectionChange: true)
+            return true
+        }
+
+        /// 2026-08-14 (⌘A): 富文本编辑器（正文/todo）的 selectAll → 整篇
+        /// 全选（跨块模式）。视图层（RichTextBlockView）提供 blocks。
+        func selectAllInNote() {
+            parent.onSelectAllInNote?()
+        }
+
+        /// 2026-08-14 (Q1-A): 拖选越过本块边界 → 跨块拖选。
+        func handleCrossBlockDrag(event: NSEvent) -> Bool {
+            guard let textView = liveTextView, let bridge = liveBridge else { return false }
+            return CrossBlockDragRouter.handleDrag(
+                event: event,
+                from: textView,
+                sourceBlockId: liveBlockId,
+                bridge: bridge
+            )
+        }
+
+        /// Return（Q5-A/Q6-B/Q9-A）：仅特殊块（todo）编辑器、块尾无选中、
+        /// 非 Shift、非 IME 时插入正文块；其余（中间 Return / Shift+Return
+        /// / 组合中）保持默认换行。
+        func handleInsertNewline(shift: Bool) -> Bool {
+            guard parent.isSpecialBlock else { return false }
+            guard let textView = liveTextView, !textView.hasMarkedText() else { return false }
+            guard !shift else { return false }
+            let selection = textView.selectedRange()
+            guard selection.length == 0,
+                  selection.location == (textView.string as NSString).length else { return false }
+            parent.onInsertParagraphAfterSelf?()
+            return true
+        }
+
+        private static func isDocumentEmpty(_ document: RichTextDocument) -> Bool {
+            document.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
 
         public func textDidChange(_ notification: Notification) {
@@ -798,11 +944,13 @@ public struct RichTextView: NSViewRepresentable {
             guard !isPushing, let textView = notification.object as? NSTextView else { return }
             // FR-063: do not publish selection during IME composition.
             guard !textView.hasMarkedText() else { return }
-            publishSelection(from: textView, source: "textViewDidChangeSelection")
+            // 2026-08-14: a REAL selection change exits the cross-block mode
+            // and collapses the other editors' lingering highlights.
+            publishSelection(from: textView, source: "textViewDidChangeSelection", isSelectionChange: true)
         }
 
         /// Publishes the current selection/focus snapshot into the bridge.
-        func publishSelection(from textView: NSTextView, source: String = "?") {
+        func publishSelection(from textView: NSTextView, source: String = "?", isSelectionChange: Bool = false) {
             guard let bridge = liveBridge else { return }
             let range = textView.selectedRange()
             let hasFocus = (textView.window?.isKeyWindow ?? false) && (textView.window?.firstResponder === textView)
@@ -834,7 +982,8 @@ public struct RichTextView: NSViewRepresentable {
                 selectedRange: range,
                 selectedMarks: marks,
                 selectionRectInWindow: rect,
-                focusedSpecialBlockId: parent.isSpecialBlock ? liveBlockId : nil
+                focusedSpecialBlockId: parent.isSpecialBlock ? liveBlockId : nil,
+                isSelectionChange: isSelectionChange
             )
         }
 
@@ -1173,6 +1322,29 @@ extension RichTextView.Coordinator: NSTextStorageDelegate {
 }
 
 
+// MARK: - BlockKeyCommandHandling (2026-08-14)
+//
+// 块级按键命令裁决协议：text view 子类在 `doCommand(by:)` 识别删除键，
+// 交给 Coordinator 裁决（Coordinator 拥有 document/选区语义）。返回 true
+// 表示事件已在块级消费（空块删除 / 块首合并），不应继续默认文本编辑。
+
+@MainActor
+protocol BlockKeyCommandHandling: AnyObject {
+    /// Backspace：空块任意位置 → 删除块；非空块块首 → 并入上一块。
+    func handleDeleteBackward() -> Bool
+    /// Delete（fn+delete）：仅空块删除（非空块块首是普通前向删除）。
+    func handleDeleteForward() -> Bool
+    /// Return：仅特殊块（todo）块尾（无选中、无 Shift、非 IME）→ 插入
+    /// 正文块；其余保持默认换行。
+    func handleInsertNewline(shift: Bool) -> Bool
+    /// 可打印字符输入：跨块模式下替换跨块选区（聚焦块收字符、其他块
+    /// 删空）；否则 false（默认输入）。
+    func handleTypingReplacement(character: String?) -> Bool
+    /// 拖选越过当前块边界 → 跨块拖选（源块钉住、目标块随拖入点、中间块
+    /// 全选）；拖回本块返回 false（默认拖选恢复）。
+    func handleCrossBlockDrag(event: NSEvent) -> Bool
+}
+
 // MARK: - IntrinsicSizingTextView (004 修复 2026-08-14, P0)
 
 /// The shared width-sensitive sizing base for the note's NSTextViews
@@ -1196,6 +1368,9 @@ class IntrinsicSizingTextView: NSTextView {
     /// instead of a stale pre-resize rect.
     var onWidthReflow: (() -> Void)?
 
+    /// 2026-08-14: 块级按键裁决者（Coordinator 注入，weak 防环）。
+    weak var blockKeyHandler: BlockKeyCommandHandling?
+
     override func setFrameSize(_ newSize: NSSize) {
         let widthChanged = abs(newSize.width - lastLayoutWidth) > 0.5
         super.setFrameSize(newSize)
@@ -1211,6 +1386,48 @@ class IntrinsicSizingTextView: NSTextView {
     override func didChangeText() {
         super.didChangeText()
         invalidateIntrinsicContentSize()
+    }
+
+    /// 2026-08-14: 块级删除键拦截——空块删除 / 块首合并。消费后不再走
+    /// 默认文本删除（super）。AppKit 按键命令在主线程派发（与 Coordinator
+    /// 的 deinit 同一假设）。
+    override func doCommand(by selector: Selector) {
+        if selector == #selector(NSResponder.deleteBackward(_:)),
+           let handler = blockKeyHandler,
+           MainActor.assumeIsolated({ handler.handleDeleteBackward() }) {
+            return
+        }
+        if selector == #selector(NSResponder.deleteForward(_:)),
+           let handler = blockKeyHandler,
+           MainActor.assumeIsolated({ handler.handleDeleteForward() }) {
+            return
+        }
+        if selector == #selector(NSResponder.insertNewline(_:)),
+           let handler = blockKeyHandler,
+           MainActor.assumeIsolated({
+               let shift = NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false
+               return handler.handleInsertNewline(shift: shift)
+           }) {
+            return
+        }
+        super.doCommand(by: selector)
+    }
+
+    /// 2026-08-14 (Q1-A): 拖选越过本块边界 → 跨块拖选（源块钉住、目标
+    /// 块随拖入点、中间块全选）。拖回本块返回 false，默认拖选恢复。
+    override func mouseDown(with event: NSEvent) {
+        DiagnoseLog.log("DRAG mouseDown hit=\(String(describing: self))")
+        super.mouseDown(with: event)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        DiagnoseLog.log("DRAG mouseDragged entered bounds=\(bounds) loc=\(convert(event.locationInWindow, from: nil)) handler=\(blockKeyHandler != nil)")
+        if let handler = blockKeyHandler,
+           MainActor.assumeIsolated({ handler.handleCrossBlockDrag(event: event) }) {
+            return
+        }
+        DiagnoseLog.log("DRAG mouseDragged default path")
+        super.mouseDragged(with: event)
     }
 }
 
@@ -1233,6 +1450,31 @@ final class NotePaperTextView: IntrinsicSizingTextView {
     /// 004 修复: per-instance minimum height (primary = 320; trailing/todo
     /// editors = 0 so an inserted block no longer renders a second paper).
     var minimumHeight: CGFloat = NotePaperTextView.minimumPaperHeight
+
+    /// 2026-08-14 (⌘A, Q8-B): 富文本编辑器（正文/todo）的 selectAll →
+    /// 整篇全选。code 编辑器（CodeEditorTextView）不设置 —— ⌘A 保持块内
+    /// 全选（代码复制习惯）。
+    var onSelectAll: (() -> Void)?
+
+    override func selectAll(_ sender: Any?) {
+        if let onSelectAll {
+            onSelectAll()
+        } else {
+            super.selectAll(sender)
+        }
+    }
+
+    /// 2026-08-14: 跨块模式下输入可打印字符 = 替换跨块选区（聚焦块收
+    /// 字符、其他块删空）。修饰键组合（⌘/⌃/⌥）与 IME 组合不拦截。
+    override func keyDown(with event: NSEvent) {
+        let modifiers = event.modifierFlags.intersection([.command, .control, .option])
+        if modifiers.isEmpty,
+           let handler = blockKeyHandler,
+           MainActor.assumeIsolated({ handler.handleTypingReplacement(character: event.charactersIgnoringModifiers) }) {
+            return
+        }
+        super.keyDown(with: event)
+    }
 
     /// 004 修复 (2026-08-13 用户实测第二轮): bottom-inset collapse. When
     /// blocks follow the paper, the BOTTOM text-container inset becomes

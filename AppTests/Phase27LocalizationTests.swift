@@ -52,6 +52,8 @@ import Foundation
         "Note Appearance", "Note body font", "System Default", "Clear Formatting",
         // Trash ⋯ menu (003 T183, 2026-08-14)
         "More trash actions",
+        // Block editing (2026-08-14): paragraph insertion via the `+` menu
+        "Insert Paragraph",
     ]
 
     @Test
