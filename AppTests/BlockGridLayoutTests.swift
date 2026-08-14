@@ -49,6 +49,7 @@ import Domain
         ]
         let view = RichTextBlockView(
             note: Note(lastModifiedDeviceId: Self.deviceId),
+            editorTypography: .system(textSize: 13),
             blocks: blocks,
             onBlocksChanged: { _ in }
         )
@@ -130,6 +131,7 @@ import Domain
         ]
         let view = RichTextBlockView(
             note: Note(lastModifiedDeviceId: Self.deviceId),
+            editorTypography: .system(textSize: 13),
             blocks: blocks,
             onBlocksChanged: { _ in },
             todoProvider: { _ in item }
@@ -252,6 +254,7 @@ import Domain
         ]
         let view = RichTextBlockView(
             note: Note(lastModifiedDeviceId: Self.deviceId),
+            editorTypography: .system(textSize: 13),
             blocks: blocks,
             onBlocksChanged: { _ in },
             todoProvider: { _ in item }

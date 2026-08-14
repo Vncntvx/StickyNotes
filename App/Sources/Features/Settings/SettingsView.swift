@@ -21,6 +21,9 @@ public struct SettingsView: View {
     @AppStorage("local.stickynotes.showDockIcon") private var showDockIcon = true
     /// The sync composition root (T285) — drives the Sync tab.
     private let syncCoordinator: SyncCoordinator?
+    /// Phase 5: the global typography preference source (single bootstrap
+    /// instance) — drives the Notes section.
+    private let typography: TypographyPreferences
     @State private var selectedTab: SettingsTab = .general
     /// Live screen-recording status (refreshed on appear and on app
     /// activation — the user may change it in System Settings and come
@@ -47,8 +50,9 @@ public struct SettingsView: View {
         }
     }
 
-    public init(syncCoordinator: SyncCoordinator? = nil) {
+    public init(syncCoordinator: SyncCoordinator? = nil, typography: TypographyPreferences = TypographyPreferences()) {
         self.syncCoordinator = syncCoordinator
+        self.typography = typography
     }
 
     public var body: some View {
@@ -87,9 +91,10 @@ public struct SettingsView: View {
                     }
             }
             // Rev 2 (FR-055): the note-font preference lives in General's
-            // Notes section (was its own first-level tab).
+            // Notes section (was its own first-level tab). Phase 5: the
+            // section also carries the global text-spacing presets.
             Section {
-                NoteFontSection()
+                NoteFontSection(typography: typography)
             } header: {
                 Text("Notes")
             } footer: {

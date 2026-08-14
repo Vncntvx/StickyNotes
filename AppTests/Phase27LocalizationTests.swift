@@ -43,6 +43,11 @@ import Foundation
         "S3-compatible storage", "WebDAV storage", "Recovery",
         "Keeps sync unlocked using Keychain until you restart or lock the vault.",
         "When enabled, changes sync automatically. Periodic syncing is optional.",
+        // Typography settings (Phase 5, 2026-08-14)
+        "Text Spacing", "Compact", "Default", "Relaxed", "Reset",
+        "Note Appearance",
+        "That font family was not found on this Mac. Your existing preference is unchanged.",
+        "Type a font family name — for example, Helvetica Neue. Empty means Default (the system font).",
     ]
 
     @Test

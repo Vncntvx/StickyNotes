@@ -75,6 +75,7 @@ import Persistence
     ) -> NSHostingView<RichTextBlockView> {
         let hosting = NSHostingView(rootView: RichTextBlockView(
             note: note,
+            editorTypography: .system(textSize: CGFloat(note.textSize)),
             blocks: blocks,
             onBlocksChanged: onBlocksChanged,
             undoManager: undoManager,
@@ -238,6 +239,7 @@ import Persistence
         var handled = false
         let hosting = NSHostingView(rootView: RichTextBlockView(
             note: note,
+            editorTypography: .system(textSize: CGFloat(note.textSize)),
             blocks: [primary, todo],
             onBlocksChanged: { _ in },
             focusRequest: EditorFocusRequest(blockId: todoId, position: .start),

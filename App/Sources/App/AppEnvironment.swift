@@ -40,6 +40,12 @@ public struct AppEnvironment: Sendable {
     /// SyncEngine wiring + status. Nil before bootstrap. Main-actor-isolated
     /// (Sendable by global-actor isolation).
     public let syncCoordinator: SyncCoordinator?
+    /// The SINGLE global typography preference source (Phase 2, 2026-08-14):
+    /// font family + text spacing, shared by Settings and every note window.
+    /// Non-optional — bootstrap always injects the persisted instance; the
+    /// default value is a test convenience only (production never relies on
+    /// it — see TypographyPreferences).
+    public let typography: TypographyPreferences
 
     public init(
         domain: DomainServices,
@@ -50,7 +56,8 @@ public struct AppEnvironment: Sendable {
         sync: SyncServices,
         systemBridge: SystemBridgeServices,
         localPreferences: LocalPreferences,
-        syncCoordinator: SyncCoordinator? = nil
+        syncCoordinator: SyncCoordinator? = nil,
+        typography: TypographyPreferences = TypographyPreferences()
     ) {
         self.domain = domain
         self.persistence = persistence
@@ -61,6 +68,7 @@ public struct AppEnvironment: Sendable {
         self.systemBridge = systemBridge
         self.localPreferences = localPreferences
         self.syncCoordinator = syncCoordinator
+        self.typography = typography
     }
 
     /// Placeholder used during foundation bring-up. Real composition
@@ -134,7 +142,8 @@ public struct AppEnvironment: Sendable {
             sync: SyncServices(),
             systemBridge: SystemBridgeServices(),
             localPreferences: LocalPreferences(),
-            syncCoordinator: syncCoordinator
+            syncCoordinator: syncCoordinator,
+            typography: TypographyPreferences.load()
         )
     }
 }

@@ -70,6 +70,12 @@ public struct RichTextBlockView: View {
     /// 004 修复: host undo/redo revision — todo rows re-fetch their
     /// TodoItem state when structural undo/redo changes it.
     let todoRevision: Int
+    /// Phase 3: the resolved typography VALUE for this note's editors
+    /// (computed by NoteWindowContent from the observable
+    /// TypographyPreferences + the note's per-note text size). Required —
+    /// the editor subtree never reads UserDefaults or the preference
+    /// object itself.
+    let editorTypography: EditorTypography
 
     @State private var isIMEComposing = false
     // T300 (FR-050a): cursor-exit detection for empty-block removal. The
@@ -97,6 +103,7 @@ public struct RichTextBlockView: View {
 
     public init(
         note: Note,
+        editorTypography: EditorTypography,
         blocks: [Block],
         onAppearanceChange: @escaping (Note) -> Void = { _ in },
         onBlocksChanged: @escaping ([Block]) -> Void,
@@ -126,6 +133,7 @@ public struct RichTextBlockView: View {
     ) {
         self.note = note
         self.blocks = blocks
+        self.editorTypography = editorTypography
         self.onAppearanceChange = onAppearanceChange
         self.onBlocksChanged = onBlocksChanged
         self.onStructuralBlocksChanged = onStructuralBlocksChanged
@@ -332,7 +340,7 @@ public struct RichTextBlockView: View {
         case .todo:
             TodoBlockView(
                 block: block,
-                textSize: ReadableTheme.textSize(for: note),
+                editorTypography: editorTypography,
                 onChanged: { updated in
                     // FR-141a: text edits debounce; completion/structural
                     // ops go through the repository directly (T290).
@@ -426,7 +434,7 @@ public struct RichTextBlockView: View {
             let isOpeningParagraph = block.id == openingRichTextBlockId
             RichTextView(
                 document: doc,
-                textSize: ReadableTheme.textSize(for: note),
+                editorTypography: editorTypography,
                 onCommit: { document in
                     if isOpeningParagraph {
                         didRemoveEmptyBlockOnExit = false

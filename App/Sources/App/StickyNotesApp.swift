@@ -104,7 +104,7 @@ struct StickyNotesApp: App {
         .menuBarExtraStyle(.window)
 
         Settings {
-            SettingsView(syncCoordinator: environment.syncCoordinator)
+            SettingsView(syncCoordinator: environment.syncCoordinator, typography: environment.typography)
         }
         // Rev 2 (2026-08-14, FR-051): stable shell — default size + minimum
         // constrained resizing. The root content frame (SettingsView) carries
@@ -570,7 +570,7 @@ struct StickyNotesApp: App {
             height: SettingsWindowPolicy.minimumHeight
         )
         window.contentView = NSHostingView(
-            rootView: SettingsView(syncCoordinator: environment.syncCoordinator)
+            rootView: SettingsView(syncCoordinator: environment.syncCoordinator, typography: environment.typography)
         )
         window.setFrameAutosaveName("StickyNotesSettings")
         window.center()

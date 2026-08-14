@@ -326,6 +326,7 @@ import SystemBridge
         )
         let view = RichTextBlockView(
             note: Note(lastModifiedDeviceId: deviceId),
+            editorTypography: .system(textSize: 13),
             blocks: blocks,
             onBlocksChanged: { _ in },
             todoProvider: { _ in item }
@@ -378,6 +379,7 @@ import SystemBridge
         let bodyText = "这是正文的第一句。连续句子，连续句子，连续句子。\n\n下面开始输入 todo:"
         let before = RichTextBlockView(
             note: Note(lastModifiedDeviceId: deviceId),
+            editorTypography: .system(textSize: 13),
             blocks: [
                 Block(noteId: noteId, kind: .richText, sortKey: 0,
                       payload: .richText(.plain(bodyText)),
@@ -398,6 +400,7 @@ import SystemBridge
         )
         let after = RichTextBlockView(
             note: Note(lastModifiedDeviceId: deviceId),
+            editorTypography: .system(textSize: 13),
             blocks: [
                 Block(noteId: noteId, kind: .richText, sortKey: 0,
                       payload: .richText(.plain(bodyText)),
@@ -486,6 +489,7 @@ import SystemBridge
         ]
         let view = RichTextBlockView(
             note: Note(lastModifiedDeviceId: deviceId),
+            editorTypography: .system(textSize: 13),
             blocks: blocks,
             onBlocksChanged: { _ in },
             todoProvider: { _ in item }
@@ -576,6 +580,7 @@ import SystemBridge
         ]
         let view = RichTextBlockView(
             note: Note(lastModifiedDeviceId: deviceId),
+            editorTypography: .system(textSize: 13),
             blocks: blocks,
             onBlocksChanged: { _ in },
             todoProvider: { _ in item }
@@ -641,6 +646,7 @@ import SystemBridge
         ]
         let view = RichTextBlockView(
             note: Note(lastModifiedDeviceId: deviceId),
+            editorTypography: .system(textSize: 13),
             blocks: blocks,
             onBlocksChanged: { _ in },
             todoProvider: { _ in item }
@@ -726,6 +732,7 @@ import SystemBridge
         ]
         let view = RichTextBlockView(
             note: Note(lastModifiedDeviceId: deviceId),
+            editorTypography: .system(textSize: 13),
             blocks: blocks,
             onBlocksChanged: { _ in },
             todoProvider: { blockId in items.first { $0.blockId == blockId } }
@@ -774,6 +781,7 @@ import SystemBridge
         ]
         let view = RichTextBlockView(
             note: Note(lastModifiedDeviceId: deviceId),
+            editorTypography: .system(textSize: 13),
             blocks: blocks,
             onBlocksChanged: { _ in },
             todoProvider: { _ in item }

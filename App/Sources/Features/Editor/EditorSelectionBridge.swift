@@ -141,10 +141,18 @@ public final class EditorSelectionBridge {
     /// T038/FR-012). No selection → typingAttributes (subsequent input);
     /// IME composition suppresses application (FR-063); plain-text (code)
     /// editors are a no-op (004 修复).
+    /// 004 修复: routes through the editor's Coordinator so the semantic
+    /// pipeline commits the canonical document and registers undo
+    /// (attribute-only edits never fire textDidChange); bare NSTextViews
+    /// (tests) fall back to the applier directly.
     public func applyMarks(_ marks: Set<RichTextMark>) {
         guard richTextEditable else { return }
         guard let textView else { return }
-        RichTextMarkApplier.applyMarks(marks, to: textView)
+        if let coordinator = textView.delegate as? RichTextView.Coordinator {
+            coordinator.applyMarks(marks, to: textView)
+        } else {
+            RichTextMarkApplier.applyMarks(marks, to: textView)
+        }
     }
 
     public func invalidate() {

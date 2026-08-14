@@ -42,7 +42,9 @@ private extension VerticalAlignment {
 /// A virtualized todo list row (FR-072b: bounded row realization).
 public struct TodoBlockView: View {
     let block: Block
-    let textSize: CGFloat
+    /// Phase 3: the resolved typography VALUE (font preference + spacing
+    /// + per-note text size) — threaded into the todo's rich-text editor.
+    let editorTypography: EditorTypography
     let onChanged: (Block) -> Void
     /// Fetches the backing TodoItem (stable identity — FR-071).
     let todoProvider: (UUID) async -> TodoItem?
@@ -82,7 +84,7 @@ public struct TodoBlockView: View {
 
     public init(
         block: Block,
-        textSize: CGFloat = 13,
+        editorTypography: EditorTypography,
         onChanged: @escaping (Block) -> Void,
         todoProvider: @escaping (UUID) async -> TodoItem? = { _ in nil },
         onToggleComplete: @escaping (UUID) async -> Void = { _ in },
@@ -99,7 +101,7 @@ public struct TodoBlockView: View {
         todoRevision: Int = 0
     ) {
         self.block = block
-        self.textSize = textSize
+        self.editorTypography = editorTypography
         self.onChanged = onChanged
         self.todoProvider = todoProvider
         self.onToggleComplete = onToggleComplete
@@ -118,7 +120,8 @@ public struct TodoBlockView: View {
         // font's line center (ascender−descender)/2. Not a magic offset:
         // it is the same metric family the published TextKit value
         // converges to; the published value refines it on the next turn.
-        let seedFont = NoteFontResolver.load().font(size: textSize, for: "")
+        let seedFont = NoteFontResolver(preference: editorTypography.fontPreference)
+            .font(size: editorTypography.textSize, for: "")
         _firstLineCenterY = State(initialValue: (seedFont.ascender - seedFont.descender) / 2)
     }
 
@@ -171,7 +174,7 @@ public struct TodoBlockView: View {
             // is display-only.
             RichTextView(
                 document: todoDocument,
-                textSize: textSize,
+                editorTypography: editorTypography,
                 onCommit: { document in
                     commitText(document)
                 },

@@ -224,7 +224,7 @@ import AssetStore
         )
         var committed: [Block] = []
         let hosting = NSHostingView(rootView: RichTextBlockView(
-            note: note, blocks: [primary, todoBlock], onBlocksChanged: { committed = $0 }
+            note: note, editorTypography: .system(textSize: CGFloat(note.textSize)), blocks: [primary, todoBlock], onBlocksChanged: { committed = $0 }
         ))
         hosting.frame = NSRect(x: 0, y: 0, width: 420, height: 800)
         hosting.layoutSubtreeIfNeeded()
@@ -264,7 +264,7 @@ import AssetStore
         )
         var committed: [Block] = []
         let hosting = NSHostingView(rootView: RichTextBlockView(
-            note: note, blocks: [primary, codeBlock], onBlocksChanged: { committed = $0 }
+            note: note, editorTypography: .system(textSize: CGFloat(note.textSize)), blocks: [primary, codeBlock], onBlocksChanged: { committed = $0 }
         ))
         hosting.frame = NSRect(x: 0, y: 0, width: 420, height: 800)
         hosting.layoutSubtreeIfNeeded()

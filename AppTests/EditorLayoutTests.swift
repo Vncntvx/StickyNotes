@@ -33,6 +33,7 @@ import Persistence
         )
         let view = RichTextBlockView(
             note: Note(lastModifiedDeviceId: Self.deviceId),
+            editorTypography: .system(textSize: 13),
             blocks: [block],
             onBlocksChanged: { _ in }
         )
@@ -64,6 +65,7 @@ import Persistence
         // 真实窗口管线：NSHostingView attach 到 NSWindow 后 layout。
         let hosting = NSHostingView(rootView: RichTextBlockView(
             note: Note(lastModifiedDeviceId: Self.deviceId),
+            editorTypography: .system(textSize: 13),
             blocks: [Block(
                 noteId: UUID(),
                 kind: .richText,

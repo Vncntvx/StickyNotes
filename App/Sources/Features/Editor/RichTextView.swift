@@ -65,10 +65,12 @@ public struct RichTextView: NSViewRepresentable {
 
     /// The canonical document currently owned by the model.
     let document: RichTextDocument
-    let textSize: CGFloat
-    /// The FR-043 global font preference applied to note text (system font
-    /// when no preference is stored).
-    let fontResolver: NoteFontResolver
+    /// The resolved typography for this editor (Phase 2, 2026-08-14): the
+    /// global font preference (nil = system font), the spacing preset, and
+    /// the PER-NOTE text size. A required VALUE — the SwiftUI layer computes
+    /// it from the observable `TypographyPreferences`; the editor subtree
+    /// never touches UserDefaults or the preference object.
+    let editorTypography: EditorTypography
     /// Reports a canonical document produced by editing (only supported
     /// attributes survive — FR-053).
     let onCommit: (RichTextDocument) -> Void
@@ -122,8 +124,7 @@ public struct RichTextView: NSViewRepresentable {
 
     public init(
         document: RichTextDocument,
-        textSize: CGFloat,
-        fontResolver: NoteFontResolver = .load(),
+        editorTypography: EditorTypography,
         onCommit: @escaping (RichTextDocument) -> Void,
         onFocusChange: @escaping (Bool, Bool) -> Void = { _, _ in },
         selectionBridge: EditorSelectionBridge? = nil,
@@ -140,8 +141,7 @@ public struct RichTextView: NSViewRepresentable {
         onFocusRequestHandled: @escaping () -> Void = {}
     ) {
         self.document = document
-        self.textSize = textSize
-        self.fontResolver = fontResolver
+        self.editorTypography = editorTypography
         self.onCommit = onCommit
         self.onFocusChange = onFocusChange
         self.selectionBridge = selectionBridge
@@ -189,7 +189,8 @@ public struct RichTextView: NSViewRepresentable {
             height: verticalInset
         )
         textView.textContainer?.lineFragmentPadding = Self.lineFragmentPadding
-        textView.font = fontResolver.font(size: textSize, for: "")
+        let resolver = NoteFontResolver(preference: editorTypography.fontPreference)
+        textView.font = resolver.font(size: editorTypography.textSize, for: "")
         textView.delegate = context.coordinator
         textView.autoresizingMask = [.width]
         // 004 修复: 尾部/todo 编辑器内容自适应（无 320 最小高度）；主纸面
@@ -198,7 +199,7 @@ public struct RichTextView: NSViewRepresentable {
             textView.minimumHeight = minimumHeight
         }
         textView.collapsesBottomInset = collapsesBottomInset
-        context.coordinator.apply(document: document, textSize: textSize, resolver: fontResolver, to: textView)
+        context.coordinator.applyDocument(document, typography: editorTypography, to: textView)
         return textView
     }
 
@@ -251,12 +252,29 @@ public struct RichTextView: NSViewRepresentable {
                 coordinator?.publishFirstLineTypographicCenter(textView)
             }
         }
-        // Push model changes only when the document actually differs (the
-        // user is editing — never clobber the live text).
-        if textView.string != document.text {
-            context.coordinator.apply(document: document, textSize: textSize, resolver: fontResolver, to: textView)
-        } else if textView.font?.pointSize != textSize {
-            textView.font = fontResolver.font(size: textSize, for: textView.string)
+        // The three update paths (Phase 3, 2026-08-14):
+        // A. user typing — handled by textDidChange, NOT here (this branch
+        //    only guards against pushing while the user edits);
+        // B. content push — the document text actually differs: applyDocument
+        //    (may rebuild the attributed string; setAttributedString allowed);
+        // C. typography-only refresh — text equal but the RESOLVED typography
+        //    changed: restyleTypographyInPlace (in-place attribute edits
+        //    ONLY — never setAttributedString, never string replacement).
+        //
+        // FR-063: while the IME is composing, the live string contains the
+        // marked text but the model holds the pre-composition version — both
+        // B and C are destructive to the composition, so they defer: the
+        // content push skips (the commit canonicalizes once the composition
+        // lands) and the typography refresh parks on `pendingTypography`
+        // (last-write-wins) until the composition commits.
+        if textView.hasMarkedText() {
+            if editorTypography != context.coordinator.lastAppliedTypography {
+                context.coordinator.pendingTypography = editorTypography
+            }
+        } else if textView.string != document.text {
+            context.coordinator.applyDocument(document, typography: editorTypography, to: textView)
+        } else if editorTypography != context.coordinator.lastAppliedTypography {
+            context.coordinator.restyleTypographyInPlace(editorTypography, document: document, to: textView)
         }
         // 004 修复: 显示专用样式（todo 完成态）每次更新对齐——文本未变也
         // 要跟随勾选状态切换。
@@ -287,6 +305,14 @@ public struct RichTextView: NSViewRepresentable {
         /// 004 修复: insertion-focus requests are handled once per request
         /// edge (re-armed by updateNSView when the request clears).
         var didHandleFocusRequest = false
+        /// Phase 3: the typography the storage was last rendered with —
+        /// the updateNSView fingerprint that discriminates content pushes
+        /// from presentation-only refreshes.
+        var lastAppliedTypography: EditorTypography?
+        /// Phase 3: a typography change parked while the IME is composing.
+        /// Last-write-wins (no queueing) — the composition commit restyles
+        /// once.
+        var pendingTypography: EditorTypography?
 
         /// 004 FR-012 (clarify 2026-08-10): the window whose key-state
         /// notifications republish the selection snapshot, plus the
@@ -318,6 +344,114 @@ public struct RichTextView: NSViewRepresentable {
         /// structural changes (⌘Z/⌘⇧Z span the whole note).
         public func undoManager(for view: NSTextView) -> UndoManager? {
             parent.undoManager
+        }
+
+        // MARK: - Formatting (semantic marks — commit + undo, 004 修复)
+
+        /// The semantic marks requested for SUBSEQUENT input (the typing
+        /// attributes state). The restyle pipeline rebuilds typing
+        /// attributes from this set — never from raw typingAttributes —
+        /// so display-only styling (completed-todo strikethrough) can
+        /// never leak into semantic state.
+        private var pendingTypingMarks: Set<RichTextMark> = []
+
+        /// Applies marks through the semantic pipeline: the selection path
+        /// toggles semantic marks per segment, re-renders the presentation,
+        /// and COMMITS the canonical document — attribute edits never fire
+        /// `textDidChange`, so without this commit a ⌘B-then-close loses
+        /// the mark. Undo restores SEMANTIC mark segments with the CURRENT
+        /// typography (a font change between ⌘B and ⌘Z survives the undo —
+        /// presentation is never undo state).
+        @discardableResult
+        func applyMarks(_ marks: Set<RichTextMark>, to textView: NSTextView) -> Bool {
+            guard !isPushing, !textView.hasMarkedText() else { return false }
+            guard let storage = textView.textStorage else { return false }
+            let range = textView.selectedRange()
+            guard range.length > 0 else {
+                // Typing path: no content exists yet — no commit, no undo.
+                pendingTypingMarks.formUnion(marks)
+                RichTextMarkApplier.renderTypingAttributes(
+                    pendingTypingMarks,
+                    textView: textView,
+                    textSize: parent.editorTypography.textSize
+                )
+                return true
+            }
+            let before = RichTextMarkApplier.semanticMarks(in: range, storage: storage)
+            let pairs = before.map { segment in
+                (
+                    range: segment.range,
+                    before: segment.marks,
+                    after: segment.marks.symmetricDifference(marks)
+                )
+            }
+            RichTextMarkApplier.applyMarks(marks, to: textView)
+            commitCurrentDocument(from: textView)
+            registerFormattingUndo(pairs, textView: textView)
+            return true
+        }
+
+        /// Registers one formatting undo action as its OWN group — the
+        /// same discipline as the host's structural undo
+        /// (`NoteWindowHostModel.registerStructuralUndo`): event grouping
+        /// is temporarily suspended so consecutive formatting commands
+        /// reverse one at a time, and typing coalescing is unaffected
+        /// (the explicit group closes before the next event's typing).
+        private func registerFormattingUndo(
+            _ pairs: [(range: NSRange, before: Set<RichTextMark>, after: Set<RichTextMark>)],
+            textView: NSTextView
+        ) {
+            guard let undoManager = textView.undoManager else { return }
+            let prior = undoManager.groupsByEvent
+            undoManager.groupsByEvent = false
+            undoManager.beginUndoGrouping()
+            undoManager.registerUndo(withTarget: self) { target in
+                target.restoreFormattingSegments(pairs, to: textView, restoringBefore: true)
+            }
+            undoManager.endUndoGrouping()
+            undoManager.groupsByEvent = prior
+        }
+
+        /// Restores a semantic formatting state (undo/redo counterpart).
+        /// Renders each segment's marks with the CURRENT typography, then
+        /// re-commits the canonical document and registers the opposite
+        /// direction.
+        private func restoreFormattingSegments(
+            _ pairs: [(range: NSRange, before: Set<RichTextMark>, after: Set<RichTextMark>)],
+            to textView: NSTextView,
+            restoringBefore: Bool
+        ) {
+            guard !isPushing, !textView.hasMarkedText(), let storage = textView.textStorage else { return }
+            for pair in pairs {
+                let wanted = restoringBefore ? pair.before : pair.after
+                RichTextMarkApplier.renderSemanticMarks(
+                    wanted,
+                    in: pair.range,
+                    storage: storage,
+                    fontResolver: NoteFontResolver(preference: parent.editorTypography.fontPreference),
+                    textSize: parent.editorTypography.textSize
+                )
+            }
+            commitCurrentDocument(from: textView)
+            textView.undoManager?.registerUndo(withTarget: self) { target in
+                target.restoreFormattingSegments(pairs, to: textView, restoringBefore: !restoringBefore)
+            }
+        }
+
+        /// Commits the text view's current attributed content into the
+        /// canonical document (shared by text edits and formatting-only
+        /// edits — attribute changes never fire `textDidChange`). Returns
+        /// the committed document (the restyle-after-composition path
+        /// renders against it — the parent's document may still be the
+        /// pre-composition version).
+        @discardableResult
+        private func commitCurrentDocument(from textView: NSTextView) -> RichTextDocument {
+            let document = Self.canonicalDocument(
+                from: textView.attributedString(),
+                excludesDisplayStyling: parent.displayStyling?.strikethrough == true
+            )
+            parent.onCommit(document)
+            return document
         }
 
         /// 004 T037: attaches the selection bridge to this editor's text
@@ -359,7 +493,16 @@ public struct RichTextView: NSViewRepresentable {
             publishSelection(from: textView)
         }
 
-        func apply(document: RichTextDocument, textSize: CGFloat, resolver: NoteFontResolver, to textView: NSTextView) {
+        /// The CONTENT push path (Phase 3 rename): model → text view. May
+        /// rebuild the attributed string (setAttributedString allowed —
+        /// this is the only path permitted to). Does not canonicalize, does
+        /// not autosave, registers no undo.
+        func applyDocument(_ document: RichTextDocument, typography: EditorTypography, to textView: NSTextView) {
+            // FR-063: a model push during composition would overwrite the
+            // marked text (the model string still holds the pre-composition
+            // version) — defer; the commit canonicalizes once the
+            // composition lands.
+            guard !textView.hasMarkedText() else { return }
             isPushing = true
             defer { isPushing = false }
             // 004 修复: model pushes must not register undo actions AND must
@@ -368,10 +511,20 @@ public struct RichTextView: NSViewRepresentable {
             let undo = textView.undoManager
             undo?.disableUndoRegistration()
             defer { undo?.enableUndoRegistration() }
-            textView.font = resolver.font(size: textSize, for: document.text)
+            let resolver = NoteFontResolver(preference: typography.fontPreference)
+            textView.font = resolver.font(size: typography.textSize, for: document.text)
             textView.string = document.text
-            applyRuns(document, textSize: textSize, resolver: resolver, to: textView)
+            applyRuns(document, typography: typography, to: textView)
+            // The content push resets typing attributes — sync the spacing
+            // layer explicitly (Relaxed→Default must really REMOVE the
+            // style, not just skip adding it).
+            if let style = paragraphStyle(for: typography) {
+                textView.typingAttributes[.paragraphStyle] = style
+            } else {
+                textView.typingAttributes[.paragraphStyle] = nil
+            }
             applyDisplayStyling(to: textView)
+            lastAppliedTypography = typography
         }
 
         /// 004 修复: applies/removes the display-only styling (todo
@@ -459,17 +612,19 @@ public struct RichTextView: NSViewRepresentable {
             guard !isPushing, let textView = notification.object as? NSTextView else { return }
             // FR-063: never persist partial IME composition.
             guard !textView.hasMarkedText() else { return }
-            let document = Self.canonicalDocument(
-                from: textView.attributedString(),
-                excludesDisplayStyling: parent.displayStyling?.strikethrough == true
-            )
-            parent.onCommit(document)
+            let document = commitCurrentDocument(from: textView)
             // 004 修复 (2026-08-13 用户实测): FR-063 suppresses selection
             // publishes DURING composition — republish after the commit so
             // the insertion-target registry never lags behind the caret
             // (stale offsets made window-level Insert split at the wrong
             // position right after CJK input).
             publishSelection(from: textView)
+            // Phase 3: the composition has landed — apply a typography
+            // change parked during composition (last-write-wins).
+            if let pending = pendingTypography {
+                pendingTypography = nil
+                restyleTypographyInPlace(pending, document: document, to: textView)
+            }
         }
 
         public func textDidEndEditing(_ notification: Notification) {
@@ -546,23 +701,14 @@ public struct RichTextView: NSViewRepresentable {
                 let end = min(scalars.count, scalarCursor + segmentScalars)
                 scalarCursor = end
                 guard end > start else { return }
-                var marks: Set<RichTextMark> = []
-                if let font = attributes[.font] as? NSFont {
-                    let traits = font.fontDescriptor.symbolicTraits
-                    if traits.contains(.bold) { marks.insert(.bold) }
-                    // 004 修复: synthesized oblique (matrix) fonts count as
-                    // italic, and CJK italic is synthesized via `.obliqueness`
-                    // (no italic face) — both must survive the round trip.
-                    if RichTextMarkApplier.hasTrait(.italic, in: font) || attributes[.obliqueness] != nil {
-                        marks.insert(.italic)
-                    }
-                    let family = font.familyName ?? ""
-                    if family.localizedCaseInsensitiveContains("mono") || family.localizedCaseInsensitiveContains("courier") {
-                        marks.insert(.inlineCode)
-                    }
-                }
-                if attributes[.underlineStyle] != nil { marks.insert(.underline) }
-                if !excludesDisplayStyling, attributes[.strikethroughStyle] != nil { marks.insert(.strikethrough) }
+                // 004 修复: the mark detection whitelist lives in
+                // RichTextMarkApplier.semanticMarks(from:) — the SAME rules
+                // the formatting undo snapshots use, so canonicalization
+                // and undo can never drift apart.
+                let marks = RichTextMarkApplier.semanticMarks(
+                    from: attributes,
+                    excludesDisplayStyling: excludesDisplayStyling
+                )
                 if let link = attributes[.link] as? URL {
                     runs.append(RichTextRun(startScalar: start, endScalar: end, marks: marks, link: link.absoluteString))
                 } else if let link = attributes[.link] as? String {
@@ -602,12 +748,24 @@ public struct RichTextView: NSViewRepresentable {
             return RichTextDocument(text: text, paragraphs: paragraphs)
         }
 
-        /// Applies the canonical runs as NSAttributedString attributes.
-        private func applyRuns(_ document: RichTextDocument, textSize: CGFloat, resolver: NoteFontResolver, to textView: NSTextView) {
-            let attributed = NSMutableAttributedString(string: document.text)
-            let full = NSRange(location: 0, length: attributed.length)
-            attributed.addAttribute(.font, value: resolver.font(size: textSize, for: document.text), range: full)
+        /// The font-affecting presentation plan for the document's runs
+        /// under a typography — `(range, font, obliqueness)` entries in
+        /// application order (full-range base font first, then per-run
+        /// coverage segments). Covers ALL font-affecting semantic marks:
+        /// bold, italic (+ CJK obliqueness) and inlineCode (monospaced).
+        /// Underline / strikethrough / link are NOT font-affecting — the
+        /// content push applies them separately and the in-place restyle
+        /// leaves them untouched.
+        private func presentationFontPlan(
+            document: RichTextDocument,
+            typography: EditorTypography
+        ) -> [(range: NSRange, font: NSFont, obliqueness: Double?)] {
             let scalars = Array(document.text.unicodeScalars)
+            let resolver = NoteFontResolver(preference: typography.fontPreference)
+            let textSize = typography.textSize
+            var plan: [(range: NSRange, font: NSFont, obliqueness: Double?)] = []
+            let full = NSRange(location: 0, length: (document.text as NSString).length)
+            plan.append((full, resolver.font(size: textSize, for: document.text), nil))
             for paragraph in document.paragraphs {
                 for run in paragraph.runs {
                     let start = min(max(run.startScalar, 0), scalars.count)
@@ -630,22 +788,62 @@ public struct RichTextView: NSViewRepresentable {
                         if run.marks.contains(.inlineCode) {
                             font = NSFont.monospacedSystemFont(ofSize: textSize, weight: .regular)
                         }
-                        attributed.addAttribute(
-                            .font,
-                            value: font,
-                            range: NSRange(location: segmentStart, length: segmentEnd - segmentStart)
-                        )
                         // 004 修复: italic on a family without an italic
                         // face (CJK) renders via synthesized obliqueness.
-                        if run.marks.contains(.italic), !RichTextMarkApplier.hasTrait(.italic, in: font) {
-                            attributed.addAttribute(
-                                .obliqueness,
-                                value: RichTextMarkApplier.synthesizedItalicObliqueness,
-                                range: NSRange(location: segmentStart, length: segmentEnd - segmentStart)
-                            )
-                        }
+                        let obliqueness: Double? = run.marks.contains(.italic)
+                            && !RichTextMarkApplier.hasTrait(.italic, in: font)
+                            ? RichTextMarkApplier.synthesizedItalicObliqueness
+                            : nil
+                        plan.append((
+                            NSRange(location: segmentStart, length: segmentEnd - segmentStart),
+                            font,
+                            obliqueness
+                        ))
                         segmentScalarOffset = segmentEnd
                     }
+                }
+            }
+            return plan
+        }
+
+        /// The paragraph style for a typography — `nil` for the standard
+        /// preset (zero delta from the TextKit-default metrics: NO
+        /// paragraph style is written at all). The compact/relaxed line
+        /// spacing values are prototype tuning constants (see
+        /// `EditorTypography.lineSpacing`).
+        private func paragraphStyle(for typography: EditorTypography) -> NSParagraphStyle? {
+            guard let lineSpacing = typography.lineSpacing else { return nil }
+            let style = NSMutableParagraphStyle()
+            style.lineSpacing = lineSpacing
+            return style
+        }
+
+        /// Applies the canonical runs as NSAttributedString attributes —
+        /// the CONTENT push renderer (rebuilds a fresh attributed string;
+        /// setAttributedString allowed ONLY here).
+        private func applyRuns(_ document: RichTextDocument, typography: EditorTypography, to textView: NSTextView) {
+            let attributed = NSMutableAttributedString(string: document.text)
+            for entry in presentationFontPlan(document: document, typography: typography) {
+                attributed.addAttribute(.font, value: entry.font, range: entry.range)
+                if let obliqueness = entry.obliqueness {
+                    attributed.addAttribute(.obliqueness, value: obliqueness, range: entry.range)
+                }
+            }
+            if let style = paragraphStyle(for: typography) {
+                attributed.addAttribute(
+                    .paragraphStyle,
+                    value: style,
+                    range: NSRange(location: 0, length: attributed.length)
+                )
+            }
+            // Non-font-affecting marks + links (content push only — the
+            // in-place restyle never rebuilds these).
+            let scalars = Array(document.text.unicodeScalars)
+            for paragraph in document.paragraphs {
+                for run in paragraph.runs {
+                    let start = min(max(run.startScalar, 0), scalars.count)
+                    let end = min(max(run.endScalar, start), scalars.count)
+                    guard end > start else { continue }
                     let range = NSRange(location: start, length: end - start)
                     if run.marks.contains(.underline) {
                         attributed.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
@@ -660,6 +858,85 @@ public struct RichTextView: NSViewRepresentable {
             }
             let current = textView.textStorage ?? NSTextStorage()
             current.setAttributedString(attributed)
+        }
+
+        /// The PRESENTATION refresh path (Phase 3, 2026-08-14): re-renders
+        /// the font-affecting attributes IN PLACE on the existing storage.
+        /// Never calls setAttributedString, never assigns `textView.string`
+        /// — no textDidChange, no canonicalization, no autosave, no undo
+        /// registration. Preserves the selection and first responder; the
+        /// typing attributes are rebuilt as typography → semantic typing
+        /// marks → display styling (the display layer is an overlay, never
+        /// a semantic source).
+        func restyleTypographyInPlace(_ typography: EditorTypography, document: RichTextDocument, to textView: NSTextView) {
+            // FR-063: defer while composing — last-write-wins.
+            guard !textView.hasMarkedText(), let storage = textView.textStorage else {
+                pendingTypography = typography
+                return
+            }
+            let selection = textView.selectedRange()
+            let focused = textView.window?.firstResponder === textView
+            let undo = textView.undoManager
+            undo?.disableUndoRegistration()
+            defer { undo?.enableUndoRegistration() }
+            let resolver = NoteFontResolver(preference: typography.fontPreference)
+            // Set the default font BEFORE the storage pass — the property
+            // setter can rewrite the whole text's font, so it must never
+            // run after the per-run plan (it would wipe the segment fonts).
+            textView.font = resolver.font(size: typography.textSize, for: document.text)
+            storage.beginEditing()
+            let full = NSRange(location: 0, length: storage.length)
+            storage.removeAttribute(.obliqueness, range: full)
+            // Relaxed→Default must really REMOVE the old style — remove
+            // first, then conditionally add (Phase 4).
+            storage.removeAttribute(.paragraphStyle, range: full)
+            for entry in presentationFontPlan(document: document, typography: typography) {
+                storage.addAttribute(.font, value: entry.font, range: entry.range)
+                if let obliqueness = entry.obliqueness {
+                    storage.addAttribute(.obliqueness, value: obliqueness, range: entry.range)
+                }
+            }
+            if let style = paragraphStyle(for: typography) {
+                storage.addAttribute(.paragraphStyle, value: style, range: full)
+            }
+            storage.endEditing()
+            if focused {
+                textView.setSelectedRange(selection)
+            }
+            // Typing attributes, in layer order: current typography (family
+            // + size from the restyled caret font) → semantic typing marks
+            // (pendingTypingMarks + the caret's content marks — derived from
+            // the RESTYLED storage, so display-only styling can never leak
+            // in) → display styling overlay (applyDisplayStyling below).
+            var typingMarks = pendingTypingMarks
+            if storage.length > 0 {
+                let caretLocation = min(max(selection.location, 0), storage.length - 1)
+                let caretAttributes = storage.attributes(at: caretLocation, effectiveRange: nil)
+                typingMarks.formUnion(RichTextMarkApplier.semanticMarks(from: caretAttributes, excludesDisplayStyling: true))
+            }
+            if storage.length > 0 {
+                let caretLocation = min(max(selection.location, 0), storage.length - 1)
+                var typing = textView.typingAttributes
+                typing[.font] = (storage.attribute(.font, at: caretLocation, effectiveRange: nil) as? NSFont)
+                    ?? resolver.font(size: typography.textSize, for: "")
+                typing[.obliqueness] = nil
+                typing[.underlineStyle] = nil
+                textView.typingAttributes = typing
+            }
+            RichTextMarkApplier.renderTypingAttributes(typingMarks, textView: textView, textSize: typography.textSize)
+            // The spacing layer for SUBSEQUENT input (same remove-then-add
+            // discipline as the storage pass).
+            if let style = paragraphStyle(for: typography) {
+                textView.typingAttributes[.paragraphStyle] = style
+            } else {
+                textView.typingAttributes[.paragraphStyle] = nil
+            }
+            applyDisplayStyling(to: textView)
+            lastAppliedTypography = typography
+            // Attribute edits do not fire didChangeText — invalidate the
+            // intrinsic explicitly so the SwiftUI ScrollView re-measures
+            // (font metrics changed the used rect).
+            textView.invalidateIntrinsicContentSize()
         }
     }
 }

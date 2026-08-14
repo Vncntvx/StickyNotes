@@ -79,7 +79,10 @@ public struct CodeTextView: NSViewRepresentable {
         // read stale focus flags.
         context.coordinator.parent = self
         context.coordinator.attach(textView)
-        if textView.string != text {
+        // FR-063: while the IME is composing, the live string contains the
+        // marked text but the model holds the pre-composition version — a
+        // push here would destroy the composition.
+        if !textView.hasMarkedText(), textView.string != text {
             context.coordinator.push(text: text, to: textView)
         }
         if requestFocus {
@@ -128,6 +131,8 @@ public struct CodeTextView: NSViewRepresentable {
         }
 
         func push(text: String, to textView: NSTextView) {
+            // FR-063: never overwrite an active IME composition.
+            guard !textView.hasMarkedText() else { return }
             isPushing = true
             defer { isPushing = false }
             let undo = textView.undoManager

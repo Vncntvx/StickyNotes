@@ -286,7 +286,7 @@ extension NoteWindowLifecycleTests {
 extension NoteWindowLifecycleTests {
     @Test
     func windowDeactivationClearsEditorFocusFlag() async throws {
-        let editor = RichTextView(document: .plain(""), textSize: 13, onCommit: { _ in })
+        let editor = RichTextView(document: .plain(""), editorTypography: .system(textSize: 13), onCommit: { _ in })
         let bridge = EditorSelectionBridge(noteId: UUID())
         let coordinator = RichTextView.Coordinator(editor)
 

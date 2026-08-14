@@ -578,9 +578,21 @@ public struct NoteWindowContent: View {
     public var body: some View {
         Group {
             if let host, let note = host.note {
+                // Phase 3: compute the resolved typography VALUE from the
+                // observable global preferences + the note's per-note text
+                // size. Reading `environment.typography` here registers
+                // SwiftUI observation — a preference change re-renders this
+                // body, recomputes the value, and every open editor
+                // restyles in place.
+                let editorTypography = EditorTypography(
+                    fontPreference: environment.typography.fontPreference,
+                    textSpacing: environment.typography.textSpacing,
+                    textSize: ReadableTheme.textSize(for: note)
+                )
                 VStack(spacing: 0) {
                     RichTextBlockView(
                         note: note,
+                        editorTypography: editorTypography,
                         blocks: host.blocks,
                         onAppearanceChange: { updated in
                             host.updateAppearance(updated)
@@ -823,7 +835,7 @@ public struct NoteWindowContent: View {
         // T301 (FR-181): full-value appearance submenus — every color /
         // opacity step / text size reachable without pointer hover (moved
         // from the removed NoteControlsView).
-        Menu("Appearance") {
+        Menu("Note Appearance") {
             Menu("Note Color") {
                 ForEach(NotePaletteKey.allCases, id: \.self) { key in
                     Button {

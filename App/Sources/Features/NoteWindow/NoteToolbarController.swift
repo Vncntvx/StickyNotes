@@ -274,13 +274,13 @@ final class NoteToolbarController: NSObject, NSToolbarDelegate {
             pointSize: NoteToolbarSpec.paletteSymbolPointSize,
             action: #selector(appearanceAction(_:))
         )
-        button.toolTip = String(localized: "Appearance")
-        button.setAccessibilityLabel(String(localized: "Appearance"))
+        button.toolTip = String(localized: "Note Appearance")
+        button.setAccessibilityLabel(String(localized: "Note Appearance"))
         let item = toolbarItem(
             identifier: NoteToolbarSpec.appearanceIdentifier,
             button: button,
-            label: String(localized: "Appearance"),
-            tooltip: String(localized: "Appearance"),
+            label: String(localized: "Note Appearance"),
+            tooltip: String(localized: "Note Appearance"),
             menuForm: makeAppearanceSubmenu(),
             priority: NoteWindowDerivations.toolbarVisibilityPriority(itemIdentifier: NoteToolbarSpec.appearanceIdentifier)
         )
@@ -380,8 +380,8 @@ final class NoteToolbarController: NSObject, NSToolbarDelegate {
     /// (0–100%, 004 Q8) + reset — migrated from the former NoteControlsView
     /// context menu (T027; single action source with the panel).
     private func makeAppearanceSubmenu() -> NSMenuItem {
-        let item = NSMenuItem(title: String(localized: "Appearance"), action: nil, keyEquivalent: "")
-        let menu = NSMenu(title: String(localized: "Appearance"))
+        let item = NSMenuItem(title: String(localized: "Note Appearance"), action: nil, keyEquivalent: "")
+        let menu = NSMenu(title: String(localized: "Note Appearance"))
         item.submenu = menu
 
         let colorMenu = NSMenu(title: String(localized: "Note Color"))

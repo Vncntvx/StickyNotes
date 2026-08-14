@@ -88,6 +88,7 @@ import SystemBridge
         let noteId = UUID()
         let view = RichTextBlockView(
             note: Note(lastModifiedDeviceId: deviceId),
+            editorTypography: .system(textSize: 13),
             blocks: [
                 Block(
                     noteId: noteId, kind: .richText, sortKey: 0,
@@ -165,6 +166,7 @@ import SystemBridge
         let bodyText = "独享纸面的一段正文。"
         let view = RichTextBlockView(
             note: Note(lastModifiedDeviceId: deviceId),
+            editorTypography: .system(textSize: 13),
             blocks: [
                 Block(
                     noteId: noteId, kind: .richText, sortKey: 0,
@@ -199,6 +201,7 @@ import SystemBridge
         let trailingId = UUID()
         let view = RichTextBlockView(
             note: Note(lastModifiedDeviceId: deviceId),
+            editorTypography: .system(textSize: 13),
             blocks: [
                 Block(
                     noteId: noteId, kind: .richText, sortKey: 0,

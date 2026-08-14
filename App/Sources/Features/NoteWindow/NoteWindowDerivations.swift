@@ -470,10 +470,191 @@ public enum NoteWindowDerivations {
 // MARK: - RichTextMarkApplier (004 FR-012/FR-053; US5)
 
 /// Applies supported marks to an NSTextView — the single formatting entry
-/// point. NSTextView is the formatting authority; SwiftUI holds no mark
-/// state copy. Selection path edits the textStorage; the no-selection path
-/// edits typingAttributes (applies to subsequent input).
+/// point. SEMANTIC marks are the source of truth for formatting state:
+/// the applier derives the current mark set per segment, toggles the
+/// requested marks, and re-renders the presentation attributes (font /
+/// obliqueness / underline / strikethrough) from that semantic state.
+/// Undo snapshots therefore capture `[range, Set<RichTextMark>]` segments —
+/// NEVER raw NSAttributedString attributes — so an undo can never resurrect
+/// a stale font family or size (presentation typography is not formatting).
+/// Selection path edits the textStorage; the no-selection path edits
+/// typingAttributes (applies to subsequent input).
 public enum RichTextMarkApplier {
+
+    /// A segment of semantic mark state (the undo snapshot unit).
+    public struct MarkSegment: Equatable, Sendable {
+        public var range: NSRange
+        public var marks: Set<RichTextMark>
+
+        public init(range: NSRange, marks: Set<RichTextMark>) {
+            self.range = range
+            self.marks = marks
+        }
+    }
+
+    // MARK: - Semantic extraction
+
+    /// The semantic marks carried by a set of attributes — the single
+    /// detection whitelist shared by the canonical round trip
+    /// (`RichTextView.Coordinator.canonicalDocument`) and the formatting
+    /// undo snapshots. `excludesDisplayStyling` drops the display-only
+    /// strikethrough (todo completion), so presentation never leaks into
+    /// semantic state.
+    public static func semanticMarks(
+        from attributes: [NSAttributedString.Key: Any],
+        excludesDisplayStyling: Bool = false
+    ) -> Set<RichTextMark> {
+        var marks: Set<RichTextMark> = []
+        if let font = attributes[.font] as? NSFont {
+            let traits = font.fontDescriptor.symbolicTraits
+            if traits.contains(.bold) { marks.insert(.bold) }
+            // 004 修复: synthesized oblique (matrix) fonts count as
+            // italic, and CJK italic is synthesized via `.obliqueness`
+            // (no italic face) — both must survive the round trip.
+            if hasTrait(.italic, in: font) || attributes[.obliqueness] != nil {
+                marks.insert(.italic)
+            }
+            let family = font.familyName ?? ""
+            if family.localizedCaseInsensitiveContains("mono") || family.localizedCaseInsensitiveContains("courier") {
+                marks.insert(.inlineCode)
+            }
+        }
+        if attributes[.underlineStyle] != nil { marks.insert(.underline) }
+        if !excludesDisplayStyling, attributes[.strikethroughStyle] != nil { marks.insert(.strikethrough) }
+        return marks
+    }
+
+    /// The semantic mark segments across a range (adjacent attribute runs
+    /// carrying identical mark sets are coalesced).
+    @MainActor
+    public static func semanticMarks(in range: NSRange, storage: NSTextStorage) -> [MarkSegment] {
+        var segments: [MarkSegment] = []
+        storage.enumerateAttributes(in: range, options: []) { attributes, subrange, _ in
+            let marks = semanticMarks(from: attributes)
+            if var last = segments.last,
+               last.range.location + last.range.length == subrange.location,
+               last.marks == marks {
+                last.range = NSRange(location: last.range.location, length: last.range.length + subrange.length)
+                segments[segments.count - 1] = last
+            } else {
+                segments.append(MarkSegment(range: subrange, marks: marks))
+            }
+        }
+        return segments
+    }
+
+    // MARK: - Semantic rendering
+
+    /// Renders a semantic mark set onto a storage range — the single
+    /// semantic→presentation exit point. `fontResolver`/`textSize` name the
+    /// CURRENT typography: pass them to re-resolve the font from the
+    /// preference (undo restore must follow the current typography); pass
+    /// `nil` to keep the families currently materialized in the storage
+    /// (formatting toggles must never switch families).
+    @MainActor
+    public static func renderSemanticMarks(
+        _ marks: Set<RichTextMark>,
+        in range: NSRange,
+        storage: NSTextStorage,
+        fontResolver: NoteFontResolver?,
+        textSize: CGFloat?
+    ) {
+        guard range.length > 0,
+              range.location >= 0,
+              range.location + range.length <= storage.length else { return }
+        storage.removeAttribute(.obliqueness, range: range)
+        storage.removeAttribute(.underlineStyle, range: range)
+        storage.removeAttribute(.strikethroughStyle, range: range)
+        let text = (storage.string as NSString).substring(with: range)
+        let size = textSize
+            ?? (storage.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont)?.pointSize
+            ?? NSFont.systemFontSize
+        var traits: NSFontDescriptor.SymbolicTraits = []
+        if marks.contains(.bold) { traits.insert(.bold) }
+        if marks.contains(.italic) { traits.insert(.italic) }
+        let segments: [(segment: String, font: NSFont)]
+        if let fontResolver {
+            segments = fontResolver.segmentedFonts(text: text, size: size, traits: traits)
+        } else {
+            segments = Self.storageFamilySegments(text: text, range: range, size: size, traits: traits, storage: storage)
+        }
+        var utf16Cursor = 0
+        for segment in segments {
+            let length = (segment.segment as NSString).length
+            guard length > 0 else { continue }
+            let segmentRange = NSRange(location: range.location + utf16Cursor, length: length)
+            var font = segment.font
+            if marks.contains(.inlineCode) {
+                font = NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+            }
+            storage.addAttribute(.font, value: font, range: segmentRange)
+            // 004 修复: no italic face (CJK) → synthesized obliqueness,
+            // so ⌘I visibly applies instead of silently no-opping.
+            if marks.contains(.italic), !hasTrait(.italic, in: font) {
+                storage.addAttribute(.obliqueness, value: synthesizedItalicObliqueness, range: segmentRange)
+            }
+            utf16Cursor += length
+        }
+        if marks.contains(.underline) {
+            storage.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+        }
+        if marks.contains(.strikethrough) {
+            storage.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+        }
+    }
+
+    /// Coverage-segmented fonts that keep the families currently
+    /// materialized in the storage (formatting toggles; bare-test views
+    /// without a resolver). Each coverage segment adopts the family of the
+    /// font at its start offset, then applies the requested traits.
+    @MainActor
+    private static func storageFamilySegments(
+        text: String,
+        range: NSRange,
+        size: CGFloat,
+        traits: NSFontDescriptor.SymbolicTraits,
+        storage: NSTextStorage
+    ) -> [(segment: String, font: NSFont)] {
+        let scalars = Array(text.unicodeScalars)
+        guard !scalars.isEmpty else { return [] }
+        var segments: [(segment: String, font: NSFont)] = []
+        var segmentStart = 0
+        var segmentUTF16Start = 0
+        var segmentIsCJK = FontPreference.containsCJK(String(scalars[0]))
+        for index in 1...scalars.count {
+            let isCJK = index < scalars.count
+                ? FontPreference.containsCJK(String(scalars[index]))
+                : segmentIsCJK
+            guard isCJK != segmentIsCJK || index == scalars.count else { continue }
+            let segmentText = String(String.UnicodeScalarView(scalars[segmentStart..<index]))
+            let location = min(range.location + segmentUTF16Start, range.location + range.length - 1)
+            let baseFont = storage.attribute(.font, at: location, effectiveRange: nil) as? NSFont
+            var font = baseFont.flatMap { NSFont(name: $0.familyName ?? "", size: size) }
+                ?? NSFont.systemFont(ofSize: size)
+            font = fontWithTraits(traits, on: font)
+            segments.append((segmentText, font))
+            segmentUTF16Start += (segmentText as NSString).length
+            segmentStart = index
+            segmentIsCJK = isCJK
+        }
+        return segments
+    }
+
+    /// Applies bold/italic symbolic traits via NSFontManager (synthesizing
+    /// when the family lacks the face — callers add `.obliqueness` for
+    /// italic when the result carries no italic trait).
+    private static func fontWithTraits(_ traits: NSFontDescriptor.SymbolicTraits, on base: NSFont) -> NSFont {
+        var result = base
+        if traits.contains(.bold) {
+            result = synthesizedFont(result, adding: .bold)
+        }
+        if traits.contains(.italic) {
+            result = synthesizedFont(result, adding: .italic)
+        }
+        return result
+    }
+
+    // MARK: - Application
 
     /// Applies (or toggles off) the given marks. Returns `true` when any
     /// change was applied.
@@ -493,20 +674,13 @@ public enum RichTextMarkApplier {
     @MainActor
     private static func applyToRange(_ range: NSRange, marks: Set<RichTextMark>, textView: NSTextView) -> Bool {
         guard let storage = textView.textStorage else { return false }
-        var changed = false
-        for mark in marks {
-            switch mark {
-            case .bold, .italic:
-                changed = applyFontTrait(mark, range: range, storage: storage) || changed
-            case .inlineCode:
-                changed = applyInlineCode(range: range, storage: storage) || changed
-            case .underline:
-                changed = toggleAttribute(.underlineStyle, range: range, storage: storage) || changed
-            case .strikethrough:
-                changed = toggleAttribute(.strikethroughStyle, range: range, storage: storage) || changed
-            }
+        let segments = semanticMarks(in: range, storage: storage)
+        guard !segments.isEmpty else { return false }
+        for segment in segments {
+            let toggled = segment.marks.symmetricDifference(marks)
+            renderSemanticMarks(toggled, in: segment.range, storage: storage, fontResolver: nil, textSize: nil)
         }
-        return changed
+        return true
     }
 
     /// The obliqueness applied as synthesized italic for families without
@@ -517,29 +691,57 @@ public enum RichTextMarkApplier {
 
     @MainActor
     private static func applyToTypingAttributes(_ marks: Set<RichTextMark>, textView: NSTextView) {
+        // The typing path ACCUMULATES (⌘B then ⌘I keeps both) — the current
+        // semantic set comes from the typing attributes (display-only
+        // strikethrough excluded), the requested marks union in.
+        var current = semanticMarks(from: textView.typingAttributes, excludesDisplayStyling: true)
+        current.formUnion(marks)
+        renderTypingAttributes(current, textView: textView)
+    }
+
+    /// Rebuilds the editor's typing attributes from a SEMANTIC mark set on
+    /// top of the current typography (family + size stay anchored to the
+    /// current typing font — subsequent input continues in the caret's
+    /// family). Display-only attributes (todo strikethrough / secondary
+    /// color) are preserved as-is — the display layer owns them, this
+    /// renderer never derives them from semantic state.
+    @MainActor
+    public static func renderTypingAttributes(
+        _ marks: Set<RichTextMark>,
+        textView: NSTextView,
+        textSize: CGFloat? = nil
+    ) {
         var attributes = textView.typingAttributes
         let base = (attributes[.font] as? NSFont)
             ?? textView.font
             ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
-        for mark in marks {
-            switch mark {
-            case .bold:
-                attributes[.font] = synthesizedFont(base, adding: .bold)
-            case .italic:
-                let target = synthesizedFont(base, adding: .italic)
-                attributes[.font] = target
-                if hasTrait(.italic, in: target) {
-                    attributes[.obliqueness] = nil
-                } else {
-                    attributes[.obliqueness] = synthesizedItalicObliqueness
-                }
-            case .inlineCode:
-                attributes[.font] = NSFont.monospacedSystemFont(ofSize: base.pointSize, weight: .regular)
-            case .underline:
-                attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
-            case .strikethrough:
-                attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
-            }
+        let size = textSize ?? base.pointSize
+        let baseTraits = base.fontDescriptor.symbolicTraits
+        let baseFamily = base.familyName ?? ""
+        let baseIsMono = baseFamily.localizedCaseInsensitiveContains("mono")
+            || baseFamily.localizedCaseInsensitiveContains("courier")
+        var traits: NSFontDescriptor.SymbolicTraits = []
+        if marks.contains(.bold) || baseTraits.contains(.bold) { traits.insert(.bold) }
+        if marks.contains(.italic) || hasTrait(.italic, in: base) || attributes[.obliqueness] != nil {
+            traits.insert(.italic)
+        }
+        var font: NSFont
+        if marks.contains(.inlineCode) || baseIsMono {
+            font = NSFont.monospacedSystemFont(ofSize: size, weight: traits.contains(.bold) ? .bold : .regular)
+        } else if let named = NSFont(name: baseFamily, size: size) {
+            font = fontWithTraits(traits, on: named)
+        } else {
+            font = fontWithTraits(traits, on: NSFont.systemFont(ofSize: size))
+        }
+        attributes[.font] = font
+        if traits.contains(.italic), !hasTrait(.italic, in: font) {
+            attributes[.obliqueness] = synthesizedItalicObliqueness
+        }
+        if marks.contains(.underline) {
+            attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
+        }
+        if marks.contains(.strikethrough) {
+            attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
         }
         textView.typingAttributes = attributes
     }
@@ -559,58 +761,11 @@ public enum RichTextMarkApplier {
         return NSFontManager.shared.convert(font, toNotHaveTrait: mask)
     }
 
-    @MainActor
-    private static func applyFontTrait(_ mark: RichTextMark, range: NSRange, storage: NSTextStorage) -> Bool {
-        var changed = false
-        let trait: NSFontDescriptor.SymbolicTraits = mark == .bold ? .bold : .italic
-        storage.enumerateAttribute(.font, in: range, options: []) { value, subrange, _ in
-            let font = (value as? NSFont) ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
-            let hasOblique = mark == .italic && storage.attribute(.obliqueness, at: subrange.location, effectiveRange: nil) != nil
-            if hasTrait(trait, in: font) || hasOblique {
-                // Toggle off: revert the font AND clear synthesized obliqueness.
-                storage.addAttribute(.font, value: synthesizedFont(font, removing: trait), range: subrange)
-                if mark == .italic { storage.removeAttribute(.obliqueness, range: subrange) }
-            } else {
-                let target = synthesizedFont(font, adding: trait)
-                storage.addAttribute(.font, value: target, range: subrange)
-                // 004 修复: no italic face (CJK) → synthesized obliqueness,
-                // so ⌘I visibly applies instead of silently no-opping.
-                if mark == .italic, !hasTrait(.italic, in: target) {
-                    storage.addAttribute(.obliqueness, value: synthesizedItalicObliqueness, range: subrange)
-                }
-            }
-            changed = true
-        }
-        return changed
-    }
-
     /// Whether the font carries the trait — italic also counts when the
     /// font is a synthesized oblique (descriptor matrix non-identity).
     static func hasTrait(_ trait: NSFontDescriptor.SymbolicTraits, in font: NSFont) -> Bool {
         if font.fontDescriptor.symbolicTraits.contains(trait) { return true }
         if trait == .italic, let matrix = font.fontDescriptor.matrix, matrix != .identity { return true }
         return false
-    }
-
-    @MainActor
-    private static func applyInlineCode(range: NSRange, storage: NSTextStorage) -> Bool {
-        storage.enumerateAttribute(.font, in: range, options: []) { value, subrange, _ in
-            let font = (value as? NSFont) ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
-            storage.addAttribute(.font, value: NSFont.monospacedSystemFont(ofSize: font.pointSize, weight: .regular), range: subrange)
-        }
-        return range.length > 0
-    }
-
-    /// Toggles an integer attribute (underline/strikethrough) on/off.
-    @MainActor
-    private static func toggleAttribute(_ key: NSAttributedString.Key, range: NSRange, storage: NSTextStorage) -> Bool {
-        guard range.length > 0 else { return false }
-        let existing = storage.attribute(key, at: range.location, effectiveRange: nil) != nil
-        if existing {
-            storage.removeAttribute(key, range: range)
-        } else {
-            storage.addAttribute(key, value: NSUnderlineStyle.single.rawValue, range: range)
-        }
-        return true
     }
 }

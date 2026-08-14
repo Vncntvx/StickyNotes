@@ -34,7 +34,7 @@ struct AppearancePanelView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(String(localized: "Appearance"))
+            Text(String(localized: "Note Appearance"))
                 .font(.headline)
 
             // MARK: Color palette (7 keys + custom; FR-032 verbatim)
