@@ -51,11 +51,16 @@ public struct EditorTypography: Equatable, Sendable {
         EditorTypography(fontPreference: nil, textSpacing: .standard, textSize: textSize)
     }
 
-    /// The spacing metric applied as `NSParagraphStyle.lineSpacing`.
-    /// `nil` = write no paragraph style at all (the standard preset keeps
-    /// the current TextKit-default metrics byte-for-byte). The compact /
-    /// relaxed values are PROTOTYPE constants for visual tuning — they are
-    /// not architecture decisions (9/13/24 pt × Latin/CJK/emoji acceptance
+    /// The inter-line spacing delta applied as
+    /// `NSParagraphStyle.lineSpacing`. `nil` for the standard preset — no
+    /// delta. NOTE (Plan B, 2026-08-14): on the system-default font path
+    /// (`fontPreference == nil`) the standard preset still writes a
+    /// paragraph style carrying ONLY a `minimumLineHeight` floor (the
+    /// regular body font's TextKit default line height) — it stabilizes
+    /// the CJK cascade's optical-face swap when Bold/Italic is applied,
+    /// never changing regular-text geometry. The compact / relaxed values
+    /// are PROTOTYPE constants for visual tuning — they are not
+    /// architecture decisions (9/13/24 pt × Latin/CJK/emoji acceptance
     /// decides the final values).
     public var lineSpacing: CGFloat? {
         switch textSpacing {
