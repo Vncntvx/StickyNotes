@@ -21,6 +21,10 @@ public struct NoteCardView: View {
     let card: LibraryModel.NoteCardRow
     let isKeyboardSelected: Bool
     let action: () -> Void
+    /// FR-055 (Rev 3): the user's body font family for the 2-line preview
+    /// (nil = the system caption font). The card TITLE always keeps the
+    /// system headline — information hierarchy, not user typography.
+    let previewFontFamily: String?
 
     /// SC-022 density bounds (003 T014 asserts the view uses these).
     public static let contentHeightBounds = NoteCardMetrics.minCardHeight...NoteCardMetrics.maxCardHeight
@@ -28,10 +32,12 @@ public struct NoteCardView: View {
     public init(
         card: LibraryModel.NoteCardRow,
         isKeyboardSelected: Bool = false,
+        previewFontFamily: String? = nil,
         action: @escaping () -> Void
     ) {
         self.card = card
         self.isKeyboardSelected = isKeyboardSelected
+        self.previewFontFamily = previewFontFamily
         self.action = action
     }
 
@@ -58,9 +64,12 @@ public struct NoteCardView: View {
 
                 // FR-020a: 2-line preview with trailing ellipsis; drawn from
                 // the first rich-text block, never the summary title.
+                // FR-055 (Rev 3): the family follows the user's body font
+                // (size stays the card preview size — density bounds
+                // unchanged); CJK falls back per-glyph like the editor.
                 if let preview = card.previewSource {
                     Text(preview)
-                        .font(.caption)
+                        .font(previewFont)
                         .foregroundStyle(secondaryText)
                         .lineLimit(2)
                         .truncationMode(.tail)
@@ -119,6 +128,13 @@ public struct NoteCardView: View {
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isKeyboardSelected ? [.isSelected] : [])
+    }
+
+    private var previewFont: Font {
+        if let previewFontFamily {
+            return .custom(previewFontFamily, size: AppMetrics.cardPreviewSize)
+        }
+        return .caption
     }
 
     private var titleText: Text {

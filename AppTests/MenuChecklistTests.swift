@@ -80,6 +80,26 @@ import SwiftUI
         }
     }
 
+    // MARK: - 003 T188 (FR-072 Rev 3, 2026-08-14): restore/empty-trash/sync
+
+    @Test
+    func restoreHasMenuCommand() {
+        #expect(MenuCommandCatalog.commands(located: .file).contains { $0.title == "Restore" },
+                "File > Restore must exist (FR-072 Rev 3)")
+    }
+
+    @Test
+    func emptyTrashHasMenuCommand() {
+        #expect(MenuCommandCatalog.commands(located: .file).contains { $0.title == "Empty Trash…" },
+                "File > Empty Trash… must exist (FR-072 Rev 3)")
+    }
+
+    @Test
+    func syncNowHasMenuCommand() {
+        #expect(MenuCommandCatalog.commands(located: .file).contains { $0.title == "Sync Now" },
+                "File > Sync Now must exist (FR-072 Rev 3)")
+    }
+
     // MARK: - 004 T047 (FR-011/FR-029, 003 FR-072 semantics)
 
     @Test

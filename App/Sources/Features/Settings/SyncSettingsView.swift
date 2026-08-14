@@ -86,6 +86,7 @@ public struct SyncSettingsView: View {
                     automaticSyncSection
                     securitySection
                     advancedSection
+                    connectionSection
                 } else {
                     notConfiguredSection
                 }
@@ -193,7 +194,7 @@ public struct SyncSettingsView: View {
                 } label: {
                     Label("Sync vault is locked", systemImage: "lock.fill")
                 }
-                Text("Unlock to resume syncing. Your notes on this Mac are still available.")
+                Text("Unlock the vault to sync manually or resume automatic sync. Your notes on this Mac are still available.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -278,13 +279,31 @@ public struct SyncSettingsView: View {
                             .help(SyncLocationPresentation.technicalPath(for: configuration))
                     }
                 }
+
+                // FR-054 (Rev 3, T186): vault/storage management lives in a
+                // "Manage…" menu here — INDEPENDENT actions (join stays its
+                // own product action, CHK033 re-entry preserved), never
+                // merged into one flow.
+                Menu {
+                    Button("Join Another Vault…") {
+                        showJoinSheet = true
+                    }
+                    .help("Connects this Mac to a vault created on another Mac. Your local notes are preserved.")
+                    Button("Set Up New Storage Location…") {
+                        showReplaceSheet = true
+                    }
+                    .help("Creates a new vault at a new storage location. Local notes are preserved; the previous location's data is not deleted.")
+                } label: {
+                    Text("Manage…")
+                }
+                .help("Manage the vault or its storage location")
             }
         }
     }
 
     private var automaticSyncSection: some View {
-        Section {
-            Toggle("Automatic sync", isOn: Binding(
+        Section("Automatic Sync") {
+            Toggle("Sync changes automatically", isOn: Binding(
                 get: { syncCoordinator?.autoSyncEnabled ?? false },
                 set: { syncCoordinator?.setAutoSyncEnabled($0) }
             ))
@@ -293,8 +312,12 @@ public struct SyncSettingsView: View {
                 : "Automatic sync starts once the vault is unlocked on this Mac.")
 
             // FR-152 (clarified 2026-08-08): user-selectable strategy —
-            // change-only or a fixed periodic interval.
-            Picker("Sync frequency", selection: Binding(
+            // change-only or a fixed periodic interval. Rev 3 (T185): the
+            // row is named "Periodic sync" (the picker axis) with change-only
+            // shown as "Off"; the schedule is a device-local preference, so
+            // a LOCKED vault does not disable it — only the master switch
+            // above does (FR-053 Rev 3).
+            Picker("Periodic sync", selection: Binding(
                 get: { syncCoordinator?.autoSyncPolicy ?? .default },
                 set: { syncCoordinator?.setAutoSyncPolicy($0) }
             )) {
@@ -303,7 +326,7 @@ public struct SyncSettingsView: View {
                 }
             }
             .pickerStyle(.menu)
-            .disabled(!(syncCoordinator?.autoSyncEnabled ?? false) || !isVaultUnlocked)
+            .disabled(!(syncCoordinator?.autoSyncEnabled ?? false))
             .help("When automatic sync is on: sync after local changes only, or also on a fixed interval")
 
             // Polish round 2/3: describe the behavior WHEN enabled. The
@@ -345,14 +368,27 @@ public struct SyncSettingsView: View {
             Text("Keeps sync unlocked using Keychain until you restart or lock the vault.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+            // FR-163 (Rev 3, T186): the no-recovery warning is a SECURITY
+            // decision, not an advanced detail — its info row lives here,
+            // concise standard style, never dominating the pane.
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Recovery")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Label("There is no password recovery. If you forget your sync password, your encrypted sync data can't be recovered.", systemImage: "info.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.top, 8)
         }
     }
 
-    /// FR-054 (Rev 2 + polish round 2): maintenance operations live in a
-    /// default-collapsed disclosure (system DisclosureGroup — VoiceOver
-    /// announces expanded/collapsed, Reduce Motion unaffected). Join stays
-    /// its OWN product action; destructive actions are confirmed with the
-    /// correct role; FR-163 is a concise informational Recovery row.
+    /// FR-054 (Rev 3, T186): the Advanced area holds the TECHNICAL
+    /// operations only, in a default-collapsed disclosure (system
+    /// DisclosureGroup — VoiceOver announces expanded/collapsed, Reduce
+    /// Motion unaffected). Vault/storage management moved to the Storage
+    /// "Manage…" menu; Disconnect Sync… is the standalone entry below.
     private var advancedSection: some View {
         Section {
             DisclosureGroup {
@@ -363,29 +399,21 @@ public struct SyncSettingsView: View {
         }
     }
 
-    /// The disclosure content: semantically grouped, system rows. Polish
-    /// round 3: `.buttonStyle(.link)` — the system link presentation (accent
-    /// color, hover/focus, keyboard reachable) so enabled actions read as
-    /// enabled; the earlier `.borderless` presentation inherited the Form
-    /// container's subdued styling and looked disabled. Dividers only
-    /// BETWEEN groups, never per action.
+    /// The disclosure content: the technical subset only — Vault ID
+    /// (copyable) + the two exports. `.buttonStyle(.link)` — the system
+    /// link presentation (accent color, hover/focus, keyboard reachable).
     @ViewBuilder
     private var advancedContent: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Vault / Storage
-            // FR-002/US1/AC6 (T029): joining a DIFFERENT existing vault
-            // applies replace semantics; CHK033 keeps the recovery re-entry.
-            Button("Join Another Vault…") {
-                showJoinSheet = true
+            // Vault ID (copyable) — its own row.
+            if let configuration = syncCoordinator?.configuration {
+                vaultIDRow(
+                    configuration.vaultLocator,
+                    technicalPath: SyncLocationPresentation.location(for: configuration) == nil
+                        ? SyncLocationPresentation.technicalPath(for: configuration)
+                        : nil
+                )
             }
-            .buttonStyle(.link)
-            .help("Connects this Mac to a vault created on another Mac. Your local notes are preserved.")
-
-            Button("Set Up New Storage Location…") {
-                showReplaceSheet = true
-            }
-            .buttonStyle(.link)
-            .help("Creates a new vault at a new storage location. Local notes are preserved; the previous location's data is not deleted.")
 
             Divider()
                 .padding(.vertical, 6)
@@ -405,44 +433,22 @@ public struct SyncSettingsView: View {
             }
             .buttonStyle(.link)
             .help("Saves a sanitized diagnostics JSON for support. No note content or credentials are included.")
+        }
+        .padding(.vertical, 4)
+    }
 
-            Divider()
-                .padding(.vertical, 6)
-
-            // Vault ID (copyable) — its own row.
-            if let configuration = syncCoordinator?.configuration {
-                vaultIDRow(
-                    configuration.vaultLocator,
-                    technicalPath: SyncLocationPresentation.location(for: configuration) == nil
-                        ? SyncLocationPresentation.technicalPath(for: configuration)
-                        : nil
-                )
-            }
-
-            // FR-163: unrecoverable-password information — its own block
-            // (not a footnote of the Vault ID row): concise, standard style,
-            // no absolute "by anyone" phrasing.
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Recovery")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Label("There is no password recovery. If you forget your sync password, your encrypted sync data can't be recovered.", systemImage: "info.circle")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.top, 8)
-
-            Divider()
-                .padding(.vertical, 6)
-
-            // Connection — separated from the export actions.
-            Button("Disconnect Sync…") {
+    /// FR-054 (Rev 3, T186): Disconnect Sync… is a STANDALONE destructive
+    /// entry at the bottom of the pane — confirmed (role: .destructive
+    /// dialog), visually/semantically distinct, never buried in the
+    /// technical area.
+    private var connectionSection: some View {
+        Section {
+            Button("Disconnect Sync…", role: .destructive) {
                 showRemoveConfirmation = true
             }
             .buttonStyle(.link)
             .help("Stops syncing on this Mac. Your notes and the data at the storage location are kept.")
         }
-        .padding(.vertical, 4)
     }
 
     /// FR-008/US1: the vault locator is the join key for another Mac

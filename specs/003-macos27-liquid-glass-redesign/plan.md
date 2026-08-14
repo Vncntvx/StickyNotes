@@ -147,7 +147,7 @@ Packages/StickyCore/         # 零改动
 - **窗口**：沿用系统 `MenuBarExtra`(.window) 场景（点击外部关闭/菜单栏定位/唯一性免费获得，FR-001 语义不变）。窗口探针（`MenuBarLibraryWindowProbe`）复用。
 - **工具栏**（FR-002/FR-002a/FR-003/FR-004/FR-005）：单一原生控制行。方案 A（首选）：经窗口探针给 MenuBarExtra 窗口附加 AppKit `NSToolbar`——新建笔记（SF Symbol，⌘N）、原生搜索字段（`NSSearchField` item）、排序（`NSPopUpButton` 或带菜单的 `NSToolbarItem`）、目的地（Notes/Trash 紧凑 `NSToolbarItemGroup` 或分段控件 item）、溢出自动。方案 B（备选，若 MenuBarExtra 窗口不支持 NSToolbar）：SwiftUI `.toolbar` + `.searchable(placement:)`（需 spike 验证渲染）。Phase 2 首个任务为**可行性 spike**，带验收标准，两案均有测试路径。
 - **内容区**：`LibraryCardGrid` REFACTOR——`LazyVGrid` 保留，列数/宽度/间距改 FR-021 公式（DesignSystem `NoteCardMetrics`），高度内容驱动 72–128（SC-022）；`CardProjection` 数据源不变。
-- **导航**：Notes/Trash 经工具栏目的地控件（FR-005 (a)）；Trash 仍是 grid scope + Trash 目的地视图（Empty Trash + 确认在此呈现，复活 `TrashView` 的确认逻辑）。
+- **导航**：Notes/Trash 经工具栏目的地控件（FR-005 (a)）；Trash 仍是 grid scope；Empty Trash 位于 header "⋯" 菜单（Rev 3 T183），确认条在 grid 内呈现（FR-026 窗内确认，MenuBarExtra 不可用 dialog）；`TrashView` 维持死代码。
 - **状态**：footer 移除（FR-006/007）；同步注意态以 `SyncAttentionBanner`（Phase 2 壳 + Phase 5 完整七类映射）呈现于内容区顶部（决策：横幅固定置于内容区顶部——spec FR-010 "就近横幅或内联"的落地选择，2026-08-09）；Help/About/Settings/Quit 全部进入菜单（Phase 1 先落）。
 - **搜索聚焦**：`searchAll` 全局快捷键与 `stickynotes://search` 从"仅激活"补全为"打开 Library + 聚焦搜索框"（D8，行为补全）。
 
@@ -161,7 +161,7 @@ Packages/StickyCore/         # 零改动
 ### Settings（REFACTOR 导航）
 
 - `Settings` 场景 + `TabView`（macOS 14+ 原生工具栏式标签导航；clarify 决策 5）替换分段控件；`NSWindow` fallback（LSUIElement 可靠性）保留但内容同步更新。
-- 面板：General（Dock + 快捷键录制，原生形态，FR-052）、Sync（FR-053 + 高级区 FR-054 + 加入既有 vault 定位 clarify 4）、Fonts（单"笔记字体"概念 + 系统回退 + 中英混排预览，FR-055；存储键不变）、Permissions（FR-056，呈现保留）。
+- 面板：General（Dock + 快捷键录制，原生形态，FR-052）、Sync（FR-053 + 高级区 FR-054 + 加入既有 vault 定位 clarify 4）、Fonts（单"正文字体"Note body font 概念 + 系统回退 + 多行中英混排预览并应用 lineSpacing，FR-055 Rev 3；存储键不变；卡片正文预览跟随、标题保持 headline）、Permissions（FR-056，呈现保留）。
 
 **首次配置入口规则（实现决议）**: 同步配置不存在时，同步面板默认页同时呈现 "Configure Sync" 与 "Join Existing Vault" 两条初始路径；配置存在后 "Join" 仅保留高级区恢复重入（tasks T050/T057）。
 - 窗口尺寸：面板高度适配内容（FR-051），不再用固定 480×540 画布。
@@ -219,7 +219,7 @@ Packages/StickyCore/         # 零改动
 
 **映射实现**：`SyncStatusPresentation`（App 层新类型）——输入 SyncCoordinator 暴露状态 + SyncSummary 标志 + sanitized codes；确定性映射，穷举测试（zh-Hans/en，无内部标识符，FR-012/SC-012）。
 
-**同步设置层级**（FR-053/054 + clarify 4）：默认页（状态/提供商/上次同步/自动同步/频率/记忆解锁/同步现在）→ 高级区（替换仓库/移除配置/加入既有 vault 恢复重入/导出同步配置/导出诊断包；破坏性操作确认）。动作分类见 `research.md` §6（Routine: Sync Now；Setup: Configure/Join；Recovery: Join 重入；Advanced: Export*；Destructive: Replace/Remove——均已有确认语义，仅重新组织 + 补单条永久删除确认 FR-026）。
+**同步设置层级**（FR-053/054 Rev 3 + clarify）：默认页（状态/提供商/上次同步/自动同步/定期同步/记忆解锁/同步现在）→ Storage "Manage…" 菜单（加入既有 vault/新建存储位置，独立动作不合并流程）→ 高级区（Vault ID/导出同步配置/导出诊断包）→ Disconnect Sync… 独立破坏性入口（确认语义保留）。动作分类见 `research.md` §6（Routine: Sync Now；Setup: Configure/Join；Recovery: Join 重入；Advanced: Export*；Destructive: Disconnect——均已有确认语义）。
 
 # 10. Migration Strategy
 

@@ -96,8 +96,15 @@ struct FontPreferenceApplicationTests {
     }
 
     @Test func bilingualPreviewMeaningful() {
-        // FR-055: a meaningful bilingual mixed-language preview exists.
-        #expect(FontPreferenceUI.bilingualPreviewSample == "Aa 中文")
+        // FR-055 (Rev 3): a meaningful bilingual mixed-language preview
+        // exists — multi-line so the Text Spacing effect is actually
+        // visible (single-line text cannot preview line spacing).
+        let sample = FontPreferenceUI.bilingualPreviewSample
+        #expect(sample.split(separator: "\n").count >= 3,
+                "preview must span at least three lines (Rev 3)")
+        #expect(sample.contains("The quick brown fox"), "Latin sample line")
+        let hasCJK = sample.unicodeScalars.contains { (0x4E00...0x9FFF).contains($0.value) }
+        #expect(hasCJK, "CJK sample line")
         #expect(FontPreferenceUI.bilingualPreviewEnabled == true)
     }
 }
