@@ -9,12 +9,14 @@ import Domain
 //
 // The three text-spacing presets are a presentation layer on the editor's
 // NSTextStorage (.paragraphStyle.lineSpacing) — never document content.
-// Covered: standard writes NOTHING (zero delta from today's metrics); the
-// three presets are distinct; Relaxed→Default really REMOVES the old
-// style; typingAttributes follow the preset (subsequent input); richText
-// and todo text apply while the code block stays untouched; spacing never
-// enters the payload / JSON export / Markdown; intrinsic heights reflow
-// per preset at 9/13/24 pt; a spacing change commits nothing.
+// Covered: standard writes a floor-only style on the SYSTEM path (Plan B —
+// a minimumLineHeight stabilizing the CJK cascade's optical-face swap)
+// and nothing on custom-font paths; the three presets are distinct;
+// Relaxed→Default really REMOVES the inter-line delta; typingAttributes
+// follow the preset (subsequent input); richText and todo text apply while
+// the code block stays untouched; spacing never enters the payload / JSON
+// export / Markdown; intrinsic heights reflow per preset at 9/13/24 pt; a
+// spacing change commits nothing.
 
 @MainActor
 @Suite struct TextSpacingPresentationTests {
@@ -76,12 +78,21 @@ import Domain
     // MARK: - Storage presentation
 
     @Test
-    func standardPresetWritesNoParagraphStyle() {
+    func standardPresetWritesFloorOnlyStyleOnSystemPath() {
+        // Plan B (2026-08-14): the SYSTEM path (fontPreference == nil)
+        // writes a floor-only style even for standard — a minimumLineHeight
+        // derived from the regular body font's default line height that
+        // stabilizes the CJK cascade's optical-face swap under ⌘B/⌘I.
         let (_, _, textView, _) = makeEditor(spacing: .standard)
-        #expect(lineSpacing(at: 0, in: textView) == nil,
-                "standard writes NO paragraph style (zero delta from today's metrics)")
-        #expect(textView.typingAttributes[.paragraphStyle] == nil,
-                "standard typing attributes carry no paragraph style")
+        let floor = NSLayoutManager().defaultLineHeight(for: NoteFontResolver(preference: nil).font(size: 13, for: ""))
+        let style = textView.textStorage?.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle
+        #expect(style != nil, "standard writes a floor-only paragraph style on the system path")
+        #expect(style?.lineSpacing == 0, "standard adds no inter-line delta")
+        #expect(style?.minimumLineHeight == floor,
+                "the floor is the regular body font's default line height (got \(String(describing: style?.minimumLineHeight)))")
+        let typing = textView.typingAttributes[.paragraphStyle] as? NSParagraphStyle
+        #expect(typing?.lineSpacing == 0 && typing?.minimumLineHeight == floor,
+                "standard typing attributes carry the floor-only style")
     }
 
     @Test
@@ -95,7 +106,7 @@ import Domain
         let standard = lineSpacing(at: 0, in: textView)
         #expect(compact != nil && relaxed != nil, "compact/relaxed write a paragraph style")
         #expect(compact! < relaxed!, "the presets are distinct (values are visual-tuning prototypes)")
-        #expect(standard == nil, "standard restores the attribute-free state")
+        #expect(standard == 0, "standard restores the delta-free state (floor-only style remains)")
     }
 
     @Test
@@ -103,10 +114,14 @@ import Domain
         let (_, coordinator, textView, _) = makeEditor(spacing: .relaxed)
         #expect(lineSpacing(at: 0, in: textView) != nil, "precondition: relaxed applied")
         restyle(coordinator, textView: textView, spacing: .standard)
-        #expect(lineSpacing(at: 0, in: textView) == nil,
-                "Relaxed→Default must really REMOVE the paragraph style")
-        #expect(textView.typingAttributes[.paragraphStyle] == nil,
-                "typing attributes drop the style too")
+        #expect(lineSpacing(at: 0, in: textView) == 0,
+                "Relaxed→Default must really REMOVE the inter-line delta")
+        // Plan B: the floor-only style remains on the system path — only
+        // the delta is gone.
+        let style = textView.textStorage?.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle
+        #expect(style?.minimumLineHeight != nil, "the floor-only style stays on the system path")
+        #expect((textView.typingAttributes[.paragraphStyle] as? NSParagraphStyle)?.lineSpacing == 0,
+                "typing attributes drop the delta too")
     }
 
     @Test
@@ -119,8 +134,9 @@ import Domain
         #expect((textView.typingAttributes[.paragraphStyle] as? NSParagraphStyle)?.lineSpacing ?? 0 < 0,
                 "typing attributes track the compact preset")
         restyle(coordinator, textView: textView, spacing: .standard)
-        #expect(textView.typingAttributes[.paragraphStyle] == nil,
-                "back to standard: typing attributes drop the style")
+        let finalStyle = textView.typingAttributes[.paragraphStyle] as? NSParagraphStyle
+        #expect(finalStyle?.lineSpacing == 0 && finalStyle?.minimumLineHeight != nil,
+                "back to standard: typing attributes keep only the floor (system path)")
     }
 
     // MARK: - Block coverage (hosting harness)

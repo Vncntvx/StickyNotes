@@ -303,6 +303,10 @@ public struct RichTextView: NSViewRepresentable {
     @MainActor
     public final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: RichTextView
+        /// Plan B (2026-08-14): a cached layout manager for line-height
+        /// METRICS ONLY — never attached to a text storage. MainActor-only
+        /// access (`regularBodyLineHeightFloor`), matching the class.
+        private static let lineHeightMetricsLayoutManager = NSLayoutManager()
         /// Suppresses delegate-driven commits while the model is pushing a
         /// document in (avoid echo loops).
         private var isPushing = false
@@ -933,20 +937,47 @@ public struct RichTextView: NSViewRepresentable {
             return plan
         }
 
-        /// The paragraph style for a typography — `nil` for the standard
-        /// preset (zero delta from the TextKit-default metrics: NO
-        /// paragraph style is written at all). The compact/relaxed line
-        /// spacing values are prototype tuning constants (see
-        /// `EditorTypography.lineSpacing`).
+        /// The line-height FLOOR for the system-default font path — the
+        /// regular body font's TextKit default line height
+        /// (`NSLayoutManager.defaultLineHeight(for:)` — NOT a magic-number
+        /// table). Max-semantics: it only RAISES collapsed fallback lines
+        /// back to the regular rhythm; regular text (whose natural height
+        /// IS the floor) never moves, and larger fallbacks (emoji) never
+        /// clamp — no maximumLineHeight by design.
+        private func regularBodyLineHeightFloor(for typography: EditorTypography) -> CGFloat {
+            let regular = NoteFontResolver(preference: nil).font(size: typography.textSize, for: "")
+            return Self.lineHeightMetricsLayoutManager.defaultLineHeight(for: regular)
+        }
+
+        /// The paragraph style for a typography — two independent metrics
+        /// compose; `nil` writes nothing at all:
+        ///
+        /// - `lineSpacing`: the compact/relaxed preset delta (prototype
+        ///   tuning constants, see `EditorTypography.lineSpacing`; `nil`
+        ///   for standard).
+        /// - `minimumLineHeight`: a floor derived from the regular body
+        ///   font's default line height (`regularBodyLineHeightFloor`),
+        ///   applied ONLY on the system-default path
+        ///   (`fontPreference == nil`). The system CJK cascade swaps
+        ///   optical faces (PingFang UIText ↔ UIDisplay) when semantic
+        ///   traits change, so ⌘B/⌘I collapses the baseline rhythm even
+        ///   though `lineSpacing` never changes — the floor keeps the
+        ///   rhythm stable. Explicit custom-font typography is untouched
+        ///   by design.
         private func paragraphStyle(for typography: EditorTypography) -> NSParagraphStyle? {
-            guard let lineSpacing = typography.lineSpacing else { return nil }
+            let lineSpacing = typography.lineSpacing
+            let floor: CGFloat? = typography.fontPreference == nil
+                ? regularBodyLineHeightFloor(for: typography)
+                : nil
+            guard floor != nil || lineSpacing != nil else { return nil }
             let mutable = NSMutableParagraphStyle()
-            mutable.lineSpacing = lineSpacing
-            // PR2: a REAL immutable snapshot — the storage full-range
-            // attribute and typingAttributes share it safely (an
-            // NSParagraphStyle is immutable; a bare mutable instance could
-            // be mutated in place by a future paragraph-level edit and
-            // propagate to every paragraph at once).
+            if let floor { mutable.minimumLineHeight = floor }
+            if let lineSpacing { mutable.lineSpacing = lineSpacing }
+            // A REAL immutable snapshot — the storage full-range attribute
+            // and typingAttributes share it safely (an NSParagraphStyle is
+            // immutable; a bare mutable instance could be mutated in place
+            // by a future paragraph-level edit and propagate to every
+            // paragraph at once).
             guard let snapshot = mutable.copy() as? NSParagraphStyle else { return mutable }
             return snapshot
         }
