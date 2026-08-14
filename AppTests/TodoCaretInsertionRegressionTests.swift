@@ -660,48 +660,56 @@ import SystemBridge
             collectTextViews(in: hosting).first { $0.string.hasPrefix("这是") },
             "todo editor not realized"
         )
-        let layoutManager = try #require(todoEditor.layoutManager)
-        let container = try #require(todoEditor.textContainer)
+            let layoutManager = try #require(todoEditor.layoutManager)
+            let container = try #require(todoEditor.textContainer)
 
-        var lastDelta: CGFloat = .greatestFiniteMagnitude
-        var converged = false
-        for _ in 0..<50 {
-            hosting.layoutSubtreeIfNeeded()
-            hosting.displayIfNeeded()
-            layoutManager.ensureLayout(for: container)
-            let todoFrame = frameInHosting(todoEditor, hosting)
-            let fragmentRect = layoutManager.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil)
-            let expectedCenterY = todoFrame.minY
-                + todoEditor.textContainerInset.height
-                + fragmentRect.midY
+            var lastDelta: CGFloat = .greatestFiniteMagnitude
+            var converged = false
+            for _ in 0..<50 {
+                hosting.layoutSubtreeIfNeeded()
+                hosting.displayIfNeeded()
+                layoutManager.ensureLayout(for: container)
+                let todoFrame = frameInHosting(todoEditor, hosting)
+                let fragmentRect = layoutManager.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil)
+                // PR1 (2026-08-14): the checkbox aligns to the ACTUAL
+                // first-line baseline (C3a: fragment origin + glyph
+                // location) minus the NOMINAL body font's optical offset —
+                // not the fragment box midY (which carries the
+                // lineSpacing/leading bias).
+                let baseline = fragmentRect.minY + layoutManager.location(forGlyphAt: 0).y
+                let alignmentFont = NoteFontResolver(preference: nil).nominalBodyFont(size: 13)
+                let expectedCenterY = todoFrame.minY
+                    + todoEditor.textContainerInset.height
+                    + baseline
+                    - (alignmentFont.ascender + alignmentFont.descender) / 2
 
-            // Candidate marker backing views: small views LEFT of the todo
-            // text, vertically overlapping its first line. The row also
-            // carries the insertion-control overlay at the same leading
-            // edge — collect ALL candidates and converge on the closest
-            // center (the checkbox is the one aligned to the line).
-            var candidates: [NSRect] = []
-            func walk(_ v: NSView) {
-                let f = v.convert(v.bounds, to: hosting)
-                if v !== todoEditor, f.width > 4, f.width <= 30,
-                   f.maxX <= todoFrame.minX + 1,
-                   f.minY < todoFrame.maxY, f.maxY > todoFrame.minY {
-                    candidates.append(f)
+                // Candidate marker backing views: small views LEFT of the todo
+                // text, vertically overlapping its first line. The row also
+                // carries the insertion-control overlay at the same leading
+                // edge — collect ALL candidates and converge on the closest
+                // center (the checkbox is the one aligned to the line).
+                var candidates: [NSRect] = []
+                func walk(_ v: NSView) {
+                    let f = v.convert(v.bounds, to: hosting)
+                    if v !== todoEditor, f.width > 4, f.width <= 30,
+                       f.maxX <= todoFrame.minX + 1,
+                       f.minY < todoFrame.maxY, f.maxY > todoFrame.minY {
+                        candidates.append(f)
+                    }
+                    for sub in v.subviews { walk(sub) }
                 }
-                for sub in v.subviews { walk(sub) }
+                walk(hosting)
+                let deltas = candidates.map { abs($0.midY - expectedCenterY) }
+                lastDelta = deltas.min() ?? .greatestFiniteMagnitude
+                if lastDelta < 1 {
+                    converged = true
+                    break
+                }
+                try await Task.sleep(nanoseconds: 20_000_000)
             }
-            walk(hosting)
-            let deltas = candidates.map { abs($0.midY - expectedCenterY) }
-            lastDelta = deltas.min() ?? .greatestFiniteMagnitude
-            if lastDelta < 3 {
-                converged = true
-                break
-            }
-            try await Task.sleep(nanoseconds: 20_000_000)
-        }
 
-        #expect(converged,
-                "the marker's visual center must converge onto the first line's typographic center (last Δ\(lastDelta))")
+            #expect(converged,
+                    "the marker's visual center must converge onto the first line's typographic center (last Δ\(lastDelta))")
     }
 
     /// Single-line and multi-line todos share the EXACT same text leading

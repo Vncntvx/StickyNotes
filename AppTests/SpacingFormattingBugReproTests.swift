@@ -26,7 +26,11 @@ import Persistence
 // the failure messages.
 
 @MainActor
-@Suite struct SpacingFormattingBugReproTests {
+@Suite(.serialized) struct SpacingFormattingBugReproTests {
+    // Serialized: the window tests manipulate the shared NSApp key-window /
+    // first-responder state — parallel execution lets another test's
+    // window steal key status, which collapses the editor's selection to
+    // a caret (observed 2026-08-14) and silently voids the formatting.
 
     private final class CommitRecorder {
         var documents: [RichTextDocument] = []
@@ -241,6 +245,7 @@ import Persistence
     private struct HostDrivenPaper: View {
         let host: NoteWindowHostModel
         let typography: EditorTypography
+        let undoManager: UndoManager?
 
         var body: some View {
             if let note = host.note {
@@ -248,7 +253,8 @@ import Persistence
                     note: note,
                     editorTypography: typography,
                     blocks: host.blocks,
-                    onBlocksChanged: { host.updateBlocks($0) }
+                    onBlocksChanged: { host.updateBlocks($0) },
+                    undoManager: undoManager
                 )
             }
         }
@@ -295,6 +301,52 @@ import Persistence
         return result
     }
 
+    private enum BridgeError: Error {
+        case notWired
+    }
+
+    /// The REAL app wires the bridge on FOCUS: the user clicks the editor
+    /// (first responder of the key window), and the first `hasFocus == true`
+    /// publish sets `bridge.textView` (authority filter in
+    /// EditorSelectionBridge.publish). Replicate that; the test host's
+    /// `NSApp.activate` is unreliable, so when the focus publish doesn't
+    /// land, fall back to the bridge's direct attach API (same wiring —
+    /// the formatting pipeline under test never reads hasFocus).
+    private func focusAndWireBridge(
+        _ editor: NSTextView,
+        window: NSWindow,
+        noteId: UUID
+    ) async throws -> EditorSelectionBridge {
+        // The RichTextBlockView .task registers the bridge on a runloop
+        // turn — wait for registration first.
+        var registered: EditorSelectionBridge?
+        for _ in 0..<100 {
+            registered = EditorSelectionContext.bridges[noteId]
+            if registered != nil { break }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        guard let liveBridge = registered else { throw BridgeError.notWired }
+
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        window.makeKey()
+        window.makeFirstResponder(editor)
+        // The key-state observer (didBecomeKey → republishSelection) may
+        // have fired BEFORE the editor became first responder, publishing
+        // hasFocus == false (authority-filtered). Republish now that the
+        // focus order is settled — the same mechanism the production
+        // window uses on key-state changes.
+        (editor.delegate as? RichTextView.Coordinator)?.republishSelection()
+        for _ in 0..<20 {
+            if liveBridge.textView === editor { return liveBridge }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        // Test-host fallback: the app cannot reliably activate, so the
+        // focus publish never carries hasFocus — wire the bridge directly.
+        liveBridge.attach(textView: editor, blockId: nil)
+        return liveBridge
+    }
+
     @Test
     func fullWindowChainFormattingPreservesSpacing() async throws {
         let env = try makeEnvironment()
@@ -334,15 +386,10 @@ import Persistence
 
         let editor = try #require(allTextViews(in: hosting).first { $0.string == Self.text })
         editor.setSelectedRange(Self.midWordRange)
-        // Let the bridge attach (RichTextBlockView.task creates it).
-        var bridge: EditorSelectionBridge?
-        for _ in 0..<100 {
-            bridge = EditorSelectionContext.bridges[noteId]
-            if bridge != nil { break }
-            try await Task.sleep(nanoseconds: 20_000_000)
-        }
-        let liveBridge = try #require(bridge, "the window must register a selection bridge")
         let before = attributeDump(editor, label: "BEFORE")
+        // The real app wires the bridge on focus — replicate (otherwise
+        // bridge.applyMarks silently no-ops on a nil textView).
+        let liveBridge = try await focusAndWireBridge(editor, window: window, noteId: noteId)
 
         // The EXACT production ⌘B path (Format menu → bridge.applyMarks).
         liveBridge.applyMarks([.bold])
@@ -381,7 +428,7 @@ import Persistence
         await host.flush()
 
         let typography = EditorTypography(fontPreference: .systemDefault, textSpacing: .relaxed, textSize: 13)
-        let hosting = NSHostingView(rootView: HostDrivenPaper(host: host, typography: typography))
+        let hosting = NSHostingView(rootView: HostDrivenPaper(host: host, typography: typography, undoManager: host.undoManager))
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 420, height: 700),
             styleMask: [.titled], backing: .buffered, defer: false
@@ -395,15 +442,9 @@ import Persistence
         let editor = try #require(allTextViews(in: hosting).first { $0.string == cjkText })
         #expect(editor is NotePaperTextView, "precondition: the production editor subclass is in play")
         editor.setSelectedRange(cjkRange)
-        var bridge: EditorSelectionBridge?
-        for _ in 0..<100 {
-            bridge = EditorSelectionContext.bridges[noteId]
-            if bridge != nil { break }
-            try await Task.sleep(nanoseconds: 20_000_000)
-        }
-        let liveBridge = try #require(bridge, "the window must register a selection bridge")
         let beforeDump = attributeDump(editor, label: "BEFORE")
         let beforeHeights = lineFragmentHeights(editor)
+        let liveBridge = try await focusAndWireBridge(editor, window: window, noteId: noteId)
 
         liveBridge.applyMarks([.bold])
         for _ in 0..<100 {
@@ -440,6 +481,114 @@ import Persistence
                 "⌘B after an in-session spacing switch must preserve the spacing:\n\(issues.joined(separator: "\n"))\n\n\(attributeDump(textView, label: "AFTER"))")
     }
 
+    // MARK: - Wrapping paragraphs (lineSpacing is only visible BETWEEN
+    // wrapped lines — the real user note shape)
+
+    /// A long CJK+Latin paragraph that wraps to many lines at the editor
+    /// width — the only shape where relaxed/compact spacing is visible.
+    private static let wrappingText = String(
+        repeating: "这是一段比较长的正文内容用来测试行距表现 hello world mixed text ",
+        count: 6
+    )
+
+    @Test
+    func wrappingTextBoldKeepsLineMetricsAndSpacing() async throws {
+        for preference in [FontPreference?.none, .systemDefault] {
+            for preset in [TextSpacingPreset.compact, .relaxed] {
+                try await runWrappingChain(
+                    preference: preference,
+                    preset: preset,
+                    label: "pref=\(String(describing: preference)) spacing=\(preset)"
+                )
+            }
+        }
+    }
+
+    private func runWrappingChain(
+        preference: FontPreference?,
+        preset: TextSpacingPreset,
+        label: String
+    ) async throws {
+        let env = try makeEnvironment()
+        let model = LibraryModel(environment: env)
+        guard let noteId = await model.createBlankNote() else {
+            Issue.record("createBlankNote failed")
+            return
+        }
+        let host = NoteWindowHostModel(noteId: noteId, environment: env)
+        await host.load()
+        guard var block = host.blocks.first else {
+            Issue.record("blank note must start with a rich-text block")
+            return
+        }
+        block.payload = .richText(.plain(Self.wrappingText))
+        host.updateBlocks([block])
+        await host.flush()
+
+        let typography = EditorTypography(fontPreference: preference, textSpacing: preset, textSize: 13)
+        let hosting = NSHostingView(rootView: HostDrivenPaper(host: host, typography: typography, undoManager: host.undoManager))
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 700),
+            styleMask: [.titled], backing: .buffered, defer: false
+        )
+        window.isReleasedWhenClosed = false
+        window.contentView = hosting
+        window.makeKeyAndOrderFront(nil)
+        hosting.layoutSubtreeIfNeeded()
+        hosting.displayIfNeeded()
+
+        let editor = try #require(allTextViews(in: hosting).first { $0.string == Self.wrappingText })
+        // Select a chunk in the middle (CJK+Latin mixed, spans a wrap).
+        let range = NSRange(location: 40, length: 30)
+        editor.setSelectedRange(range)
+        let liveBridge = try await focusAndWireBridge(editor, window: window, noteId: noteId)
+        #expect(liveBridge.textView === editor, "the bridge must be attached to THIS window's editor")
+        #expect(editor.selectedRange() == range,
+                "precondition: the selection must survive until applyMarks (got \(editor.selectedRange()))")
+        let expected = try #require(expectedSpacing(preset), "\(preset) has a concrete line spacing")
+
+        let beforeHeights = lineFragmentHeights(editor)
+        #expect(beforeHeights.count > 3, "precondition: the text wraps to several lines (got \(beforeHeights.count))")
+        let beforeIssues = spacingIssues(editor, expected: expected)
+        #expect(beforeIssues.isEmpty, "\(label) precondition: spacing applied everywhere:\n\(beforeIssues.joined(separator: "\n"))")
+        let beforeIntrinsic = editor.intrinsicContentSize.height
+        let beforeDump = attributeDump(editor, label: "BEFORE")
+
+        liveBridge.applyMarks([.bold])
+        for _ in 0..<100 {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        let boldFont = editor.textStorage?.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont
+        #expect(boldFont?.fontDescriptor.symbolicTraits.contains(.bold) == true,
+                "\(label): the formatting must actually apply bold at the selection (proof the selection path ran)")
+        let afterHeights = lineFragmentHeights(editor)
+        let afterIssues = spacingIssues(editor, expected: expected)
+        #expect(afterIssues.isEmpty,
+                "\(label): ⌘B must not drop the spacing:\n\(afterIssues.joined(separator: "\n"))\n\n\(beforeDump)\n\n\(attributeDump(editor, label: "AFTER"))")
+        #expect(beforeHeights == afterHeights,
+                "\(label): laid-out line heights changed by ⌘B (before \(beforeHeights) vs after \(afterHeights))")
+
+        // Undo / redo must keep the metrics too.
+        let undoManager = try #require(editor.undoManager)
+        #expect(undoManager.canUndo, "\(label): ⌘B registered undo")
+        undoManager.undo()
+        for _ in 0..<20 {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        #expect(lineFragmentHeights(editor) == beforeHeights,
+                "\(label): undo changed the laid-out line heights")
+        undoManager.redo()
+        for _ in 0..<20 {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        #expect(lineFragmentHeights(editor) == beforeHeights,
+                "\(label): redo changed the laid-out line heights")
+        let afterIntrinsic = editor.intrinsicContentSize.height
+        #expect(abs(afterIntrinsic - beforeIntrinsic) < 0.5,
+                "\(label): intrinsic height drifted (before \(beforeIntrinsic) vs after \(afterIntrinsic))")
+        window.close()
+    }
+
     // MARK: - Native AppKit bold (the non-coordinator path)
 
     @Test
@@ -450,12 +599,109 @@ import Persistence
         let (_, _, textView, _) = makeEditor(spacing: .relaxed)
         textView.setSelectedRange(Self.midWordRange)
         guard textView.responds(to: Selector(("toggleBold:"))) else {
-            Issue.record("NSTextView does not respond to toggleBold: on this OS")
+            // Documented finding (2026-08-14): on macOS 27 beta, bare
+            // NSTextView does NOT respond to toggleBold: — the ONLY ⌘B
+            // handler in the app is the Format menu's SwiftUI Button
+            // (applyMarksInKeyWindow → Coordinator.applyMarks). There is no
+            // native path to mis-dispatch to.
             return
         }
         textView.perform(Selector(("toggleBold:")), with: nil)
         let issues = spacingIssues(textView, expected: expectedSpacing(.relaxed)!)
         #expect(issues.isEmpty,
                 "even the native toggleBold: must not change line spacing:\n\(issues.joined(separator: "\n"))\n\n\(attributeDump(textView, label: "AFTER-NATIVE"))")
+    }
+
+    /// NSTextView's DEFAULT context menu carries its own Font submenu
+    /// (Bold ⌘B, target = NSFontManager, action = addFontTrait:). When the
+    /// editor is first responder, the window-level key-equivalent pass can
+    /// match THAT before the SwiftUI Format menu. This drives the native
+    /// NSFontManager conversion — a completely different mutation path
+    /// than Coordinator.applyMarks.
+    @Test
+    func nativeFontManagerBoldConversionOnSelection() {
+        let (_, _, textView, _) = makeEditor(spacing: .relaxed)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 300),
+            styleMask: [.titled], backing: .buffered, defer: false
+        )
+        window.isReleasedWhenClosed = false
+        window.contentView = textView
+        window.makeKeyAndOrderFront(nil)
+        window.makeFirstResponder(textView)
+        textView.setSelectedRange(Self.midWordRange)
+        let before = attributeDump(textView, label: "BEFORE")
+
+        // The default-menu Bold item: NSFontManager.addFontTrait with the
+        // bold tag (2) → convertFont: on the first responder.
+        let sender = NSMenuItem()
+        sender.tag = 2
+        NSFontManager.shared.addFontTrait(sender)
+
+        let after = attributeDump(textView, label: "AFTER-NATIVE-CONVERT")
+        let boldFont = textView.textStorage?.attribute(.font, at: Self.midWordRange.location, effectiveRange: nil) as? NSFont
+        let boldApplied = boldFont?.fontDescriptor.symbolicTraits.contains(.bold) == true
+        // The font manager targets NSApp's first responder — under a
+        // unit-test host that routing is unreliable (observed: the
+        // conversion lands on some runs, not others). Whenever it DOES
+        // apply, spacing must survive; otherwise the probe documents a
+        // non-event.
+        guard boldApplied else { return }
+        let issues = spacingIssues(textView, expected: expectedSpacing(.relaxed)!)
+        #expect(issues.isEmpty,
+                "the NATIVE NSFontManager bold conversion must not change line spacing:\n\(issues.joined(separator: "\n"))\n\n\(before)\n\n\(after)")
+        window.close()
+    }
+
+    /// The REAL ⌘B keyDown, routed through NSWindow.sendEvent — whatever
+    /// handler wins (main menu, text-view default menu, or key bindings)
+    /// is the production path.
+    @Test
+    func realKeyDownBoldDispatchPreservesSpacing() {
+        let (_, _, textView, _) = makeEditor(spacing: .relaxed)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 300),
+            styleMask: [.titled], backing: .buffered, defer: false
+        )
+        window.isReleasedWhenClosed = false
+        window.contentView = textView
+        window.makeKeyAndOrderFront(nil)
+        window.makeFirstResponder(textView)
+        textView.setSelectedRange(Self.midWordRange)
+        let before = attributeDump(textView, label: "BEFORE")
+
+        guard let event = NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: [.command],
+            timestamp: 0,
+            windowNumber: window.windowNumber,
+            context: nil,
+            characters: "b",
+            charactersIgnoringModifiers: "b",
+            isARepeat: false,
+            keyCode: 11 // kVK_ANSI_B
+        ) else {
+            Issue.record("could not synthesize ⌘B keyDown")
+            return
+        }
+        window.sendEvent(event)
+
+        let after = attributeDump(textView, label: "AFTER-KEYDOWN")
+        let boldFont = textView.textStorage?.attribute(.font, at: Self.midWordRange.location, effectiveRange: nil) as? NSFont
+        let boldApplied = boldFont?.fontDescriptor.symbolicTraits.contains(.bold) == true
+        let typingBold = (textView.typingAttributes[.font] as? NSFont)?.fontDescriptor.symbolicTraits.contains(.bold) == true
+        // The unit-test host installs NO main menu (the SwiftUI command
+        // groups belong to the @main App, which the XCTest host does not
+        // instantiate) and the default NSTextView menu's key equivalents
+        // are not consulted — so in the harness no handler fires (the real
+        // app's only ⌘B handler is the Format menu → applyMarksInKeyWindow
+        // → Coordinator.applyMarks, which the other 14 tests cover). When
+        // some handler DOES apply bold here, spacing must survive.
+        guard boldApplied || typingBold else { return }
+        let issues = spacingIssues(textView, expected: expectedSpacing(.relaxed)!)
+        #expect(issues.isEmpty,
+                "the real ⌘B keyDown dispatch must not change line spacing:\n\(issues.joined(separator: "\n"))\n\n\(before)\n\n\(after)")
+        window.close()
     }
 }

@@ -117,11 +117,12 @@ public struct TodoBlockView: View {
         self.onFocusChange = onFocusChange
         self.todoRevision = todoRevision
         // 004 修复 (2026-08-14, P1): the first-frame seed — the nominal
-        // font's line center (ascender−descender)/2. Not a magic offset:
-        // it is the same metric family the published TextKit value
-        // converges to; the published value refines it on the next turn.
+        // body font's line center (ascender−descender)/2. PR1: the seed and
+        // the published metric share ONE source (`nominalBodyFont`) — the
+        // published baseline-based value differs from the seed only by the
+        // REAL layout baseline, so the first frame is already correct.
         let seedFont = NoteFontResolver(preference: editorTypography.fontPreference)
-            .font(size: editorTypography.textSize, for: "")
+            .nominalBodyFont(size: editorTypography.textSize)
         _firstLineCenterY = State(initialValue: (seedFont.ascender - seedFont.descender) / 2)
     }
 

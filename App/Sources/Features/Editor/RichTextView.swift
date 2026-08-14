@@ -192,6 +192,10 @@ public struct RichTextView: NSViewRepresentable {
         let resolver = NoteFontResolver(preference: editorTypography.fontPreference)
         textView.font = resolver.font(size: editorTypography.textSize, for: "")
         textView.delegate = context.coordinator
+        // PR2: the storage's didProcessEditing reports the EXACT character
+        // edit range (the typing normalization consumes it) — the
+        // coordinator observes the storage here.
+        textView.textStorage?.delegate = context.coordinator
         textView.autoresizingMask = [.width]
         // 004 修复: 尾部/todo 编辑器内容自适应（无 320 最小高度）；主纸面
         // 保持 NotePaperTextView 默认值。
@@ -240,9 +244,6 @@ public struct RichTextView: NSViewRepresentable {
         }
         // 004 T037: keep the bridge attached to the live text view.
         context.coordinator.attach(textView, bridge: selectionBridge, blockId: richTextBlockId)
-        // 004 修复 (2026-08-14, P1): publish the first line's typographic
-        // center for the host's marker alignment (todo checkbox).
-        context.coordinator.publishFirstLineTypographicCenter(textView)
         // 004 修复 (2026-08-14, P0): a width reflow must republish the
         // selection rect — the contextual format row re-anchors to the
         // real post-resize geometry.
@@ -279,6 +280,14 @@ public struct RichTextView: NSViewRepresentable {
         // 004 修复: 显示专用样式（todo 完成态）每次更新对齐——文本未变也
         // 要跟随勾选状态切换。
         context.coordinator.applyDisplayStyling(to: textView)
+        // 004 修复 (2026-08-14, P1): publish the first line's typographic
+        // center for the host's marker alignment (todo checkbox). PR1
+        // (2026-08-14): runs AFTER the apply/restyle/display-styling
+        // mutations — a pre-mutation publish could deliver pre-restyle
+        // geometry while the render is post-restyle, and the checkbox then
+        // has no guaranteed second publish to converge on (the async @State
+        // write only triggers a re-render when the value CHANGES).
+        context.coordinator.publishFirstLineTypographicCenter(textView)
         if requestFocus {
             context.coordinator.requestFocusIfNeeded(textView)
         } else if context.coordinator.didHandleFocusRequest {
@@ -313,6 +322,15 @@ public struct RichTextView: NSViewRepresentable {
         /// Last-write-wins (no queueing) — the composition commit restyles
         /// once.
         var pendingTypography: EditorTypography?
+        /// PR2: the last CHARACTER-edit range reported by the storage's
+        /// `didProcessEditing` — consumed by the typing normalization at a
+        /// safe point (textDidChange after the FR-063 composition guard).
+        /// The storage's own `editedRange` report is used verbatim — NEVER
+        /// reconstructed from `changeInLength`, which is a delta (negative
+        /// for deletions) and not a range length. While the IME composes,
+        /// multiple character edits UNION (coalesce) into one pending range
+        /// consumed at composition commit — never last-write-wins.
+        var pendingCharacterEditRange: NSRange?
 
         /// 004 FR-012 (clarify 2026-08-10): the window whose key-state
         /// notifications republish the selection snapshot, plus the
@@ -333,10 +351,14 @@ public struct RichTextView: NSViewRepresentable {
 
         /// 004 修复 (2026-08-14, P1): publishes the editor's first-line
         /// typographic center (real TextKit geometry) so the host aligns
-        /// its marker (todo checkbox) to it.
+        /// its marker (todo checkbox) to it. The alignment font is the
+        /// NOMINAL body font of the CURRENT typography (PR1) — the optical
+        /// offset is stable across first-character formatting.
         func publishFirstLineTypographicCenter(_ textView: NSTextView) {
             guard let paper = textView as? NotePaperTextView else { return }
-            parent.onFirstLineTypographicCenter?(paper.firstLineTypographicCenterFromTop)
+            let resolver = NoteFontResolver(preference: parent.editorTypography.fontPreference)
+            let alignmentFont = resolver.nominalBodyFont(size: parent.editorTypography.textSize)
+            parent.onFirstLineTypographicCenter?(paper.firstLineTypographicCenterFromTop(alignmentFont: alignmentFont))
         }
 
         /// 004 修复: routes this editor's undo to the window-level shared
@@ -388,6 +410,11 @@ public struct RichTextView: NSViewRepresentable {
             RichTextMarkApplier.applyMarks(marks, to: textView)
             commitCurrentDocument(from: textView)
             registerFormattingUndo(pairs, textView: textView)
+            // 2026-08-14 fix: attribute edits never fire didChangeText —
+            // without this the SwiftUI frame keeps the pre-mark intrinsic
+            // (the "⌘B 后段落错位、拉宽才恢复" symptom) whenever the
+            // mark changes the laid-out line metrics.
+            textView.invalidateIntrinsicContentSize()
             return true
         }
 
@@ -436,6 +463,9 @@ public struct RichTextView: NSViewRepresentable {
             textView.undoManager?.registerUndo(withTarget: self) { target in
                 target.restoreFormattingSegments(pairs, to: textView, restoringBefore: !restoringBefore)
             }
+            // Same discipline as applyMarks: attribute edits need an
+            // explicit intrinsic invalidation.
+            textView.invalidateIntrinsicContentSize()
         }
 
         /// Commits the text view's current attributed content into the
@@ -505,6 +535,10 @@ public struct RichTextView: NSViewRepresentable {
             guard !textView.hasMarkedText() else { return }
             isPushing = true
             defer { isPushing = false }
+            // PR2: a model push rebuilds the whole storage — its edits must
+            // never feed the typing normalization (the storage delegate
+            // also skips pushes; this reset covers any captured residue).
+            pendingCharacterEditRange = nil
             // 004 修复: model pushes must not register undo actions AND must
             // not wipe the shared undo stack (clearing is the structural
             // change's job — NoteWindowHostModel).
@@ -525,6 +559,16 @@ public struct RichTextView: NSViewRepresentable {
             }
             applyDisplayStyling(to: textView)
             lastAppliedTypography = typography
+            // 2026-08-14 fix (insertion gap): a content push changes the
+            // text but NEVER fires didChangeText (verified — neither the
+            // `string` setter nor setAttributedString do) — the intrinsic
+            // content size stays stale and SwiftUI keeps the pre-push
+            // frame. This is the "插入后与正文距离异常变大、拉宽窗口才恢复"
+            // mechanism: the caretSplit trims/splits the body, the frame
+            // stays at the old (taller) height. The invalidate must be
+            // unconditional — the incidental flag-flip invalidation only
+            // covered the single-block shape.
+            textView.invalidateIntrinsicContentSize()
         }
 
         /// 004 修复: applies/removes the display-only styling (todo
@@ -619,12 +663,95 @@ public struct RichTextView: NSViewRepresentable {
             // (stale offsets made window-level Insert split at the wrong
             // position right after CJK input).
             publishSelection(from: textView)
+            // PR2: normalize the just-edited range to the canonical font
+            // plan — live typing becomes visually identical to any content
+            // push / restyle within the same runloop turn (Invariant 2).
+            // Runs only for USER edits (never during pushes — the capture
+            // skips isPushing), and never during composition (the guard
+            // above; the pending range unions and is consumed at commit).
+            normalizeEditedRangeIfNeeded(textView)
             // Phase 3: the composition has landed — apply a typography
             // change parked during composition (last-write-wins).
             if let pending = pendingTypography {
                 pendingTypography = nil
                 restyleTypographyInPlace(pending, document: document, to: textView)
             }
+        }
+
+        // MARK: - PR2 typing normalization (canonical font projection)
+
+        /// The canonical FONT plan for a storage range, resolved from the
+        /// CURRENT typography — the same rules as `presentationFontPlan`
+        /// (full coverage via `NoteFontResolver.segmentedFonts` + marks),
+        /// driven by the storage's own attribute segments instead of the
+        /// document's runs. Single font source of truth: live typing,
+        /// content push and restyle all land on this plan.
+        private func fontPlan(
+            in range: NSRange,
+            storage: NSTextStorage
+        ) -> [(range: NSRange, font: NSFont, obliqueness: Double?)] {
+            let resolver = NoteFontResolver(preference: parent.editorTypography.fontPreference)
+            let textSize = parent.editorTypography.textSize
+            var plan: [(range: NSRange, font: NSFont, obliqueness: Double?)] = []
+            storage.enumerateAttributes(in: range, options: []) { attributes, subrange, _ in
+                let marks = RichTextMarkApplier.semanticMarks(from: attributes, excludesDisplayStyling: true)
+                let subText = (storage.string as NSString).substring(with: subrange)
+                var traits: NSFontDescriptor.SymbolicTraits = []
+                if marks.contains(.bold) { traits.insert(.bold) }
+                if marks.contains(.italic) { traits.insert(.italic) }
+                let segments = resolver.segmentedFonts(text: subText, size: textSize, traits: traits)
+                var utf16Cursor = subrange.location
+                for segment in segments {
+                    let length = (segment.segment as NSString).length
+                    guard length > 0 else { continue }
+                    var font = segment.font
+                    if marks.contains(.inlineCode) {
+                        font = NSFont.monospacedSystemFont(ofSize: textSize, weight: traits.contains(.bold) ? .bold : .regular)
+                    }
+                    let obliqueness: Double? = marks.contains(.italic)
+                        && !RichTextMarkApplier.hasTrait(.italic, in: font)
+                        ? RichTextMarkApplier.synthesizedItalicObliqueness
+                        : nil
+                    plan.append((NSRange(location: utf16Cursor, length: length), font, obliqueness))
+                    utf16Cursor += length
+                }
+            }
+            return plan
+        }
+
+        /// Applies the canonical font plan to the pending character-edit
+        /// range (extended to its enclosing paragraph — v1 simplification,
+        /// line-metric coherence; documented as NOT the final performance
+        /// invariant). Attribute-only edits: no textDidChange, no commit,
+        /// no undo registration — the canonical round trip derives marks
+        /// from traits, which this pass preserves.
+        private func normalizeEditedRangeIfNeeded(_ textView: NSTextView) {
+            guard let pending = pendingCharacterEditRange else { return }
+            pendingCharacterEditRange = nil
+            guard let storage = textView.textStorage else { return }
+            var effective = pending
+            if effective.length == 0 {
+                // Pure deletion: the deletion point may have joined two
+                // script runs — cover at least one composed character on
+                // each side (the paragraph expansion absorbs the rest).
+                effective = NSRange(location: max(0, pending.location - 1), length: 2)
+            }
+            let full = NSRange(location: 0, length: storage.length)
+            let clamped = NSIntersectionRange(effective, full)
+            guard clamped.length > 0 else { return }
+            let paragraphRange = (storage.string as NSString).paragraphRange(for: clamped)
+            guard paragraphRange.length > 0 else { return }
+            let undo = textView.undoManager
+            undo?.disableUndoRegistration()
+            defer { undo?.enableUndoRegistration() }
+            storage.beginEditing()
+            for entry in fontPlan(in: paragraphRange, storage: storage) {
+                storage.addAttribute(.font, value: entry.font, range: entry.range)
+                if let obliqueness = entry.obliqueness {
+                    storage.addAttribute(.obliqueness, value: obliqueness, range: entry.range)
+                }
+            }
+            storage.endEditing()
         }
 
         public func textDidEndEditing(_ notification: Notification) {
@@ -813,9 +940,15 @@ public struct RichTextView: NSViewRepresentable {
         /// `EditorTypography.lineSpacing`).
         private func paragraphStyle(for typography: EditorTypography) -> NSParagraphStyle? {
             guard let lineSpacing = typography.lineSpacing else { return nil }
-            let style = NSMutableParagraphStyle()
-            style.lineSpacing = lineSpacing
-            return style
+            let mutable = NSMutableParagraphStyle()
+            mutable.lineSpacing = lineSpacing
+            // PR2: a REAL immutable snapshot — the storage full-range
+            // attribute and typingAttributes share it safely (an
+            // NSParagraphStyle is immutable; a bare mutable instance could
+            // be mutated in place by a future paragraph-level edit and
+            // propagate to every paragraph at once).
+            guard let snapshot = mutable.copy() as? NSParagraphStyle else { return mutable }
+            return snapshot
         }
 
         /// Applies the canonical runs as NSAttributedString attributes —
@@ -941,6 +1074,43 @@ public struct RichTextView: NSViewRepresentable {
     }
 }
 
+// MARK: - NSTextStorageDelegate (PR2 typing normalization capture)
+//
+// The SDK protocol is not @MainActor-annotated (unlike NSTextViewDelegate),
+// while the coordinator is. The witness is nonisolated and hops to the main
+// actor via assumeIsolated — the storage calls arrive on the main thread
+// (AppKit editing), the same discipline as the coordinator's deinit.
+
+extension RichTextView.Coordinator: NSTextStorageDelegate {
+    /// Apple's storage pipeline: attribute fixing → didProcessEditing →
+    /// layout-manager notifications. The delegate may edit ATTRIBUTES
+    /// here (never characters). We only CAPTURE — normalization runs
+    /// later, after the FR-063 composition guard — so marked text is
+    /// never restyled mid-composition (Invariant 5).
+    public nonisolated func textStorage(
+        _ textStorage: NSTextStorage,
+        didProcessEditing editedMask: NSTextStorageEditActions,
+        range editedRange: NSRange,
+        changeInLength delta: Int
+    ) {
+        MainActor.assumeIsolated {
+            guard editedMask.contains(.editedCharacters) else { return }
+            // Model pushes rebuild the whole storage — their edits must not
+            // feed the typing normalization.
+            guard !isPushing else { return }
+            if let existing = pendingCharacterEditRange {
+                let unioned = NSUnionRange(existing, editedRange)
+                // A zero-length range (pure deletion) must not shrink the
+                // pending union — keep the wider of the two.
+                pendingCharacterEditRange = unioned.length > 0 ? unioned : existing
+            } else {
+                pendingCharacterEditRange = editedRange
+            }
+        }
+    }
+}
+
+
 // MARK: - IntrinsicSizingTextView (004 修复 2026-08-14, P0)
 
 /// The shared width-sensitive sizing base for the note's NSTextViews
@@ -1033,27 +1203,53 @@ final class NotePaperTextView: IntrinsicSizingTextView {
     }
 
     /// The FIRST LINE's typographic center, measured from the text view's
-    /// top (004 修复 2026-08-14, P1): the line fragment's midY in view
-    /// coordinates — REAL TextKit layout geometry (the fragment box
-    /// already accounts for font fallback / mixed runs / line-height
-    /// factors), never nominal font metrics. Measured on a CJK todo:
-    /// fragment = used = 16pt tall, midY 8pt — the stable expression of
-    /// "第一行 typographic center". Empty text falls back to the caret
-    /// line's center from the current font (same value family).
-    var firstLineTypographicCenterFromTop: CGFloat {
-        if let layoutManager, let container = textContainer {
+    /// top (004 修复 2026-08-14, P1; PR1 rework 2026-08-14): the REAL TextKit
+    /// first-line baseline minus the NOMINAL body font's optical offset
+    /// `(ascender + descender) / 2` — independent of line spacing, wrapping
+    /// width, line count and first-character formatting. `alignmentFont`
+    /// MUST be the same nominal body font the todo row seeds its checkbox
+    /// with (`NoteFontResolver.nominalBodyFont`) — the invariant is
+    /// "checkbox center == actual baseline - (nominalAsc + nominalDesc)/2",
+    /// NOT a fixed position: bold / inline code / CJK / emoji move the
+    /// checkbox only when TextKit's own line metrics move the baseline.
+    ///
+    /// Baseline acquisition (calibrated by TodoFirstLineMetricTests):
+    /// C3a — `fragment.minY + location(forGlyphAt: 0).y` (the glyph location
+    /// is relative to the line-fragment origin). The semantic reference is
+    /// C3b — `fragment.maxY - typesetter.baselineOffset(in:glyphIndex:)` —
+    /// and the calibration suite pins C3a to it; if a future macOS release
+    /// diverges, switch this branch to C3b.
+    func firstLineTypographicCenterFromTop(alignmentFont: NSFont) -> CGFloat {
+        if let layoutManager, let container = textContainer,
+           let storage = textStorage, storage.length > 0,
+           container.size.width > 1.0 {
             layoutManager.ensureLayout(for: container)
-            if let storage = textStorage, storage.length > 0 {
-                let rect = layoutManager.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil)
-                return rect.midY + textContainerInset.height
-            }
+            let fragment = layoutManager.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil)
+            let baseline = fragment.minY + layoutManager.location(forGlyphAt: 0).y + textContainerInset.height
+            return baseline - (alignmentFont.ascender + alignmentFont.descender) / 2
         }
-        let current = font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
-        // baseline = inset + ascender; center = baseline − (asc+desc)/2.
-        return textContainerInset.height + (current.ascender - current.descender) / 2
+        // Empty text / zero-width container: no authoritative geometry —
+        // the seed-formula family (the nominal font's own typographic
+        // center), identical to the TodoBlockView seed.
+        return textContainerInset.height + (alignmentFont.ascender - alignmentFont.descender) / 2
     }
 
     override var intrinsicContentSize: NSSize {
+        let topInset = textContainerInset.height
+        let lineFont = font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        let lineHeight = lineFont.ascender - lineFont.descender + lineFont.leading
+        let oneLineFloor = topInset + ceil(lineHeight)
+        let floor = minimumHeight > 0 ? minimumHeight : oneLineFloor
+        // 2026-08-14 fix (insertion gap): a freshly inserted editor's
+        // container is still 0 wide on the FIRST measurement — a width-0
+        // layout puts EVERY glyph on its own line, so usedRect reports a
+        // bogus TALL height and the first frame inflates the gap until a
+        // width change re-measures. Zero-width containers report the floor
+        // (no authoritative geometry); the first real frame triggers the
+        // width-change re-measure.
+        if let container = textContainer, container.size.width <= 1.0 {
+            return NSSize(width: NSView.noIntrinsicMetric, height: floor)
+        }
         // 004 T063 (2026-08-13): force the layout pass before reading
         // usedRect — the enclosing SwiftUI ScrollView relies on this
         // intrinsic height to grow its content and scroll a long note
@@ -1062,17 +1258,12 @@ final class NotePaperTextView: IntrinsicSizingTextView {
             layoutManager.ensureLayout(for: textContainer)
         }
         let used = layoutManager?.usedRect(for: textContainer ?? NSTextContainer()).height ?? 0
-        let topInset = textContainerInset.height
         let bottomInset = collapsesBottomInset ? 0 : textContainerInset.height
         let contentHeight = used + topInset + bottomInset
         // The floor: the primary paper keeps its 320pt click target; a
         // content-sized editor (minimumHeight == 0 — trailing/todo/primary-
         // with-blocks) keeps ONE line so an empty block never collapses to
         // 0pt (the caret/click target must survive the zero vertical inset).
-        let lineFont = font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
-        let lineHeight = lineFont.ascender - lineFont.descender + lineFont.leading
-        let oneLineFloor = topInset + ceil(lineHeight)
-        let floor = minimumHeight > 0 ? minimumHeight : oneLineFloor
         return NSSize(
             width: NSView.noIntrinsicMetric,
             height: max(contentHeight, floor)

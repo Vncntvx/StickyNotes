@@ -64,6 +64,23 @@ public struct NoteFontResolver {
         return Self.font(family: family, size: size, traits: traits)
     }
 
+    /// The NOMINAL body font for a typography: the PRIMARY family at the
+    /// given size, never script-segmented. This is the todo checkbox's
+    /// stable alignment font (PR1) — the optical offset between the real
+    /// first-line baseline and the checkbox center is derived from it, so
+    /// first-character bold / inline code / CJK / emoji formatting can never
+    /// move the checkbox by changing the offset. The explicit form of the
+    /// former `font(size:for: "")` edge case (an empty string made
+    /// `family(for:)` return the primary family) — the alignment invariant
+    /// must not depend on another API's empty-string semantics.
+    public func nominalBodyFont(size: CGFloat) -> NSFont {
+        guard let preference else {
+            return Self.systemFont(size: size, traits: [])
+        }
+        let family = preference.primaryFamily ?? FontPreference.systemDefault.primaryFamily!
+        return Self.font(family: family, size: size, traits: [])
+    }
+
     /// Splits `text` into alternating non-CJK / CJK coverage segments, each
     /// with the font FR-043 assigns to it. Mixed Latin+CJK runs (e.g.
     /// "Hello 世界") therefore render English in the primary family and

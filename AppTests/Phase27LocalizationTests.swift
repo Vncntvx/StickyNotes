@@ -19,7 +19,7 @@ import Foundation
         "Synchronization", "Not configured", "Up to Date", "Automatic sync",
         "Keep sync unlocked on this Mac", "Sync Now", "Syncing…",
         "Moved to Trash", "Permanently Deleted", "Sync not configured",
-        "Sync issue", "Retry", "Sync ready", "Add Todo", "Add Code Block",
+        "Sync issue", "Retry", "Sync ready", "Add Todo",
         "Add File Reference…", "Capture Screenshot…", "Add Block",
         "Add Screenshot", "Capture Region…", "Capture Window…", "Todo",
         "Set as Cover", "Remove Cover", "Caption", "View", "Copy",

@@ -90,7 +90,7 @@ public struct BlockInsertionControl: View {
             && !BlockInsertionPolicy.obscuresContent
         Menu {
             Button("Add Todo", action: onInsertTodo)
-            Button("Add Code Block", action: onInsertCode)
+            Button("Add Block", action: onInsertCode)
             Divider()
             Button("Add File Reference…", action: onInsertFileReference)
             Button("Capture Screenshot…", action: onCaptureScreenshot)

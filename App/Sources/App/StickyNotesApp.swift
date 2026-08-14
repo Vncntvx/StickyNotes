@@ -204,7 +204,7 @@ struct StickyNotesApp: App {
                 }
                 .keyboardShortcut("t", modifiers: [.command, .shift])
 
-                Button("Add Code Block") {
+                Button("Add Block") {
                     postInsertion(.stickyRequestInsertCode)
                 }
                 .keyboardShortcut("c", modifiers: [.command, .shift])

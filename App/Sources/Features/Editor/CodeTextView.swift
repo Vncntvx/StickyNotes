@@ -252,6 +252,17 @@ public struct CodeTextView: NSViewRepresentable {
 final class CodeEditorTextView: IntrinsicSizingTextView {
 
     override var intrinsicContentSize: NSSize {
+        let lineFont = font ?? NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        let lineHeight = lineFont.ascender - lineFont.descender + lineFont.leading
+        let singleLineFloor = ceil(lineHeight) + textContainerInset.height * 2
+        // 2026-08-14 fix (insertion gap): same zero-width guard as
+        // NotePaperTextView — a freshly inserted code editor's first
+        // measurement at container width 0 reports every glyph on its own
+        // line (bogus tall), inflating the insertion gap until a width
+        // change re-measures.
+        if let container = textContainer, container.size.width <= 1.0 {
+            return NSSize(width: NSView.noIntrinsicMetric, height: singleLineFloor)
+        }
         if let layoutManager, let textContainer {
             layoutManager.ensureLayout(for: textContainer)
         }
@@ -259,9 +270,6 @@ final class CodeEditorTextView: IntrinsicSizingTextView {
         let contentHeight = used + textContainerInset.height * 2
         // One monospaced line + insets — content-sized text never pays more
         // than its lines; empty text keeps this as its click target.
-        let lineFont = font ?? NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
-        let lineHeight = lineFont.ascender - lineFont.descender + lineFont.leading
-        let singleLineFloor = ceil(lineHeight) + textContainerInset.height * 2
         return NSSize(
             width: NSView.noIntrinsicMetric,
             height: max(contentHeight, singleLineFloor)

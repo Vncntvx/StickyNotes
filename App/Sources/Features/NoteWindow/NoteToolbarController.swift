@@ -523,7 +523,7 @@ final class NoteToolbarController: NSObject, NSToolbarDelegate {
         todoItem.target = self
         menu.addItem(todoItem)
 
-        let codeItem = NSMenuItem(title: String(localized: "Add Code Block"), action: #selector(insertCodeAction(_:)), keyEquivalent: "c")
+        let codeItem = NSMenuItem(title: String(localized: "Add Block"), action: #selector(insertCodeAction(_:)), keyEquivalent: "c")
         codeItem.keyEquivalentModifierMask = [.command, .shift]
         codeItem.target = self
         menu.addItem(codeItem)

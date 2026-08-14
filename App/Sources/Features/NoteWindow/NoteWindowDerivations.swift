@@ -605,8 +605,17 @@ public enum RichTextMarkApplier {
 
     /// Coverage-segmented fonts that keep the families currently
     /// materialized in the storage (formatting toggles; bare-test views
-    /// without a resolver). Each coverage segment adopts the family of the
-    /// font at its start offset, then applies the requested traits.
+    /// without a resolver). Each coverage segment adopts the font at its
+    /// start offset, then applies the requested traits.
+    ///
+    /// 2026-08-14 fix (whole-paragraph ⌘B/⌘I "text spacing 紧缩"): the
+    /// previous implementation RECONSTRUCTED the font by family name
+    /// (`NSFont(name: familyName)`) — a lossy step: system-font family
+    /// names (".AppleSystemUIFont") and CJK UI variants can resolve to a
+    /// DIFFERENT font (verified: ".PingFang UI SC" → Times New Roman, line
+    /// height 16→13pt). The ACTUAL font object is now preserved and the
+    /// traits are added/removed on it directly — metrics can never change
+    /// on a formatting toggle.
     @MainActor
     private static func storageFamilySegments(
         text: String,
@@ -629,10 +638,8 @@ public enum RichTextMarkApplier {
             let segmentText = String(String.UnicodeScalarView(scalars[segmentStart..<index]))
             let location = min(range.location + segmentUTF16Start, range.location + range.length - 1)
             let baseFont = storage.attribute(.font, at: location, effectiveRange: nil) as? NSFont
-            var font = baseFont.flatMap { NSFont(name: $0.familyName ?? "", size: size) }
                 ?? NSFont.systemFont(ofSize: size)
-            font = fontWithTraits(traits, on: font)
-            segments.append((segmentText, font))
+            segments.append((segmentText, fontWithTraits(traits, on: baseFont)))
             segmentUTF16Start += (segmentText as NSString).length
             segmentStart = index
             segmentIsCJK = isCJK
@@ -640,16 +647,24 @@ public enum RichTextMarkApplier {
         return segments
     }
 
-    /// Applies bold/italic symbolic traits via NSFontManager (synthesizing
-    /// when the family lacks the face — callers add `.obliqueness` for
-    /// italic when the result carries no italic trait).
+    /// Applies bold/italic symbolic traits via NSFontManager ON THE ACTUAL
+    /// FONT OBJECT (synthesizing when the family lacks the face — callers
+    /// add `.obliqueness` for italic when the result carries no italic
+    /// trait). Traits are ADDED or REMOVED relative to the font's current
+    /// state, so a toggle in either direction lands on the family's own
+    /// faces — line metrics are preserved by construction.
     private static func fontWithTraits(_ traits: NSFontDescriptor.SymbolicTraits, on base: NSFont) -> NSFont {
         var result = base
-        if traits.contains(.bold) {
-            result = synthesizedFont(result, adding: .bold)
+        let current = result.fontDescriptor.symbolicTraits
+        if current.contains(.bold) != traits.contains(.bold) {
+            result = traits.contains(.bold)
+                ? synthesizedFont(result, adding: .bold)
+                : synthesizedFont(result, removing: .bold)
         }
-        if traits.contains(.italic) {
-            result = synthesizedFont(result, adding: .italic)
+        if current.contains(.italic) != traits.contains(.italic) {
+            result = traits.contains(.italic)
+                ? synthesizedFont(result, adding: .italic)
+                : synthesizedFont(result, removing: .italic)
         }
         return result
     }

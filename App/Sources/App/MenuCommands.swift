@@ -57,7 +57,7 @@ public enum MenuCommandCatalog {
         MenuCommand(title: "Settings…", location: .file, shortcut: ","),
         // Edit (standard edit commands + block insertion)
         MenuCommand(title: "Insert Todo", location: .edit, shortcut: "t", modifiers: [.command, .shift]),
-        MenuCommand(title: "Insert Code Block", location: .edit, shortcut: "c", modifiers: [.command, .shift]),
+        MenuCommand(title: "Insert Block", location: .edit, shortcut: "c", modifiers: [.command, .shift]),
         MenuCommand(title: "Insert File Reference…", location: .edit),
         MenuCommand(title: "Capture Screenshot…", location: .edit),
         // 004 T035 (FR-010): unified image insertion.
