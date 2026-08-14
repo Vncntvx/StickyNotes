@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import AppKit
 import Domain
+import EditorCore
 @testable import StickyNotes
 
 // MARK: - Block key-command routing tests (2026-08-14)
@@ -166,5 +167,69 @@ import Domain
         textView.setMarkedText("拼", selectedRange: NSRange(location: 0, length: 1), replacementRange: NSRange(location: NSNotFound, length: 0))
         textView.doCommand(by: #selector(NSResponder.deleteBackward(_:)))
         #expect(!merged, "the merge must not fire while the IME is composing (FR-063)")
+    }
+
+    // MARK: - R2.2 cross-block copy (Phase 2, FR-054)
+
+    /// Builds a rich-text view wired to a bridge with an ACTIVE cross-block
+    /// selection, capturing the copy callback.
+    private func makeCrossBlockCopyFixture() -> (NotePaperTextView, EditorSelectionBridge, () -> CrossBlockSelection?) {
+        var copied: CrossBlockSelection?
+        let bridge = EditorSelectionBridge(noteId: UUID())
+        let editor = RichTextView(
+            document: .plain("keep"),
+            editorTypography: .system(textSize: 13),
+            onCommit: { _ in },
+            onDeleteSpanningSelection: nil,
+            onCopySpanningSelection: { copied = $0 }
+        )
+        let coordinator = RichTextView.Coordinator(editor)
+        let textView = NotePaperTextView(frame: NSRect(x: 0, y: 0, width: 380, height: 200))
+        textView.isRichText = true
+        textView.string = "keep"
+        textView.font = NSFont.systemFont(ofSize: 13)
+        textView.delegate = coordinator
+        textView.blockKeyHandler = coordinator
+        coordinator.attach(textView, bridge: bridge, blockId: nil)
+        return (textView, bridge, { copied })
+    }
+
+    @Test
+    func commandCWithCrossBlockSelectionInvokesSpanningCopy() {
+        let (textView, bridge, copied) = makeCrossBlockCopyFixture()
+        let firstBlock = UUID()
+        let secondBlock = UUID()
+        // An active cross-block selection covering two blocks.
+        bridge.publishCrossBlockSelection(
+            CrossBlockSelection(selections: [
+                (blockId: firstBlock, range: 0..<4),
+                (blockId: secondBlock, range: 0..<2),
+            ]),
+            focusedBlockId: firstBlock
+        )
+
+        let event = NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [.command],
+            timestamp: 0, windowNumber: 0, context: nil,
+            characters: "c", charactersIgnoringModifiers: "c",
+            isARepeat: false, keyCode: 8
+        )!
+        textView.keyDown(with: event)
+
+        #expect(copied() != nil, "⌘C with a cross-block selection must invoke the spanning copy")
+        #expect(copied()?.selections.count == 2, "the full spanning selection is copied")
+    }
+
+    @Test
+    func commandCWithoutCrossBlockSelectionFallsThroughToSystemCopy() {
+        let (textView, _, copied) = makeCrossBlockCopyFixture()
+        let event = NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [.command],
+            timestamp: 0, windowNumber: 0, context: nil,
+            characters: "c", charactersIgnoringModifiers: "c",
+            isARepeat: false, keyCode: 8
+        )!
+        textView.keyDown(with: event)
+        #expect(copied() == nil, "⌘C without a cross-block selection must NOT intercept (system copy)")
     }
 }
