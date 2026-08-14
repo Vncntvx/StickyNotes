@@ -146,7 +146,11 @@ import AssetStore
             let assetStore = env.assets.store!
             let original = try await assetStore.readData(assetID: payload.originalAssetId)
             #expect(original == Self.pngFixture, "original asset bytes stored (FR-090a)")
-            let thumb = try await assetStore.readData(assetID: payload.thumbnailAssetId)
+            guard let thumbID = payload.thumbnailAssetId else {
+                Issue.record("thumbnail must exist for a valid PNG fixture")
+                return
+            }
+            let thumb = try await assetStore.readData(assetID: thumbID)
             #expect(!thumb.isEmpty, "thumbnail stored")
         } else {
             Issue.record("expected screenshot payload")
@@ -187,5 +191,88 @@ import AssetStore
         await host.performEmbeddedImageAction(blockId: blockId, action: .remove)
         let blocks = try await env.persistence.noteRepository!.fetchBlocks(noteId: noteId)
         #expect(!blocks.contains { $0.id == blockId }, "remove deletes the image block (FR-090)")
+    }
+
+    // MARK: - R1.3 capture failure fail-closed (remediation-phase1 T012/T013)
+    //
+    // The capture pipeline must NEVER produce a note mutation from failed
+    // or empty capture data (Core T303 fail-closed contract), and a
+    // missing thumbnail must never fall back to the full-resolution
+    // original (SC-008: the card grid never decodes an original).
+
+    @Test
+    func captureProviderFailureLeavesNoSideEffects() async throws {
+        // T012: a throwing capture provider → capture fails, no block, no
+        // asset. (Guard test: locks in the existing fail-closed behavior.)
+        let (env, _) = try makeEnvironment()
+        let model = LibraryModel(environment: env)
+        guard let noteId = await model.createBlankNote() else {
+            Issue.record("createBlankNote failed")
+            return
+        }
+        let host = await freshHost(env: env, noteId: noteId)
+        let blockCountBefore = host.blocks.count
+        let assetsBefore = await env.assets.store?.snapshot().count ?? 0
+
+        let ok = await host.captureRegion(
+            dataProvider: { throw StickyError.capture(.captureStreamFailed) },
+            target: .append
+        )
+        #expect(ok == false, "capture failure must report failure")
+        #expect(host.blocks.count == blockCountBefore, "no block inserted on capture failure")
+        #expect((await env.assets.store?.snapshot().count ?? 0) == assetsBefore,
+                "no asset stored on capture failure")
+    }
+
+    @Test
+    func emptyCaptureDataIsRejected() async throws {
+        // T013a: empty data (the pre-fix CaptureFlow swallowed errors into
+        // `Data()` and the empty PNG was stored as a successful screenshot)
+        // must be rejected — no block, no asset, failure reported.
+        let (env, _) = try makeEnvironment()
+        let model = LibraryModel(environment: env)
+        guard let noteId = await model.createBlankNote() else {
+            Issue.record("createBlankNote failed")
+            return
+        }
+        let host = await freshHost(env: env, noteId: noteId)
+        let blockCountBefore = host.blocks.count
+        let assetsBefore = await env.assets.store?.snapshot().count ?? 0
+
+        let ok = await host.captureRegion(dataProvider: { Data() }, target: .append)
+        #expect(ok == false, "empty capture data must be rejected, never stored as a screenshot")
+        #expect(host.blocks.count == blockCountBefore, "no block inserted for empty data")
+        #expect((await env.assets.store?.snapshot().count ?? 0) == assetsBefore,
+                "no asset stored for empty data")
+    }
+
+    @Test
+    func thumbnailFailureDoesNotFallBackToOriginal() async throws {
+        // T013b (SC-008): when thumbnail generation fails, the block's
+        // thumbnailAssetId must be nil — never the original asset id (the
+        // card grid would decode a full-resolution original).
+        // Deterministic injection: non-image bytes pass the size check,
+        // store as an original, and fail thumbnail generation.
+        let (env, _) = try makeEnvironment()
+        let model = LibraryModel(environment: env)
+        guard let noteId = await model.createBlankNote() else {
+            Issue.record("createBlankNote failed")
+            return
+        }
+        let host = await freshHost(env: env, noteId: noteId)
+        let blockCountBefore = host.blocks.count
+
+        let ok = await host.captureRegion(
+            dataProvider: { Data("garbage-bytes-that-are-not-an-image".utf8) },
+            target: .append
+        )
+        #expect(ok == true, "the original bytes still store (thumbnail failure is not a capture failure)")
+        #expect(host.blocks.count == blockCountBefore + 1, "a screenshot block is inserted")
+        guard let block = host.blocks.last, case .screenshot(let payload) = block.payload else {
+            Issue.record("expected a screenshot block")
+            return
+        }
+        #expect(payload.thumbnailAssetId == nil,
+                "thumbnailAssetId must not fall back to the original (SC-008)")
     }
 }
