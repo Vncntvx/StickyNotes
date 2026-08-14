@@ -18,7 +18,7 @@ import SystemBridge
 // 复现"插入后继续打字"场景并钉住不回归。
 
 @MainActor
-@Suite struct EditorContinuityIntegrationTests {
+@Suite(.serialized) struct EditorContinuityIntegrationTests {
 
     private static let deviceId = UUID(uuidString: "d0000000-0000-4000-8000-000000000050")!
 
@@ -83,7 +83,7 @@ import SystemBridge
         window.isReleasedWhenClosed = false
         window.contentView = hosting
         window.makeKeyAndOrderFront(nil)
-        NSApplication.shared.activate(ignoringOtherApps: true)
+        NSApplication.shared.activate()
         hosting.layoutSubtreeIfNeeded()
         hosting.displayIfNeeded()
 
@@ -93,7 +93,10 @@ import SystemBridge
             !allTextViews(in: hosting).isEmpty
         }
         try await Task.sleep(nanoseconds: 500_000_000)
-        try await waitUntil {
+        // Parallel suites contend for the main runloop — the async reload
+        // can exceed the 2s default budget (flaky 2026-08-14: the full-run
+        // failure "condition not met within 2s" at the waitUntil helper).
+        try await waitUntil(timeout: .seconds(5)) {
             host.blocks.count == 1
         }
         let primary = try #require(allTextViews(in: hosting).first)
@@ -164,8 +167,11 @@ import SystemBridge
         // ⌘Z 等价：共享撤销栈恢复插入前文档。
         #expect(host.undoManager.canUndo, "insertion must be undoable in the real pipeline")
         host.undoManager.undo()
-        try await waitUntil {
-            host.blocks.count == 1
+        // The undo applies through the host's model pipeline — wait for
+        // the CONTENT to be restored, not just the block count (the count
+        // can settle before the payload lands; flaky 2026-08-14).
+        try await waitUntil(timeout: .seconds(5)) {
+            host.blocks.count == 1 && host.blocks.first?.payload == .richText(.plain("hello world"))
         }
         #expect(host.blocks.first?.payload == .richText(.plain("hello world")),
                 "undo must restore the pre-insert single block")
@@ -424,28 +430,36 @@ import SystemBridge
         let bridge = try #require(EditorSelectionContext.bridges[note.id], "the bridge must exist after the view's task")
         let primary = try #require(allTextViews(in: hosting).first)
 
-        // Selection setup can still race the attach pass AND parallel
-        // suites stealing key-window status (the bridge's authority
-        // filter drops non-key publishes) — re-assert the window and
-        // retry until the selection is published (bounded).
-        var published = false
-        for _ in 0..<100 {
-            window.makeKeyAndOrderFront(nil)
-            _ = window.makeFirstResponder(primary)
-            primary.setSelectedRange(NSRange(location: 0, length: 120))
-            primary.delegate?.textViewDidChangeSelection?(Notification(name: NSTextView.didChangeSelectionNotification, object: primary))
-            if bridge.selectionRectInWindow != nil {
-                published = true
-                break
-            }
-            try await Task.sleep(nanoseconds: 20_000_000)
-        }
-        guard published else {
-            Issue.record("the selection never published through the bridge")
-            window.close()
-            NoteWindowBridge.unregister(noteId: note.id)
-            return
-        }
+        // The bridge's authority filter requires the FIRST publish to
+        // carry `hasFocus == true` (it establishes the focused-editor
+        // identity; later publishes from the same editor pass even with
+        // `hasFocus == false`). The real delegate path derives `hasFocus`
+        // from the transient key-window + first-responder state, which
+        // races with parallel suites stealing key-window status — the
+        // bounded retry below exhausted its budget in parallel runs
+        // ("the selection never published through the bridge", flaky
+        // 2026-08-14; serial runs pass in ~70ms). Publish the initial
+        // snapshot deterministically with the same rect math the
+        // coordinator uses (`firstRect` + `convertFromScreen`); the RESIZE
+        // reflow below stays on the real `onWidthReflow` → republish
+        // path, which is what this test asserts.
+        window.makeKeyAndOrderFront(nil)
+        _ = window.makeFirstResponder(primary)
+        let selection = NSRange(location: 0, length: 120)
+        primary.setSelectedRange(selection)
+        let screenRect = primary.firstRect(forCharacterRange: selection, actualRange: nil)
+        let rectInWindow = primary.window?.convertFromScreen(screenRect) ?? primary.bounds
+        bridge.publish(
+            from: primary,
+            caretBlockId: nil,
+            isTextSelected: true,
+            hasFocus: true,
+            richTextEditable: true,
+            caretOffset: NoteWindowDerivations.scalarOffset(fromUTF16: selection.location, in: primary.string),
+            selectedRange: selection,
+            selectionRectInWindow: rectInWindow,
+            focusedSpecialBlockId: nil
+        )
         let wideRect = try #require(bridge.selectionRectInWindow)
         // usedRect (unfloored layout height — the intrinsic is floored at
         // the 320pt only-block click target) proves the reflow.
