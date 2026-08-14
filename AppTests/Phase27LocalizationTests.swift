@@ -49,7 +49,7 @@ import Foundation
         "When enabled, changes sync automatically. Periodic syncing is optional.",
         // Typography settings (Phase 5 + Rev 3, 2026-08-14)
         "Text Spacing", "Compact", "Default", "Relaxed",
-        "Note Appearance", "Note body font", "System Default",
+        "Note Appearance", "Note body font", "System Default", "Clear Formatting",
         // Trash ⋯ menu (003 T183, 2026-08-14)
         "More trash actions",
     ]

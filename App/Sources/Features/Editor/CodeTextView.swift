@@ -161,6 +161,18 @@ public struct CodeTextView: NSViewRepresentable {
                 // IME state at focus loss (FR-063).
                 parent.onFocusChange(false, textView.hasMarkedText())
                 publishSelection(from: textView)
+                // 2026-08-14 (用户实测): same exclusive-selection rule as
+                // RichTextView — collapse the lingering selection if focus
+                // does not return within this event turn (the bridge covers
+                // the focus-MOVE case; this covers non-editor destinations).
+                DispatchQueue.main.async { [weak textView] in
+                    guard let textView, textView.window?.firstResponder !== textView else { return }
+                    let location = textView.selectedRange().location
+                    textView.setSelectedRange(NSRange(
+                        location: location == NSNotFound ? 0 : location,
+                        length: 0
+                    ))
+                }
             }
         }
 

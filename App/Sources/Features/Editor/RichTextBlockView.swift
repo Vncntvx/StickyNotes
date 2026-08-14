@@ -622,7 +622,8 @@ struct ContextualFormatBar: View {
                 formatButton("italic", mark: .italic, help: String(localized: "Italic"))
                 formatButton("underline", mark: .underline, help: String(localized: "Underline"))
                 formatButton("strikethrough", mark: .strikethrough, help: String(localized: "Strikethrough"))
-                formatButton("chevron.left.forwardslash.chevron.right", mark: .inlineCode, help: String(localized: "Code Style"))
+                // 2026-08-14: clear formatting (empty marks) — the eraser.
+                formatButton("eraser", mark: nil, help: String(localized: "Clear Formatting"))
             }
             .padding(.horizontal, 6)
             .padding(.vertical, 4)
@@ -647,9 +648,16 @@ struct ContextualFormatBar: View {
         }
     }
 
-    private func formatButton(_ systemImage: String, mark: RichTextMark, help: String) -> some View {
-        Button {
-            bridge.applyMarks([mark])
+    private func formatButton(_ systemImage: String, mark: RichTextMark?, help: String) -> some View {
+        // 2026-08-14: active state — the toggle button highlights when the
+        // selection already carries the mark (so "no effect" is visibly
+        // "already on / next press toggles off"). The eraser (nil mark)
+        // highlights while ANY semantic marks are present.
+        let isActive = mark.map { bridge.selectedMarks.contains($0) }
+            ?? !bridge.selectedMarks.isEmpty
+        return Button {
+            // nil mark = clear formatting (empty marks set).
+            bridge.applyMarks(mark.map { [$0] } ?? [])
             // FR-029: the row never steals editing focus — restore the
             // editor as first responder after each action.
             bridge.textView?.window?.makeFirstResponder(bridge.textView)
@@ -657,6 +665,7 @@ struct ContextualFormatBar: View {
             Image(systemName: systemImage)
                 .font(.system(size: 12, weight: .medium))
                 .frame(width: 26, height: 22)
+                .foregroundStyle(isActive ? Color.accentColor : Color.primary)
         }
         // `.plain` inside the ONE material surface — no glass-on-glass
         // (FR-061), icons stay legible on the material (2026-08-14).

@@ -395,7 +395,12 @@ public struct RichTextView: NSViewRepresentable {
             let range = textView.selectedRange()
             guard range.length > 0 else {
                 // Typing path: no content exists yet — no commit, no undo.
-                pendingTypingMarks.formUnion(marks)
+                // Empty marks CLEAR the pending typing marks (2026-08-14).
+                if marks.isEmpty {
+                    pendingTypingMarks.removeAll()
+                } else {
+                    pendingTypingMarks.formUnion(marks)
+                }
                 RichTextMarkApplier.renderTypingAttributes(
                     pendingTypingMarks,
                     textView: textView,
@@ -408,7 +413,9 @@ public struct RichTextView: NSViewRepresentable {
                 (
                     range: segment.range,
                     before: segment.marks,
-                    after: segment.marks.symmetricDifference(marks)
+                    // Empty marks = CLEAR formatting (2026-08-14): after is
+                    // the empty set, not a no-op symmetric difference.
+                    after: marks.isEmpty ? [] : segment.marks.symmetricDifference(marks)
                 )
             }
             RichTextMarkApplier.applyMarks(marks, to: textView)
@@ -761,13 +768,27 @@ public struct RichTextView: NSViewRepresentable {
         public func textDidEndEditing(_ notification: Notification) {
             guard !isPushing, let textView = notification.object as? NSTextView else { return }
             parent.onFocusChange(false, textView.hasMarkedText())
-            publishSelection(from: textView)
+            publishSelection(from: textView, source: "textDidEndEditing")
+            // 2026-08-14 (用户实测): focus left the editor — if it does not
+            // return within this event turn (format-row actions restore it
+            // synchronously), the selection would linger gray in the
+            // unfocused block. The bridge already collapses it when focus
+            // MOVES to another editor; this covers focus leaving to a
+            // NON-editor (title field, toolbar).
+            DispatchQueue.main.async { [weak textView] in
+                guard let textView, textView.window?.firstResponder !== textView else { return }
+                let location = textView.selectedRange().location
+                textView.setSelectedRange(NSRange(
+                    location: location == NSNotFound ? 0 : location,
+                    length: 0
+                ))
+            }
         }
 
         public func textDidBeginEditing(_ notification: Notification) {
             parent.onFocusChange(true, false)
             if let textView = notification.object as? NSTextView {
-                publishSelection(from: textView)
+                publishSelection(from: textView, source: "textDidBeginEditing")
             }
         }
 
@@ -777,11 +798,11 @@ public struct RichTextView: NSViewRepresentable {
             guard !isPushing, let textView = notification.object as? NSTextView else { return }
             // FR-063: do not publish selection during IME composition.
             guard !textView.hasMarkedText() else { return }
-            publishSelection(from: textView)
+            publishSelection(from: textView, source: "textViewDidChangeSelection")
         }
 
         /// Publishes the current selection/focus snapshot into the bridge.
-        func publishSelection(from textView: NSTextView) {
+        func publishSelection(from textView: NSTextView, source: String = "?") {
             guard let bridge = liveBridge else { return }
             let range = textView.selectedRange()
             let hasFocus = (textView.window?.isKeyWindow ?? false) && (textView.window?.firstResponder === textView)
@@ -794,6 +815,15 @@ public struct RichTextView: NSViewRepresentable {
             // canonical 文档与块拆分使用 scalar 偏移 — 转换后发布，否则
             // CJK/emoji 光标处拆分落错位。
             let scalarOffset = NoteWindowDerivations.scalarOffset(fromUTF16: range.location, in: textView.string)
+            // 2026-08-14: the selection's semantic marks drive the format
+            // bar's active states (toggle buttons highlight when present).
+            let marks: Set<RichTextMark>
+            if range.length > 0, let storage = textView.textStorage {
+                marks = RichTextMarkApplier.semanticMarks(in: range, storage: storage)
+                    .reduce(into: Set<RichTextMark>()) { $0.formUnion($1.marks) }
+            } else {
+                marks = []
+            }
             bridge.publish(
                 from: textView,
                 caretBlockId: liveBlockId,
@@ -802,6 +832,7 @@ public struct RichTextView: NSViewRepresentable {
                 richTextEditable: true,
                 caretOffset: scalarOffset,
                 selectedRange: range,
+                selectedMarks: marks,
                 selectionRectInWindow: rect,
                 focusedSpecialBlockId: parent.isSpecialBlock ? liveBlockId : nil
             )

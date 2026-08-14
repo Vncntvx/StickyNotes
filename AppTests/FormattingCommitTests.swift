@@ -144,6 +144,36 @@ import Persistence
                 "⌘B followed by an immediate close must persist the mark")
     }
 
+    // MARK: - Clear formatting (2026-08-14: the format bar's eraser button)
+
+    @Test
+    func emptyMarksClearSelectionFormatting() {
+        let (_, coordinator, textView, recorder) = makeEditor()
+        textView.selectedRange = NSRange(location: 0, length: 5)
+        _ = coordinator.applyMarks([.bold, .italic], to: textView)
+        #expect(marks(in: recorder.documents.last!, scalarRange: 0..<5) == [.bold, .italic])
+
+        // Empty marks = clear formatting: everything off, document committed.
+        _ = coordinator.applyMarks([], to: textView)
+        let cleared = recorder.documents.last!
+        #expect(marks(in: cleared, scalarRange: 0..<5).isEmpty,
+                "empty marks must clear all semantic marks on the selection")
+    }
+
+    @Test
+    func emptyMarksClearTypingAttributes() {
+        let (_, coordinator, textView, _) = makeEditor()
+        // No selection: the typing path accumulates marks for the next input.
+        textView.selectedRange = NSRange(location: textView.string.count, length: 0)
+        _ = coordinator.applyMarks([.bold], to: textView)
+        let before = RichTextMarkApplier.semanticMarks(from: textView.typingAttributes, excludesDisplayStyling: true)
+        #expect(before.contains(.bold), "typing path must accumulate the mark")
+
+        _ = coordinator.applyMarks([], to: textView)
+        let after = RichTextMarkApplier.semanticMarks(from: textView.typingAttributes, excludesDisplayStyling: true)
+        #expect(after.isEmpty, "empty marks must clear the pending typing marks")
+    }
+
     private func makeEnvironment() throws -> AppEnvironment {
         let store = try DatabaseStore.inMemory()
         try InitialSchema.migrator().migrate(store.dbPool)

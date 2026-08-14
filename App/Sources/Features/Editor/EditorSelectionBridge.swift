@@ -73,6 +73,10 @@ public final class EditorSelectionBridge {
     /// The selected range (UTF-16 NSRange of the focused editor) — nil when
     /// collapsed.
     public private(set) var selectedRange: NSRange?
+    /// The SEMANTIC marks on the current selection (2026-08-14: drives the
+    /// format bar's active states — a toggle button highlights when its
+    /// mark is already present). Empty while collapsed.
+    public private(set) var selectedMarks: Set<RichTextMark> = []
     /// The selection rectangle in window coordinates (contextual row
     /// anchoring).
     public private(set) var selectionRectInWindow: CGRect?
@@ -101,11 +105,27 @@ public final class EditorSelectionBridge {
         richTextEditable: Bool = true,
         caretOffset: Int?,
         selectedRange: NSRange?,
+        selectedMarks: Set<RichTextMark> = [],
         selectionRectInWindow: CGRect?,
         focusedSpecialBlockId: UUID?
     ) {
         if let textView {
             if hasFocus {
+                // 2026-08-14 (用户实测): focus moved to a DIFFERENT editor —
+                // each NSTextView owns its own selection, so the previous
+                // editor keeps painting its old range as the inactive gray
+                // highlight. Collapse it (caret position preserved). The
+                // new editor becomes authoritative FIRST — the previous
+                // editor's synchronous republish (its didChangeSelection
+                // fires from the setSelectedRange below) is then filtered
+                // by the authority rule.
+                if let previous = focusedTextView, previous !== textView {
+                    let location = previous.selectedRange().location
+                    previous.setSelectedRange(NSRange(
+                        location: location == NSNotFound ? 0 : location,
+                        length: 0
+                    ))
+                }
                 focusedTextView = textView
                 self.textView = textView
             } else if focusedTextView !== textView {
@@ -118,6 +138,7 @@ public final class EditorSelectionBridge {
         self.richTextEditable = richTextEditable
         self.caretOffset = caretOffset
         self.selectedRange = selectedRange
+        self.selectedMarks = selectedMarks
         self.selectionRectInWindow = selectionRectInWindow
         self.focusedSpecialBlockId = focusedSpecialBlockId
         EditorSelectionContext.registry[noteId] = InsertionContext(

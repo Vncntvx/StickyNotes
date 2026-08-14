@@ -692,7 +692,9 @@ public enum RichTextMarkApplier {
         let segments = semanticMarks(in: range, storage: storage)
         guard !segments.isEmpty else { return false }
         for segment in segments {
-            let toggled = segment.marks.symmetricDifference(marks)
+            // Empty marks = CLEAR formatting (the format bar's eraser):
+            // everything off, not a no-op toggle (2026-08-14).
+            let toggled = marks.isEmpty ? [] : segment.marks.symmetricDifference(marks)
             renderSemanticMarks(toggled, in: segment.range, storage: storage, fontResolver: nil, textSize: nil)
         }
         return true
@@ -708,9 +710,14 @@ public enum RichTextMarkApplier {
     private static func applyToTypingAttributes(_ marks: Set<RichTextMark>, textView: NSTextView) {
         // The typing path ACCUMULATES (⌘B then ⌘I keeps both) — the current
         // semantic set comes from the typing attributes (display-only
-        // strikethrough excluded), the requested marks union in.
+        // strikethrough excluded), the requested marks union in. Empty
+        // marks CLEAR the pending typing marks (2026-08-14).
         var current = semanticMarks(from: textView.typingAttributes, excludesDisplayStyling: true)
-        current.formUnion(marks)
+        if marks.isEmpty {
+            current.removeAll()
+        } else {
+            current.formUnion(marks)
+        }
         renderTypingAttributes(current, textView: textView)
     }
 
@@ -735,9 +742,13 @@ public enum RichTextMarkApplier {
         let baseFamily = base.familyName ?? ""
         let baseIsMono = baseFamily.localizedCaseInsensitiveContains("mono")
             || baseFamily.localizedCaseInsensitiveContains("courier")
+        // 2026-08-14 (clear formatting): an EMPTY mark set must not keep
+        // the base font's traits — the eraser removes bold/italic that
+        // live only in the current typing font.
+        let keepBaseTraits = !marks.isEmpty
         var traits: NSFontDescriptor.SymbolicTraits = []
-        if marks.contains(.bold) || baseTraits.contains(.bold) { traits.insert(.bold) }
-        if marks.contains(.italic) || hasTrait(.italic, in: base) || attributes[.obliqueness] != nil {
+        if marks.contains(.bold) || (keepBaseTraits && baseTraits.contains(.bold)) { traits.insert(.bold) }
+        if marks.contains(.italic) || (keepBaseTraits && (hasTrait(.italic, in: base) || attributes[.obliqueness] != nil)) {
             traits.insert(.italic)
         }
         var font: NSFont
@@ -751,12 +762,18 @@ public enum RichTextMarkApplier {
         attributes[.font] = font
         if traits.contains(.italic), !hasTrait(.italic, in: font) {
             attributes[.obliqueness] = synthesizedItalicObliqueness
+        } else if marks.isEmpty {
+            attributes[.obliqueness] = nil
         }
         if marks.contains(.underline) {
             attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
+        } else if marks.isEmpty {
+            attributes[.underlineStyle] = nil
         }
         if marks.contains(.strikethrough) {
             attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
+        } else if marks.isEmpty {
+            attributes[.strikethroughStyle] = nil
         }
         textView.typingAttributes = attributes
     }

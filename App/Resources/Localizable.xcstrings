@@ -6732,6 +6732,23 @@
           }
         }
       }
+    },
+    "Clear Formatting": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear Formatting"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清除格式"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
