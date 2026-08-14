@@ -985,22 +985,47 @@ final class RepoLayoutInMemoryProvider: SyncProviderProtocol, @unchecked Sendabl
         #expect(elapsed < 60.0, "first sync of <100 notes converges within 1 minute (SC-002)")
     }
 
-    // MARK: - 003 T054 (FR-054/SC-013): advanced-area separation
+    // MARK: - 003 T054/T186 (FR-054/SC-013 Rev 3): advanced-area separation
 
     @Test
     func advancedMaintenanceOperationsAreSeparated() {
-        // SC-013: replace/remove/join/export live in a SEPARATE Advanced
-        // area, not the primary sync page (FR-054 Rev 2 user-facing names).
+        // SC-013 (Rev 3): the Advanced area holds the TECHNICAL operations
+        // only — exports; vault/storage management moved to the Storage
+        // "Manage…" menu, Disconnect is a standalone destructive entry.
         #expect(SyncAdvancedAreaPolicy.operationsInSeparateAdvancedArea == true)
         #expect(SyncAdvancedAreaPolicy.operations == [
-            "Join Another Vault", "Set Up New Storage Location",
-            "Export Sync Profile", "Disconnect Sync", "Export Diagnostic Bundle",
+            "Export Sync Profile", "Export Diagnostic Bundle",
         ])
     }
 
     @Test
+    func managedOperationsLiveInStorageManageMenu() {
+        // FR-054 Rev 3: Join + Set Up New Storage Location live in the
+        // Storage section's "Manage…" menu — still INDEPENDENT actions
+        // (never merged into one flow).
+        #expect(SyncAdvancedAreaPolicy.managedOperationsInStorageSection == true)
+        #expect(SyncAdvancedAreaPolicy.managedOperationNames == [
+            "Join Another Vault", "Set Up New Storage Location",
+        ])
+    }
+
+    @Test
+    func disconnectIsStandaloneDestructiveEntry() {
+        // FR-054 Rev 3: Disconnect Sync… is its own destructive entry at
+        // the bottom of the pane, not buried in the technical area.
+        #expect(SyncAdvancedAreaPolicy.disconnectIsStandaloneDestructiveEntry == true)
+    }
+
+    @Test
+    func recoveryRowLivesInSecuritySection() {
+        // FR-163 (Rev 3): the no-recovery warning is a security decision —
+        // its info row lives in the Security section.
+        #expect(SyncAdvancedAreaPolicy.recoveryRowInSecuritySection == true)
+    }
+
+    @Test
     func joinIsASeparateProductAction() {
-        // FR-054 Rev 2: joining an existing vault is its own product action
+        // FR-054 Rev 3: joining an existing vault is its own product action
         // and must never be merged into the storage-location change flow.
         #expect(SyncAdvancedAreaPolicy.joinIsSeparateProductAction == true)
     }
@@ -1008,7 +1033,7 @@ final class RepoLayoutInMemoryProvider: SyncProviderProtocol, @unchecked Sendabl
     @Test
     func joinHasInitialSetupAndRecoveryReEntry() {
         // CHK033: join-existing-vault has an initial-setup path (T050) AND
-        // an advanced recovery re-entry.
+        // a re-entry (now the Storage "Manage…" menu).
         #expect(SyncAdvancedAreaPolicy.initialSetupJoinEnabled == true)
         #expect(SyncAdvancedAreaPolicy.recoveryReEntryEnabled == true)
     }
