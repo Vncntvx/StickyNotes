@@ -504,4 +504,31 @@ import AssetStore
         }
         #expect(assetCount == 0, "corrupt asset must never be registered locally")
     }
+
+    // MARK: - R3.6 contentHash contract (remediation roadmap 2026-08-14)
+
+    /// RemoteManifest spec: entry contentHash is 64-char SHA-256 hex. The
+    /// audit's convergence pass found SyncEngine's private helper hex-
+    /// encoded the raw BYTES instead (2×N chars — self-consistent locally
+    /// but contract-violating and ~40× the size for image payloads).
+    @Test
+    func remoteEntryContentHashIsSHA256Hex() async throws {
+        let (_, vault) = try await fastVault()
+        let provider = LocalProvider()
+        let store = try makeStore()
+        let repo = SQLiteNoteRepository(store: store, fullTextSearch: FullTextSearch(dbPool: store.dbPool))
+        try await repo.create(makeNote(title: "hash contract"))
+        _ = try await makeEngine(provider: provider, vault: vault, store: store).syncNow()
+
+        // Decrypt the remote manifest and inspect the note entry's hash.
+        let wire = try await provider.fetch(objectName: ManifestStore.manifestObjectName)
+        let envelope = try EncryptedEnvelope.fromCanonicalJSON(wire)
+        let decrypted = try vault.decrypt(
+            envelope: envelope, objectType: "manifest", schemaVersion: RemoteManifest.schemaVersion
+        )
+        let manifest = try CanonicalJSONDecoder().decode(RemoteManifest.self, from: decrypted.plaintext)
+        let entry = try #require(manifest.entries.first, "the note must produce a remote entry")
+        #expect(entry.contentHash.count == 64,
+                "contentHash must be 64-char SHA-256 hex per RemoteManifest spec (got \(entry.contentHash.count) chars)")
+    }
 }

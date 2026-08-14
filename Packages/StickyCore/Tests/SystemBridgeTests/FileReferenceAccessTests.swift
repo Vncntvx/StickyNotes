@@ -16,13 +16,13 @@ import SystemBridge
 
     @Test
     func resolvedBookmarkMapsToAvailable() {
-        let url = URL(fileURLWithPath: "/tmp/example.pdf")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("example.pdf")
         #expect(FileAvailabilityClassifier.availability(from: .resolved(url)) == .available)
     }
 
     @Test
     func missingFileMapsToMissing() {
-        let url = URL(fileURLWithPath: "/tmp/gone.pdf")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("gone.pdf")
         #expect(FileAvailabilityClassifier.availability(from: .fileMissing(url)) == .missing)
     }
 

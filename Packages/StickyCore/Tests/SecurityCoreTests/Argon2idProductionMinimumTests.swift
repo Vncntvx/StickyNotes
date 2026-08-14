@@ -13,6 +13,9 @@ import SecurityCore
 
 @Suite struct Argon2idProductionMinimumTests {
 
+    /// Deterministic non-empty salt (the production guard now rejects empty salts).
+    private static let testSalt = Data(repeating: 0xAB, count: 16)
+
     @Test
     func productionMinimumConstantsMatchFR160c() {
         #expect(Argon2Parameters.productionMinimumMemoryKiB == 19_456)
@@ -33,7 +36,7 @@ import SecurityCore
 
     @Test
     func weakMemoryRejectedInProductionContext() {
-        let weak = Argon2Parameters(salt: Data(), memoryKiB: 8, iterations: 2, parallelism: 1)
+        let weak = Argon2Parameters(salt: Self.testSalt, memoryKiB: 8, iterations: 2, parallelism: 1)
         #expect(!weak.meetsProductionMinimum)
         do {
             try weak.requireProductionMinimum(isTestFixture: false)
@@ -47,7 +50,7 @@ import SecurityCore
 
     @Test
     func memoryExactlyAtMinimumIsAccepted() {
-        let atMin = Argon2Parameters(salt: Data(), memoryKiB: 19_456, iterations: 2, parallelism: 1)
+        let atMin = Argon2Parameters(salt: Self.testSalt, memoryKiB: 19_456, iterations: 2, parallelism: 1)
         #expect(atMin.meetsProductionMinimum)
         #expect(throws: Never.self) {
             try atMin.requireProductionMinimum(isTestFixture: false)
@@ -56,7 +59,7 @@ import SecurityCore
 
     @Test
     func memoryBelowMinimumRejected() {
-        let below = Argon2Parameters(salt: Data(), memoryKiB: 19_455, iterations: 2, parallelism: 1)
+        let below = Argon2Parameters(salt: Self.testSalt, memoryKiB: 19_455, iterations: 2, parallelism: 1)
         #expect(!below.meetsProductionMinimum)
     }
 
@@ -64,7 +67,7 @@ import SecurityCore
 
     @Test
     func weakIterationsRejectedInProductionContext() {
-        let weak = Argon2Parameters(salt: Data(), memoryKiB: 19_456, iterations: 1, parallelism: 1)
+        let weak = Argon2Parameters(salt: Self.testSalt, memoryKiB: 19_456, iterations: 1, parallelism: 1)
         #expect(!weak.meetsProductionMinimum)
         do {
             try weak.requireProductionMinimum(isTestFixture: false)
@@ -80,7 +83,7 @@ import SecurityCore
 
     @Test
     func weakParallelismRejectedInProductionContext() {
-        let weak = Argon2Parameters(salt: Data(), memoryKiB: 19_456, iterations: 2, parallelism: 0)
+        let weak = Argon2Parameters(salt: Self.testSalt, memoryKiB: 19_456, iterations: 2, parallelism: 0)
         #expect(!weak.meetsProductionMinimum)
     }
 
@@ -88,7 +91,7 @@ import SecurityCore
 
     @Test
     func testFixtureBypassAcceptsWeakParameters() {
-        let weak = Argon2Parameters(salt: Data(), memoryKiB: 8, iterations: 1, parallelism: 1)
+        let weak = Argon2Parameters(salt: Self.testSalt, memoryKiB: 8, iterations: 1, parallelism: 1)
         #expect(!weak.meetsProductionMinimum)
         #expect(throws: Never.self) {
             try weak.requireProductionMinimum(isTestFixture: true)
@@ -128,5 +131,26 @@ import SecurityCore
         // Unlocking with the stored params + correct password succeeds.
         let key = try await VaultBootstrapService.openVault(bootstrap, password: "pw")
         #expect(key.withUnsafeBytes { Data($0) }.count == 32)
+    }
+
+    // MARK: - R1.5 Empty-salt guard (remediation roadmap 2026-08-14)
+
+    /// `Argon2Parameters.recommended` ships with an EMPTY salt (a
+    /// registration-time oversight the audit flagged): any caller deriving
+    /// a KEK straight from it gets a deterministic derivation. The
+    /// production guard must reject empty salts so the template cannot be
+    /// consumed as-is.
+    @Test
+    func productionMinimumRejectsEmptySalt() {
+        #expect(Argon2Parameters.recommended.salt.isEmpty,
+                "precondition: the audit found the recommended template with an empty salt")
+        do {
+            try Argon2Parameters.recommended.requireProductionMinimum(isTestFixture: false)
+            Issue.record("empty salt must be rejected in production context")
+        } catch StickyError.encryption(.kdfFailed) {
+            #expect(Bool(true))
+        } catch {
+            Issue.record("unexpected error: \(error)")
+        }
     }
 }

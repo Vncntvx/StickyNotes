@@ -122,7 +122,7 @@ import Domain
             UUID(uuidString: "a0000000-0000-4000-8000-000000000003")!: Data([0xFF, 0xD8, 0xFF]),
         ]
 
-        let document = try NoteDocumentSerializer.exportDocument(note: note, blocks: blocks, assetBytes: assetBytes)
+        let document = NoteDocumentSerializer.exportDocument(note: note, blocks: blocks, assetBytes: assetBytes)
         let data = try NoteDocumentSerializer.encodeDocument(document)
         let sidecar = try NoteDocumentSerializer.encodeAssetSidecar(assetBytes)
 
@@ -203,7 +203,7 @@ import Domain
     @Test
     func fileReferenceExportsGenericMetadataOnly() throws {
         let (note, blocks) = makeFullNote()
-        let document = try NoteDocumentSerializer.exportDocument(note: note, blocks: blocks)
+        let document = NoteDocumentSerializer.exportDocument(note: note, blocks: blocks)
         let json = String(data: try NoteDocumentSerializer.encodeDocument(document), encoding: .utf8)!
 
         // No bookmark bytes / absolute paths anywhere (FR-105).
@@ -218,7 +218,7 @@ import Domain
     @Test
     func unsupportedSchemaVersionFailsClosed() throws {
         let (note, blocks) = makeFullNote()
-        let document = try NoteDocumentSerializer.exportDocument(note: note, blocks: blocks)
+        let document = NoteDocumentSerializer.exportDocument(note: note, blocks: blocks)
         let data = try NoteDocumentSerializer.encodeDocument(document)
 
         // Corrupt the schemaVersion to 99.
@@ -300,14 +300,14 @@ import Domain
             payload: .richText(doc),
             lastModifiedDeviceId: Self.deviceId
         )
-        let document = try NoteDocumentSerializer.exportDocument(note: note, blocks: corrupted)
+        let document = NoteDocumentSerializer.exportDocument(note: note, blocks: corrupted)
         #expect(NoteDocumentSerializer.validateForImport(document) != nil)
     }
 
     @Test
     func importValidationPassesForValidDocument() throws {
         let (note, blocks) = makeFullNote()
-        let document = try NoteDocumentSerializer.exportDocument(note: note, blocks: blocks)
+        let document = NoteDocumentSerializer.exportDocument(note: note, blocks: blocks)
         #expect(NoteDocumentSerializer.validateForImport(document) == nil)
     }
 }
