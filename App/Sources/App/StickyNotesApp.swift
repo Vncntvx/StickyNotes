@@ -186,6 +186,20 @@ struct StickyNotesApp: App {
                 Button("Delete Forever…") {
                     permanentlyDeleteFocusedNote()
                 }
+
+                // 003 T188 (FR-072 Rev 3): trash-scope + manual sync reachable
+                // from the menu bar; Restore/Empty Trash act on the library's
+                // keyboard selection / shared confirmation mechanism.
+                Divider()
+                Button("Restore") {
+                    restoreFocusedNote()
+                }
+                Button("Empty Trash…") {
+                    requestEmptyTrashFromMenu()
+                }
+                Button("Sync Now") {
+                    syncNowFromMenu()
+                }
             }
 
             CommandGroup(after: .saveItem) {
@@ -668,6 +682,28 @@ struct StickyNotesApp: App {
                 coordinator?.closeAll(noteId: focused)
             }
         }
+    }
+
+    /// Restores the keyboard-focused note (Trash scope, 003 T188).
+    private func restoreFocusedNote() {
+        guard let model = libraryModel,
+              model.scope == .trash,
+              let focused = model.keyboardSelection else { return }
+        Task { await model.restore(noteId: focused) }
+    }
+
+    /// Requests the Empty Trash confirmation (003 T188) — the shared
+    /// model flag drives the library's in-window confirmation bar (T183;
+    /// FR-026: dialogs invert the MenuBarExtra window on macOS 27).
+    private func requestEmptyTrashFromMenu() {
+        guard let model = libraryModel else { return }
+        model.setScope(.trash)
+        model.requestEmptyTrashConfirmation()
+    }
+
+    /// Manual sync from the menu bar (003 T188, FR-010a semantics).
+    private func syncNowFromMenu() {
+        Task { await environment.syncCoordinator?.manualSync() }
     }
 
     /// Closes the key note window (⌘W).

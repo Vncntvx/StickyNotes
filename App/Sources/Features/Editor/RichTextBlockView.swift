@@ -599,9 +599,11 @@ public struct RichTextBlockView: View {
 
 /// The floating glass format row: appears while text is selected (or a
 /// format command is active), anchored over the editor, never stealing
-/// focus (FR-012/FR-029). Buttons are standard SwiftUI controls inside a
-/// single glass group (FR-022 — one grouped surface, not scattered
-/// capsules). The only custom glass in the feature (plan §5.2).
+/// focus (FR-012/FR-029). Buttons are the SYSTEM glass button style
+/// (`.buttonStyle(.glass)`, FR-061 Rev 3 — interactive custom controls use
+/// the system glass button style instead of raw `glassEffect` layering);
+/// the tight HStack keeps them one coherent group (FR-022). This is the
+/// feature's custom-glass surface — no manual material/glassEffect layers.
 struct ContextualFormatBar: View {
     @Bindable var bridge: EditorSelectionBridge
 
@@ -618,20 +620,7 @@ struct ContextualFormatBar: View {
             }
             .padding(.horizontal, 6)
             .padding(.vertical, 4)
-            .background(formatBarMaterial)
-            .clipShape(Capsule())
             .accessibilityElement(children: .contain)
-        }
-    }
-
-    @ViewBuilder
-    private var formatBarMaterial: some View {
-        if #available(macOS 26.0, *) {
-            Capsule()
-                .fill(.regularMaterial)
-                .glassEffect(.regular, in: Capsule())
-        } else {
-            Capsule().fill(.regularMaterial)
         }
     }
 
@@ -646,7 +635,10 @@ struct ContextualFormatBar: View {
                 .font(.system(size: 12, weight: .medium))
                 .frame(width: 26, height: 22)
         }
-        .buttonStyle(.plain)
+        // FR-061 (Rev 3, T187): the system glass button style — the
+        // standard control gets the system's Liquid Glass appearance and
+        // Reduce Transparency / appearance adaptation automatically.
+        .buttonStyle(.glass)
         .help(help)
         .accessibilityLabel(help)
     }

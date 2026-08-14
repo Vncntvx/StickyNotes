@@ -53,6 +53,10 @@ public enum MenuCommandCatalog {
         MenuCommand(title: "New Note from Window Capture", location: .file),
         MenuCommand(title: "Move to Trash", location: .file, shortcut: KeyEquivalent.delete),
         MenuCommand(title: "Delete Forever…", location: .file),
+        // 003 T188 (FR-072 Rev 3, 2026-08-14): trash-scope + sync commands.
+        MenuCommand(title: "Restore", location: .file),
+        MenuCommand(title: "Empty Trash…", location: .file),
+        MenuCommand(title: "Sync Now", location: .file),
         MenuCommand(title: "Close Note Window", location: .file, shortcut: "w"),
         MenuCommand(title: "Settings…", location: .file, shortcut: ","),
         // Edit (standard edit commands + block insertion)
