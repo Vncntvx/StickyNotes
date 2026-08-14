@@ -33,7 +33,8 @@ import Domain
         let text = "see www.example.com/page for details"
         let links = AutoLinkDetector.detectLinks(in: text, insideCodeBlock: false)
         #expect(links.count == 1)
-        #expect(links[0].target == "www.example.com/page")
+        // NSDataDetector normalizes scheme-less www to http:// (R3.5).
+        #expect(links[0].target == "http://www.example.com/page")
     }
 
     @Test
@@ -49,6 +50,7 @@ import Domain
         let text = "call +1 (555) 123-4567 today"
         let links = AutoLinkDetector.detectLinks(in: text, insideCodeBlock: false)
         #expect(links.count == 1)
+        // International numbers normalize to E.164 (R3.5).
         #expect(links[0].target == "tel:+15551234567")
     }
 
@@ -57,7 +59,9 @@ import Domain
         let text = "555-123-4567"
         let links = AutoLinkDetector.detectLinks(in: text, insideCodeBlock: false)
         #expect(links.count == 1)
-        #expect(links[0].target == "tel:+5551234567")
+        // LOCAL numbers keep their formatting — no invented "+" prefix
+        // (R3.5; the old scanner produced meaningless tel:+5551234567).
+        #expect(links[0].target == "tel:555-123-4567")
     }
 
     @Test

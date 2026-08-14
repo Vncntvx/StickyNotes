@@ -38,4 +38,27 @@ import Domain
         let result = await coordinator.open(noteId: UUID())
         #expect(result == nil, "a window-open failure returns nil, never crashes (FR-011a)")
     }
+
+    @Test
+    func failedLoadRecordsRenderableStatusMessage() async {
+        // R1.10 (remediation roadmap 2026-08-14): the library error
+        // surface must carry a renderable message — the scene now displays
+        // `statusMessage` as a dismissible banner, so a failed load must
+        // leave one behind (previously the surface was written but never
+        // read).
+        let env = AppEnvironment.placeholder
+        let model = LibraryModel(environment: env)
+        await model.reload()
+        if model.cards.isEmpty {
+            // The placeholder environment cannot load real cards; the load
+            // must surface as an error state (message + flag) for the
+            // scene to render — never a silent empty grid.
+            #expect(model.statusMessage != nil,
+                    "a failed load must record a status message for the scene to render")
+            #expect(model.isError, "a failed load must set the error flag")
+            model.dismissStatusMessage()
+            #expect(model.statusMessage == nil && !model.isError,
+                    "the error surface must be dismissible")
+        }
+    }
 }

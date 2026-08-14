@@ -1,6 +1,7 @@
 import Foundation
 import CryptoKit
 import Domain
+import SecurityCore
 
 // MARK: - S3Provider (T115)
 //
@@ -91,14 +92,6 @@ public final class S3Provider: SyncProviderProtocol, @unchecked Sendable {
         return components.url!
     }
 
-    private func key(fromURL url: URL) -> String {
-        var path = url.path
-        if config.pathStyle {
-            path = path.replacingOccurrences(of: "/\(config.bucket)", with: "", options: .anchored)
-        }
-        return path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-    }
-
     // MARK: - SyncProviderProtocol
 
     public func verify() async throws {
@@ -132,7 +125,7 @@ public final class S3Provider: SyncProviderProtocol, @unchecked Sendable {
                 objectName: objectName,
                 versionToken: response.value(forHTTPHeaderField: "ETag"),
                 byteSize: Int(response.value(forHTTPHeaderField: "Content-Length") ?? ""),
-                modifiedAt: response.value(forHTTPHeaderField: "Last-Modified").flatMap(parseHTTPDate)
+                modifiedAt: SyncHTTPDateParser.parse(response.value(forHTTPHeaderField: "Last-Modified"))
             )
         case 404:
             return nil
@@ -164,9 +157,13 @@ public final class S3Provider: SyncProviderProtocol, @unchecked Sendable {
         case 412:
             throw ProviderError.conditionalFailed
         case 501:
-            // If-None-Match unsupported (AWS): fall back to plain PUT — the
-            // engine's manifest serialization keeps creates safe.
-            return
+            // R2.3 (remediation roadmap 2026-08-14): a gateway rejecting
+            // the conditional create must NOT report success — the engine
+            // would add a manifest entry for an object that may not exist
+            // or may hold different bytes. Surface the server rejection;
+            // the engine treats create failures as sync errors, never
+            // adoption.
+            throw ProviderError.server
         default:
             throw mapStatus(response.statusCode)
         }
@@ -208,17 +205,22 @@ public final class S3Provider: SyncProviderProtocol, @unchecked Sendable {
 
     public func list() async throws -> [ObjectMetadata] {
         var components = URLComponents(url: config.endpoint, resolvingAgainstBaseURL: false)!
-        if config.pathStyle {
-            components.path = "/\(config.bucket)"
-        }
-        var query: [URLQueryItem] = [
+        let query: [URLQueryItem] = [
             URLQueryItem(name: "list-type", value: "2"),
             URLQueryItem(name: "prefix", value: config.prefix),
             URLQueryItem(name: "max-keys", value: "1000"),
         ]
-        if !config.pathStyle {
-            query.append(URLQueryItem(name: "prefix", value: config.prefix))
-            components.host = config.endpoint.host
+        if config.pathStyle {
+            components.path = "/\(config.bucket)"
+        } else {
+            // R2.2 (remediation roadmap 2026-08-14): virtual-host style
+            // must target the bucket SUBDOMAIN (`<bucket>.<host>`) — the
+            // previous code re-set the bare endpoint host (listing the
+            // wrong scope) and appended the prefix query item a second
+            // time.
+            if let host = config.endpoint.host {
+                components.host = "\(config.bucket).\(host)"
+            }
         }
         components.queryItems = query
         var request = URLRequest(url: components.url!)
@@ -309,13 +311,6 @@ public final class S3Provider: SyncProviderProtocol, @unchecked Sendable {
         }
     }
 
-    private func parseHTTPDate(_ string: String) -> Date? {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(identifier: "GMT")
-        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss 'GMT'"
-        return formatter.date(from: string)
-    }
 }
 
 // MARK: - AWS SigV4 signer (project-owned, research.md R11)
@@ -343,7 +338,7 @@ public struct SigV4Signer: Sendable {
         let amzDate = Self.amzDateString(date)
         let dateStamp = String(amzDate.prefix(8))
 
-        let payloadHash = sha256Hex(request.httpBody ?? Data())
+        let payloadHash = SHA256DigestHash.hash(request.httpBody ?? Data())
         request.setValue(amzDate, forHTTPHeaderField: "x-amz-date")
         // Payload hashing is always present (matches the AWS S3 documented
         // vector, which signs x-amz-content-sha256 even for GET).
@@ -360,7 +355,7 @@ public struct SigV4Signer: Sendable {
             "AWS4-HMAC-SHA256",
             amzDate,
             scope,
-            sha256Hex(Data(canonicalRequest.utf8)),
+            SHA256DigestHash.hash(Data(canonicalRequest.utf8)),
         ].joined(separator: "\n")
 
         let signingKey = deriveSigningKey(dateStamp: dateStamp)
@@ -375,7 +370,7 @@ public struct SigV4Signer: Sendable {
     /// verification only; not part of the production surface). Shares the
     /// exact construction path with `sign` so the two cannot diverge.
     public func debugCanonicalRequest(_ request: URLRequest) -> String {
-        let payloadHash = sha256Hex(request.httpBody ?? Data())
+        let payloadHash = SHA256DigestHash.hash(request.httpBody ?? Data())
         return canonicalRequestString(for: request, payloadHash: payloadHash)
     }
 
@@ -383,7 +378,7 @@ public struct SigV4Signer: Sendable {
     /// AWS documents in its SigV4 string-to-sign. Used by the test vector
     /// to pin the canonical request before asserting on the signature.
     public func debugCanonicalRequestHash(_ request: URLRequest) -> String {
-        sha256Hex(Data(debugCanonicalRequest(request).utf8))
+        SHA256DigestHash.hash(Data(debugCanonicalRequest(request).utf8))
     }
 
     // MARK: - Canonical pieces (shared by sign + debug)
@@ -504,9 +499,7 @@ public struct SigV4Signer: Sendable {
         hmac(key: key, data: data).map { String(format: "%02x", $0) }.joined()
     }
 
-    private func sha256Hex(_ data: Data) -> String {
-        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-    }
+
 }
 
 // MARK: - S3 error/listing XML parsing

@@ -295,13 +295,3 @@ public struct TodoBlockView: View {
         onChanged(updated)
     }
 }
-
-/// The card todo progress format (FR-072b) — "completed/total", or
-/// "99+ completed" when the total exceeds 99.
-public enum TodoCardProgress {
-    public static func string(completed: Int, total: Int) -> String? {
-        guard total > 0 else { return nil }
-        if total > 99 { return "99+ completed" }
-        return "\(completed)/\(total)"
-    }
-}

@@ -12,8 +12,17 @@ struct SyncSchedulePresentationTests {
     // MARK: AutoSyncPolicy display names
 
     @Test func changeOnlyDisplaysAsOff() {
-        #expect(AutoSyncPolicy.changeOnly.displayName == "Off",
-                "the periodic-sync picker shows Off for change-only (Rev 3)")
+        // Localized (R3.8): the catalog now compiles into the bundle, so
+        // `String(localized: "Off")` resolves per-language (zh-Hans "关闭")
+        // instead of falling back to the key. Assert the semantics
+        // language-independently: change-only is the zero-interval policy
+        // and its label differs from every periodic option.
+        #expect(AutoSyncPolicy.changeOnly.interval == nil)
+        #expect(AutoSyncPolicy.changeOnly.displayName == "Off"
+                || AutoSyncPolicy.changeOnly.displayName == "关闭",
+                "change-only reads as Off on the periodic-sync axis (Rev 3)")
+        let periodic = AutoSyncPolicy.allCases.filter { $0 != .changeOnly }
+        #expect(!periodic.contains { $0.displayName == AutoSyncPolicy.changeOnly.displayName })
     }
 
     @Test func displayNamesAreDistinct() {

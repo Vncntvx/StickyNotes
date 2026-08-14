@@ -21,9 +21,11 @@ import SystemBridge
 /// The composed application services. Constructed at app startup; passed to
 /// scenes via SwiftUI `@Environment` (or `@State` at the app root).
 ///
-/// Until the foundational services (Phase 2) and the user-story UIs (Phase 3+)
-/// land, this is a `placeholder` that lets the app compile and run for
-/// foundation bring-up. Real composition lands incrementally per tasks.md.
+/// Placeholder used before bootstrap completes — the menu shows "setup in
+/// progress" until `bootstrap` swaps in the real environment, and the
+/// Settings scene reads the real `syncCoordinator`/`typography` only after
+/// that (R3.8, remediation roadmap 2026-08-14: the "foundation bring-up"
+/// framing was stale — Phases 2/3 landed).
 public struct AppEnvironment: Sendable {
     public let domain: DomainServices
     public let persistence: PersistenceServices
@@ -122,6 +124,12 @@ public struct AppEnvironment: Sendable {
         let assetDirectory = baseURL.appendingPathComponent("Assets", isDirectory: true)
         try FileManager.default.createDirectory(at: assetDirectory, withIntermediateDirectories: true)
         let assetStore = try AssetStore(directoryURL: assetDirectory)
+        // R1.1 (remediation roadmap 2026-08-14): relaunch recovery — the
+        // record tables are in-memory only, so every previously stored
+        // asset was unreachable after a relaunch (and orphan cleanup would
+        // have treated them as garbage). Scan the store directories back
+        // into the record tables before anything else touches the store.
+        try await assetStore.restoreFromDisk()
 
         // T284/T285: compose the sync root (vault config store + Keychain +
         // SyncEngine wiring). Loads the persisted configuration/state.
@@ -230,7 +238,12 @@ public struct PersistenceServices: Sendable {
         sort: NoteSortKey,
         noteIds: Set<UUID>? = nil
     ) async throws -> [NoteCardProjection] {
-        guard let store else { return [] }
+        // R1.10 (remediation roadmap 2026-08-14): a missing store is a
+        // FAILURE (the database is unavailable), not an empty library —
+        // silently returning [] made every pre-bootstrap/placeholder load
+        // look like an empty grid and the FR-011a error surface was never
+        // exercised.
+        guard let store else { throw StickyError.persistence(.databaseOpenFailed) }
         return try await CardProjection.fetchCardProjections(
             store: store,
             lifecycle: lifecycle,

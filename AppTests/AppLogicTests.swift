@@ -69,11 +69,19 @@ import Persistence
         let now = Date(timeIntervalSince1970: 1_700_000_000)
         // Exactly 7 days → relative.
         let sevenDays = now.addingTimeInterval(-7 * 86_400)
+        // Localization-compiled (R3.8): relative-time copy follows the
+        // host language, so assert LANGUAGE-INDEPENDENTLY — the relative
+        // form carries a number and differs from the absolute date form.
         let text = DisplayFormatters.lastModified(sevenDays, now: now)
-        #expect(text.contains("days ago"), "exactly 7 days renders relative (FR-020a boundary)")
+        let absolute = DisplayFormatters.absoluteDate(sevenDays, now: now)
+        #expect(text != absolute, "exactly 7 days renders relative (FR-020a boundary)")
+        #expect(text.contains(/\d/), "the relative form embeds a number (got \(text))")
 
         let minutesAgo = now.addingTimeInterval(-300)
-        #expect(DisplayFormatters.lastModified(minutesAgo, now: now).contains("min ago"))
+        let minText = DisplayFormatters.lastModified(minutesAgo, now: now)
+        let minAbsolute = DisplayFormatters.absoluteDate(minutesAgo, now: now)
+        #expect(minText != minAbsolute, "5 minutes ago renders relative")
+        #expect(minText.contains(/\d/))
     }
 
     @Test

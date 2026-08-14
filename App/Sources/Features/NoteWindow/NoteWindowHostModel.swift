@@ -73,12 +73,6 @@ public final class NoteWindowHostModel {
             }
         }
     }
-
-    /// The shared undo manager factory (see `undoManager` above).
-    private static func makeUndoManager() -> UndoManager {
-        UndoManager()
-    }
-
     // MARK: - Loading
 
     public func load() async {
@@ -86,7 +80,7 @@ public final class NoteWindowHostModel {
         do {
             self.note = try await repo.fetch(id: noteId)
             self.blocks = try await repo.fetchBlocks(noteId: noteId)
-            self.hasEverHadMeaningfulContent = Self.isMeaningful(note, blocks: blocks)
+            self.hasEverHadMeaningfulContent = note.map { NoteAutoDiscard.hadContent($0, blocks: blocks) } ?? false
             healTrailingEmptyLinesOnLoad()
         } catch {
             self.note = nil
@@ -125,7 +119,7 @@ public final class NoteWindowHostModel {
     /// Persists an appearance edit immediately (structural op, FR-141a).
     public func updateAppearance(_ updated: Note) {
         self.note = updated
-        if Self.isMeaningful(updated, blocks: blocks) {
+        if NoteAutoDiscard.hadContent(updated, blocks: blocks) {
             hasEverHadMeaningfulContent = true
         }
         let deviceId = DeviceIdentity.current.id
@@ -148,7 +142,7 @@ public final class NoteWindowHostModel {
     public func updateBlocks(_ newBlocks: [Block], isStructural: Bool = false) {
         StickyLogger(category: .app).debug("host-updateBlocks", code: "fired", sanitizedContext: "count=\(newBlocks.count)")
         self.blocks = newBlocks
-        if Self.isMeaningful(note, blocks: newBlocks) {
+        if let note, NoteAutoDiscard.hadContent(note, blocks: newBlocks) {
             hasEverHadMeaningfulContent = true
         }
         let snapshot = newBlocks
@@ -1352,32 +1346,9 @@ public final class NoteWindowHostModel {
         // targets, so a non-empty stack would keep the host alive.
         undoManager.removeAllActions()
         guard !hasEverHadMeaningfulContent else { return false }
-        return !Self.isMeaningful(note, blocks: blocks)
+        return !(note.map { NoteAutoDiscard.hadContent($0, blocks: blocks) } ?? false)
     }
 
-    // MARK: - FR-012a meaningful-content rule
-
-    /// FR-012a: at least one non-whitespace Unicode character in the title or
-    /// any rich-text block, OR the presence of any todo/image/screenshot/
-    /// code/file-reference block. Whitespace-only does not qualify.
-    public static func isMeaningful(_ note: Note?, blocks: [Block]) -> Bool {
-        if let title = note?.title,
-           title.rangeOfCharacter(from: .whitespacesAndNewlines.inverted) != nil {
-            return true
-        }
-        for block in blocks {
-            switch block.kind {
-            case .richText:
-                if case .richText(let doc) = block.payload,
-                   doc.text.rangeOfCharacter(from: .whitespacesAndNewlines.inverted) != nil {
-                    return true
-                }
-            case .todo, .code, .fileRef, .image, .screenshot:
-                return true
-            }
-        }
-        return false
-    }
 
     // MARK: - Save sink (off the main actor)
 

@@ -4,9 +4,9 @@
 //
 // Eight SwiftPM targets map 1:1 to the constitution's required separable
 // concerns and enforce the dependency direction from plan.md
-// §Module boundaries at the compiler level. The App and WidgetExtension
-// targets depend on this package; the Widget target imports only the
-// minimal Domain + Persistence surface and never links SyncCore/SecurityCore.
+// §Module boundaries at the compiler level. The App target depends on
+// this package. (The WidgetExtension target was removed 2026-08-13 with
+// the widget surface — R3.8, remediation roadmap 2026-08-14.)
 //
 // Toolchain baseline (research.md R0): macOS 26 deployment target, Swift 6.3
 // in Swift 6 language mode with strict concurrency. The dev machine runs

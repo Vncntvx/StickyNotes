@@ -169,12 +169,3 @@ public struct SettingsView: View {
         screenRecordingStatus = PermissionService.screenRecordingStatus()
     }
 }
-
-extension Notification.Name {
-    /// 003 T032 (SC-004): Edit/Insert menu block-insertion requests,
-    /// dispatched to the key note window's host by the coordinator.
-    static let stickyRequestInsertTodo = Notification.Name("sticky.requestInsertTodo")
-    static let stickyRequestInsertCode = Notification.Name("sticky.requestInsertCode")
-    static let stickyRequestInsertFileReference = Notification.Name("sticky.requestInsertFileReference")
-    static let stickyRequestCaptureScreenshot = Notification.Name("sticky.requestCaptureScreenshot")
-}

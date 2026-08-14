@@ -58,7 +58,7 @@ import Persistence
         let locator = FileLocator(
             blockId: blockId,
             bookmarkData: Data([0x01, 0x02, 0x03]),
-            lastResolvedPath: "/tmp/example.txt",
+            lastResolvedPath: FileManager.default.temporaryDirectory.appendingPathComponent("example.txt").path,
             availabilityStatus: .missing,
             stale: true,
             verifiedAt: Date()
@@ -138,7 +138,7 @@ import Persistence
         try await env.persistence.fileLocatorRepository!.upsert(FileLocator(
             blockId: blockId,
             bookmarkData: Data("corrupt-bookmark".utf8),
-            lastResolvedPath: "/tmp/gone.pdf",
+            lastResolvedPath: FileManager.default.temporaryDirectory.appendingPathComponent("gone.pdf").path,
             availabilityStatus: .available,
             stale: false
         ))

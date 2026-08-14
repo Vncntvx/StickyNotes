@@ -1,18 +1,19 @@
 import SwiftUI
 
-// MARK: - SyncAttentionBanner (003 T026 shell → US5 complete)
+// MARK: - SyncAttentionBanner (003 T026 — seven-category mapping complete)
 //
-// Per tasks.md T026: a basic attention-state banner placed above the grid
-// with the three-element layout (what happened / local data safe / action),
-// dismissible. The FULL seven-category mapping lands in US5 (T052/T056,
-// FR-010); this shell wires the presentation model + dismiss skeleton so
-// the layout exists. Iconography uses SF Symbols (FR-064).
+// Per tasks.md T026: an attention-state banner placed above the grid with
+// the three-element layout (what happened / local data safe / action),
+// dismissible. The seven-category mapping is complete
+// (SyncStatusPresentation, R3.8 remediation roadmap 2026-08-14: this
+// header previously claimed the full mapping "lands in US5").
+// Iconography uses SF Symbols (FR-064).
 //
 // Normal sync state = zero footprint (FR-007): when `presentation == nil`
 // the banner renders nothing.
 
 /// The banner's three-element presentation (what happened / local data
-/// safe / action). Fleshed out per seven categories in US5 (T055).
+/// safe / action). Maps the seven sync categories (SyncStatusPresentation).
 public struct SyncBannerPresentation: Sendable, Equatable {
     /// The FR-012 category (drives dismiss-suppression, FR-010).
     public let category: SyncStatusCategory?

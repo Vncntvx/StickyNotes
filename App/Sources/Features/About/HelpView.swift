@@ -35,8 +35,8 @@ public struct HelpView: View {
                 )
 
                 HelpSection(
-                    title: String(localized: "Markdown shortcuts"),
-                    text: String(localized: "Type “# ” for a heading, “- ” for a bullet, “- [ ] ” for a todo, “**text**” for bold, “*text*” for italic, and three backticks for a code block. A single Undo (⌘Z) restores the exact Markdown you typed.")
+                    title: String(localized: "Formatting"),
+                    text: String(localized: "Select text and use the Format menu (⌘B bold, ⌘I italic, ⌘U underline) or the toolbar to style it. Text Size in the Format menu adjusts the whole note's font size.")
                 )
 
                 HelpSection(
@@ -46,7 +46,7 @@ public struct HelpView: View {
 
                 HelpSection(
                     title: String(localized: "Screenshots and files"),
-                    text: String(localized: "Add a screenshot or a file reference from a note's upper control area. Files are referenced, never copied. A screenshot viewer opens in its own window with zoom and caption editing.")
+                    text: String(localized: "Add a screenshot or a file reference from the note window's toolbar or the Insert menu. Files are referenced, never copied. A screenshot viewer opens in its own window with zoom and caption editing.")
                 )
 
                 HelpSection(

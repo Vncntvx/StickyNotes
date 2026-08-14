@@ -31,18 +31,45 @@ public enum AutoLinkDetector {
     /// fence is a Markdown concern, not link detection).
     public static func detectLinks(in text: String, insideCodeBlock: Bool) -> [DetectedLink] {
         guard !insideCodeBlock else { return [] }
-        let scalars = Array(text.unicodeScalars)
+        // R3.5 (remediation roadmap 2026-08-14): the previous implementation
+        // was a hand-rolled character scanner with ad-hoc regexes — it
+        // destroyed phone formatting ("+" + digits produced meaningless
+        // tel: targets for local numbers) and emitted scheme-less www
+        // targets. NSDataDetector is the platform detector (link +
+        // phoneNumber) and stays Foundation-only, so the EditorCore module
+        // boundary is untouched.
+        guard let detector = try? NSDataDetector(
+            types: NSTextCheckingResult.CheckingType.link.rawValue
+                | NSTextCheckingResult.CheckingType.phoneNumber.rawValue
+        ) else { return [] }
+        let nsText = text as NSString
         var results: [DetectedLink] = []
-        var index = 0
-        while index < scalars.count {
-            // Look ahead from each position for a known prefix.
-            let remainder = String(String.UnicodeScalarView(scalars[index...]))
-            if let (length, target) = match(atStartOf: remainder) {
-                results.append(DetectedLink(range: index..<(index + length), target: target))
-                index += length
-                continue
+        detector.enumerateMatches(
+            in: text,
+            range: NSRange(location: 0, length: nsText.length)
+        ) { match, _, _ in
+            guard let match, let utf16Range = Range(match.range, in: text) else { return }
+            let target: String
+            if let url = match.url {
+                target = url.absoluteString
+            } else if let phone = match.phoneNumber {
+                // E.164 for international numbers (strip separators);
+                // LOCAL numbers keep their original formatting — the old
+                // scanner prepended "+" to everything, producing
+                // meaningless tel: targets for local numbers (R3.5).
+                if phone.hasPrefix("+") {
+                    let digits = phone.filter { $0.isNumber || $0 == "+" }
+                    target = "tel:\(digits)"
+                } else {
+                    target = "tel:\(phone)"
+                }
+            } else {
+                return
             }
-            index += 1
+            let scalars = text.unicodeScalars
+            let lower = scalars.distance(from: scalars.startIndex, to: utf16Range.lowerBound)
+            let upper = scalars.distance(from: scalars.startIndex, to: utf16Range.upperBound)
+            results.append(DetectedLink(range: lower..<upper, target: target))
         }
         return results
     }

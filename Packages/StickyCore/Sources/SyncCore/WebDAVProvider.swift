@@ -86,7 +86,7 @@ public final class WebDAVProvider: SyncProviderProtocol, @unchecked Sendable {
                 objectName: objectName,
                 versionToken: response.value(forHTTPHeaderField: "ETag"),
                 byteSize: Int(response.value(forHTTPHeaderField: "Content-Length") ?? ""),
-                modifiedAt: parseDate(response.value(forHTTPHeaderField: "Last-Modified"))
+                modifiedAt: SyncHTTPDateParser.parse(response.value(forHTTPHeaderField: "Last-Modified"))
             )
         case 404:
             return nil
@@ -99,8 +99,16 @@ public final class WebDAVProvider: SyncProviderProtocol, @unchecked Sendable {
         var request = URLRequest(url: objectURL(objectName))
         request.httpMethod = "GET"
         let (data, response) = try await perform(request)
-        guard response.statusCode == 200 else { throw unmappedError(response.statusCode, op: "fetch") }
-        return data
+        switch response.statusCode {
+        case 200:
+            return data
+        case 404:
+            // R2.3 (remediation roadmap 2026-08-14): a missing object must
+            // map to `.notFound` — it previously fell into `.unmapped`.
+            throw ProviderError.notFound
+        default:
+            throw unmappedError(response.statusCode, op: "fetch")
+        }
     }
 
     public func upload(objectName: String, data: Data) async throws {
@@ -113,8 +121,14 @@ public final class WebDAVProvider: SyncProviderProtocol, @unchecked Sendable {
         switch response.statusCode {
         case 201, 200, 204:
             return
-        case 412, 405:
+        case 412:
             throw ProviderError.conditionalFailed
+        case 405:
+            // R2.3 (remediation roadmap 2026-08-14): 405 Method Not Allowed
+            // is a server capability rejection, NOT "object already
+            // exists" — mapping it to conditionalFailed made the engine
+            // adopt objects that were never created.
+            throw ProviderError.server
         default:
             throw unmappedError(response.statusCode, op: "upload")
         }
@@ -233,43 +247,6 @@ public final class WebDAVProvider: SyncProviderProtocol, @unchecked Sendable {
         return .unmapped("\(op).status\(status)")
     }
 
-    private func mapStatus(_ status: Int) -> ProviderError {
-        switch status {
-        case 401, 403:
-            return .forbidden
-        case 404:
-            return .notFound
-        case 409:
-            return .conflict
-        case 412:
-            return .conditionalFailed
-        case 507:
-            return .server
-        case 408, 429:
-            return .network
-        case 400, 405, 423:
-            // Bad request / method not allowed / locked — server-side
-            // protocol-level rejections, not client transport faults.
-            return .server
-        case 500..<600:
-            return .server
-        default:
-            // FR-165: the status is sanitized diagnostic signal (never
-            // content); surfaced as `sync.provider.unmapped.status<N>` so
-            // the UI shows why the sync failed.
-            StickyLogger(category: .sync).error("webdav-status", code: "unmapped.\(status)")
-            return .unmapped("status\(status)")
-        }
-    }
-
-    private func parseDate(_ string: String?) -> Date? {
-        guard let string else { return nil }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss 'GMT'"
-        formatter.timeZone = TimeZone(identifier: "GMT")
-        return formatter.date(from: string)
-    }
 }
 
 // MARK: - XML multistatus parsing (research.md R10)
@@ -295,16 +272,6 @@ public enum WebDAVXMLParser {
         return name.removingPercentEncoding
     }
 
-    private static func parseHTTPDate(_ string: String) -> Date? {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(identifier: "GMT")
-        for format in ["EEE, dd MMM yyyy HH:mm:ss 'GMT'", "yyyy-MM-dd'T'HH:mm:ssZZZZZ"] {
-            formatter.dateFormat = format
-            if let date = formatter.date(from: string) { return date }
-        }
-        return nil
-    }
 
     /// SAX parser producing [ObjectMetadata].
     private final class MultistatusParser: NSObject, XMLParserDelegate {
@@ -351,7 +318,7 @@ public enum WebDAVXMLParser {
             case "getcontentlength":
                 size = Int(text)
             case "getlastmodified":
-                modified = WebDAVXMLParser.parseHTTPDate(text)
+                modified = SyncHTTPDateParser.parse(text)
             case "response":
                 if let href = currentHref {
                     entries.append(ObjectMetadata(

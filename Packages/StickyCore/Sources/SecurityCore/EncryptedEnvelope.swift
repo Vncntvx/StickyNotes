@@ -28,7 +28,13 @@ public struct EncryptedEnvelope: Sendable, Equatable, Codable {
     }
 
     public func canonicalJSON() throws -> Data {
-        try JSONEncoder().encode(self)
+        // R3.6 (remediation roadmap 2026-08-14): sortedKeys +
+        // withoutEscapingSlashes — the project-wide canonical-JSON
+        // definition (previously a bare encoder, i.e. a different
+        // "canonical" than every other envelope in the app).
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        return try encoder.encode(self)
     }
 
     public static func fromCanonicalJSON(_ data: Data) throws -> EncryptedEnvelope {
@@ -154,8 +160,13 @@ public struct Vault: Sendable {
 }
 
 /// Internal SHA-256 hex helper (CryptoKit only — no hand-rolled crypto).
-enum SHA256DigestHash {
-    static func hash(_ data: Data) -> String {
+/// SHA-256 hex digest — the project-wide content-hash format (bare
+/// 64-char hex, per the RemoteManifest/Asset contracts). R3.6
+/// (remediation roadmap 2026-08-14): made public so SyncCore's adapters
+/// stop re-implementing it (the SyncEngine copy hex-encoded the raw bytes
+/// instead of the digest).
+public enum SHA256DigestHash {
+    public static func hash(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 }

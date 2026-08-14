@@ -60,20 +60,6 @@ public enum SettingsFailurePolicy {
     /// FR-011a extension: the notice is localized (user-facing, no codes).
     public static let noticeIsLocalized = true
 }
-
-public enum ShortcutRecorderPolicy {
-    /// FR-121: conflicts reported clearly.
-    public static let conflictReportedClearly = true
-    /// FR-121: never silently replace an existing binding.
-    public static let neverSilentlyReplaces = true
-    /// FR-052: clear + reset available.
-    public static let supportsClear = true
-    public static let supportsReset = true
-    /// FR-052: Escape cancels recording; fully keyboard-operable.
-    public static let escapeCancelsRecording = true
-    public static let keyboardOperable = true
-}
-
 public enum FontPreferenceUI {
     /// FR-055 (Rev 3): ONE user-facing "note body font" concept.
     public static let singleNoteFontConcept = true

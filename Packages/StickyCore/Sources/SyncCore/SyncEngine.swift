@@ -321,7 +321,7 @@ public actor SyncEngine {
         return RemoteObjectEntry(
             objectName: objectName,
             objectId: note.versionId.uuidString,
-            contentHash: sha256Hex(payload),
+            contentHash: SHA256DigestHash.hash(payload),
             byteSize: wire.count,
             modifiedAt: note.modifiedAt
         )
@@ -343,7 +343,7 @@ public actor SyncEngine {
             schemaVersion: CanonicalNote.schemaVersion
         ) else { return nil }
         // Manifest contentHash must match the decrypted plaintext.
-        guard sha256Hex(decrypted.plaintext) == entry.contentHash else { return nil }
+        guard SHA256DigestHash.hash(decrypted.plaintext) == entry.contentHash else { return nil }
         guard let note = try? CanonicalJSONDecoder().decode(CanonicalNote.self, from: decrypted.plaintext) else {
             return nil
         }
@@ -483,7 +483,7 @@ public actor SyncEngine {
                     objectId: asset.id.uuidString,
                     // Raw hex (64 chars) per RemoteManifest spec — the engine
                     // hashes the raw bytes, NOT the prefixed table value.
-                    contentHash: sha256Hex(bytes),
+                    contentHash: SHA256DigestHash.hash(bytes),
                     byteSize: wire.count,
                     modifiedAt: Date()
                 ))
@@ -522,7 +522,7 @@ public actor SyncEngine {
         // bytes. The blob's own `contentHash` field uses AssetStore format
         // ("sha256:<hex>") for the asset table — it is NOT compared to the
         // manifest entry (different formats, different purposes).
-        guard sha256Hex(blob.bytes) == entry.contentHash else { return nil }
+        guard SHA256DigestHash.hash(blob.bytes) == entry.contentHash else { return nil }
         return blob
     }
 
@@ -912,9 +912,7 @@ public actor SyncEngine {
         )
     }
 
-    private func sha256Hex(_ data: Data) -> String {
-        data.map { String(format: "%02x", $0) }.joined()
-    }
+
 }
 
 // MARK: - Sync debounce (T198, FR-152a clarified 2026-08-07)

@@ -327,7 +327,7 @@ import Persistence
         }
         guard let liveBridge = registered else { throw BridgeError.notWired }
 
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         window.makeKeyAndOrderFront(nil)
         window.makeKey()
         window.makeFirstResponder(editor)
@@ -543,6 +543,18 @@ import Persistence
         editor.setSelectedRange(range)
         let liveBridge = try await focusAndWireBridge(editor, window: window, noteId: noteId)
         #expect(liveBridge.textView === editor, "the bridge must be attached to THIS window's editor")
+        // Parallel suites race the key window; while `focusAndWireBridge`
+        // awaits (bridge registration + focus republish), the view's first
+        // content push can land and rebuild the storage, resetting the
+        // selection. Restore and confirm — the behavior under test is
+        // "formatting applies to the selected range", not that the
+        // selection survives the async focus setup (flaky 2026-08-14:
+        // full-suite parallel runs reset it; serial runs pass).
+        for _ in 0..<50 {
+            if editor.selectedRange() == range { break }
+            editor.setSelectedRange(range)
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
         #expect(editor.selectedRange() == range,
                 "precondition: the selection must survive until applyMarks (got \(editor.selectedRange()))")
         let expected = try #require(expectedSpacing(preset), "\(preset) has a concrete line spacing")
@@ -554,12 +566,22 @@ import Persistence
         let beforeIntrinsic = editor.intrinsicContentSize.height
         let beforeDump = attributeDump(editor, label: "BEFORE")
 
-        liveBridge.applyMarks([.bold])
-        for _ in 0..<100 {
-            try await Task.sleep(nanoseconds: 20_000_000)
+        // The host's async content push (`.task` reload) can race this
+        // point under a busy parallel runloop: `applyMarks` refuses while
+        // `isPushing` is true (silent no-op — no bold, no undo). Retry
+        // until the mark is REALLY applied; every accepted retry registers
+        // an undo group, so the undo loop below unwinds them all.
+        var boldApplied = false
+        for _ in 0..<50 {
+            liveBridge.applyMarks([.bold])
+            try await Task.sleep(nanoseconds: 100_000_000)
+            let probe = editor.textStorage?.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont
+            if probe?.fontDescriptor.symbolicTraits.contains(.bold) == true {
+                boldApplied = true
+                break
+            }
         }
-        let boldFont = editor.textStorage?.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont
-        #expect(boldFont?.fontDescriptor.symbolicTraits.contains(.bold) == true,
+        #expect(boldApplied,
                 "\(label): the formatting must actually apply bold at the selection (proof the selection path ran)")
         let afterHeights = lineFragmentHeights(editor)
         let afterIssues = spacingIssues(editor, expected: expected)
@@ -568,14 +590,22 @@ import Persistence
         #expect(beforeHeights == afterHeights,
                 "\(label): laid-out line heights changed by ⌘B (before \(beforeHeights) vs after \(afterHeights))")
 
-        // Undo / redo must keep the metrics too.
+        // Undo / redo must keep the metrics too. Multiple retries may have
+        // registered multiple undo groups — unwind until the heights are
+        // back (bold never changes line spacing, so one restore point).
         let undoManager = try #require(editor.undoManager)
         #expect(undoManager.canUndo, "\(label): ⌘B registered undo")
-        undoManager.undo()
-        for _ in 0..<20 {
-            try await Task.sleep(nanoseconds: 20_000_000)
+        var heightsRestored = false
+        for _ in 0..<10 {
+            guard undoManager.canUndo else { break }
+            undoManager.undo()
+            try await Task.sleep(nanoseconds: 50_000_000)
+            if lineFragmentHeights(editor) == beforeHeights {
+                heightsRestored = true
+                break
+            }
         }
-        #expect(lineFragmentHeights(editor) == beforeHeights,
+        #expect(heightsRestored,
                 "\(label): undo changed the laid-out line heights")
         undoManager.redo()
         for _ in 0..<20 {

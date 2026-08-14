@@ -124,6 +124,38 @@ import Domain
         #expect(hits.contains(where: { $0.id == noteId }))
     }
 
+    // MARK: - R1.4 FTS update atomicity (remediation roadmap 2026-08-14)
+
+    /// `NoteRepository.update` refreshes the FTS title via `upsertSearchRow`,
+    /// whose `ON CONFLICT DO UPDATE` replaces EVERY column — the audit
+    /// found it passes empty body/todos/code, so any `update()` that is
+    /// not immediately followed by a reindex silently destroys the note's
+    /// searchability (the app's host layer happened to reindex, masking
+    /// the defect). A plain metadata update must not wipe searchable
+    /// content.
+    @Test
+    func updatePreservesSearchableBody() async throws {
+        let (repo, search, _) = try await freshServices()
+        let noteId = UUID()
+        var note = Note(id: noteId, lastModifiedDeviceId: Self.deviceId)
+        try await repo.create(note)
+        let blocks = [Block(noteId: noteId, kind: .richText, sortKey: 0,
+                            payload: .richText(RichTextDocument.plain("unique body token xylophone")),
+                            lastModifiedDeviceId: Self.deviceId)]
+        try await search.reindexNote(noteId: noteId, title: "Hello", blocks: blocks)
+        #expect(try await search.searchActiveNotes(query: "xylophone").contains { $0.id == noteId },
+                "precondition: the body token is searchable before the update")
+
+        // A metadata-only update (title change, no content change) — the
+        // shape every autosave/version bump takes.
+        note.title = "Renamed"
+        try await repo.update(note, modifyingDeviceId: Self.deviceId)
+
+        let hits = try await search.searchActiveNotes(query: "xylophone")
+        #expect(hits.contains { $0.id == noteId },
+                "update() must not wipe searchable body content (got \(hits.map(\.id)))")
+    }
+
     @Test
     func searchFindsByFileName() async throws {
         let (repo, search, _) = try await freshServices()

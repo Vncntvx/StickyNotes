@@ -27,6 +27,9 @@ import Foundation
         // standard (Default) in the middle — the zero-delta baseline.
         let cases = TextSpacingPreset.allCases
         #expect(cases == [.compact, .standard, .relaxed])
-        #expect(cases[1].displayName == "Default")
+        // Localized (R3.8): assert language-independently — the middle
+        // preset is the zero-delta standard and all three names differ.
+        #expect(cases[1] == .standard, "the middle preset is the zero-delta baseline")
+        #expect(Set(cases.map(\.displayName)).count == 3, "the three preset names must be distinct")
     }
 }

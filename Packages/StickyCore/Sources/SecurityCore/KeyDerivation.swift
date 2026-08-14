@@ -72,6 +72,13 @@ public extension Argon2Parameters {
     ///   suite fast). Production callers MUST pass `false`.
     func requireProductionMinimum(isTestFixture: Bool = false) throws {
         if isTestFixture { return }
+        // R1.5 (remediation roadmap 2026-08-14): reject EMPTY salts too —
+        // `Argon2Parameters.recommended` shipped with an empty salt, so a
+        // caller deriving straight from the template got a deterministic
+        // KEK. A production derivation must always use a fresh random salt.
+        guard !salt.isEmpty else {
+            throw StickyError.encryption(.kdfFailed)
+        }
         guard meetsProductionMinimum else {
             throw StickyError.encryption(.kdfFailed)
         }
@@ -111,10 +118,16 @@ public enum KeyDerivation {
         }
     }
 
-    /// Generates a fresh random salt (16 bytes).
-    public static func generateSalt() -> Data {
+    /// Generates a fresh random salt (16 bytes). Throws
+    /// `.encryption(.kdfFailed)` if the system RNG fails — a silently
+    /// zero-filled salt would make the KEK derivation deterministic
+    /// (R1.5, remediation roadmap 2026-08-14).
+    public static func generateSalt() throws -> Data {
         var bytes = [UInt8](repeating: 0, count: 16)
-        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        guard status == errSecSuccess else {
+            throw StickyError.encryption(.kdfFailed)
+        }
         return Data(bytes)
     }
 

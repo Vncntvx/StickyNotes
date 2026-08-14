@@ -1,10 +1,10 @@
 # AGENTS.md
 
-Specs-first repository for "macOS Sticky Notes" — a native, menu-bar-primary sticky-notes app for macOS 26+. **No application code exists yet**; everything lives in the single feature dir `specs/001-sticky-notes-app/` (spec, plan, tasks, research, data-model, quickstart, contracts/). Only one commit exists; work is driven through the Spec Kit (speckit) workflow, not ad-hoc editing.
+Specs-first repository for "macOS Sticky Notes" — a native, menu-bar-primary sticky-notes app for macOS 26+. The app target (`App/Sources`, `AppTests`), the `StickyCore` Swift package (7 modules), and the feature specs (`specs/001-sticky-notes-app/`) all live in this repository; work is driven through the Spec Kit (speckit) workflow, not ad-hoc editing. (R3.8, remediation roadmap 2026-08-14: this header previously claimed "no application code exists" — stale since Phase 1 of the original plan landed.)
 
 ## Workflow (critical)
 
-- Use the speckit commands/skills (`/speckit.specify`, `/speckit.plan`, `/speckit.tasks`, `/speckit.implement`, …) wired in `.opencode/commands/` and `.claude/skills/`. Run them in order: specify → plan → tasks → implement, with review gates.
+- Use the speckit commands/skills (`/speckit.specify`, `/speckit.plan`, `/speckit.tasks`, `/speckit.implement`, …) wired in `.zcode/skills/`. Run them in order: specify → plan → tasks → implement, with review gates.
 - `spec.md`, `plan.md`, and `tasks.md` are authoritative design artifacts. Implement per `tasks.md` — it defines exact repository paths (`App/Sources/…`, `Packages/StickyCore/Sources/{Domain,Persistence,EditorCore,AssetStore,SecurityCore,SyncCore,SystemBridge}`) and module boundaries. (The `WidgetExtension/` target was removed 2026-08-13 with the widget surface.) Do not invent structure that contradicts the plan.
 - Keep artifacts in sync: never change behavior in `spec.md`/`plan.md` outside the speckit flow (`speckit-analyze` checks cross-artifact consistency).
 - "macOS Sticky Notes" is a **working title only** — never invent a final product or brand name (spec.md line 9).
@@ -87,7 +87,6 @@ DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild test -p
 
 - **Local toolchain (verified 2026-08-07):** `/Applications/Xcode-beta.app` — Xcode 27.0 (27A5228h), Swift 6.4, macOS 27 beta. `Testing.framework` is available under `…/Platforms/MacOSX.platform/Developer/Library/Frameworks/`. Always invoke build/test with `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer` (system default still points at CLT, which lacks `Testing.framework`).
 - **Intended CI toolchain:** Xcode 26.x, Swift 6.3, Swift 6 language mode, strict concurrency, macOS 26 deployment target. The local Xcode 27 beta is NEWER than CI — code that compiles locally may need to stay within the macOS 26 API surface. Record the actual toolchain in `Documentation/toolchain.md` (task T008); do not silently change the deployment target or language mode.
-- Intended architecture: modular monolith — app target + one local Swift package `StickyCore` (7 modules). GRDB SQLite (WAL, FTS5) in the app sandbox container is the source of truth; Keychain for credentials/secrets; sync is an additive E2E-encrypted layer (WebDAV or S3-compatible, one at a time).
 - Intended architecture: modular monolith — app target + one local Swift package `StickyCore` (7 modules). GRDB SQLite (WAL, FTS5) in the app sandbox container is the source of truth; Keychain for credentials/secrets; sync is an additive E2E-encrypted layer (WebDAV or S3-compatible, one at a time).
 
 <!-- BEGIN token-budget compact-backups -->
