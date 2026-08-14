@@ -92,6 +92,15 @@ public struct MenuBarLibraryScene: View {
                 action: { model.performBannerAction() }
             )
 
+            // R1.10 (remediation roadmap 2026-08-14): the FR-011a error
+            // surface (statusMessage/isError) was written on every library
+            // failure but never rendered — every failure was silently
+            // swallowed. Non-blocking banner, dismissible like the sync
+            // notice.
+            if let message = model.statusMessage {
+                errorBanner(message: message, dismiss: { model.dismissStatusMessage() })
+            }
+
             LibraryCardGrid(model: model, openNote: openNote, onTrash: { noteId in
                 Task {
                     if await model.trash(noteId: noteId) != nil {
@@ -130,6 +139,34 @@ public struct MenuBarLibraryScene: View {
     /// framework rendering quirk this window cannot opt out of. A neutral
     /// hairline keeps FR-080 separator semantics without fighting the
     /// system glass rim.
+    /// R1.10 (remediation roadmap 2026-08-14): the FR-011a non-blocking
+    /// library error banner. Mirrors the sync notice's geometry; errors
+    /// are dismissible and never block the grid.
+    private func errorBanner(message: String, dismiss: @escaping () -> Void) -> some View {
+        HStack(spacing: AppMetrics.rowSpacing) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            Text(message)
+                .font(.system(size: AppMetrics.bannerTextSize))
+                .lineLimit(2)
+            Spacer(minLength: 8)
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Dismiss library error")
+        }
+        .padding(AppMetrics.contentInset)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: AppMetrics.surfaceRadius))
+        .padding(.horizontal, AppMetrics.contentInset)
+        .padding(.top, 6)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Library error: \(message)")
+    }
+
     private struct SeparatorLine: View {
         var body: some View {
             Rectangle()

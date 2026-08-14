@@ -38,8 +38,6 @@ public final class NoteWindowCoordinator {
     /// observable state.
     @ObservationIgnored private nonisolated(unsafe) var displayObserver: NSObjectProtocol?
     /// 003 T032: insertion-notification observers (removed in deinit).
-    @ObservationIgnored private nonisolated(unsafe) var insertionObserver: NSObjectProtocol?
-    @ObservationIgnored private nonisolated(unsafe) var insertionObservers: [NSObjectProtocol] = []
     /// Retains each window's delegate: `NSWindow.delegate` is WEAK, so the
     /// delegate would otherwise deallocate right after `open()` returns and
     /// `windowWillClose` (frame save, FR-141a flush, FR-012a auto-discard)
@@ -66,44 +64,23 @@ public final class NoteWindowCoordinator {
                 self?.reapplyFrames()
             }
         }
-        // 003 T032 (SC-004): the Edit/Insert menu commands dispatch block
-        // insertion to the KEY note window's host.
-        insertionObserver = NotificationCenter.default.addObserver(
-            forName: .stickyRequestInsertTodo, object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.insertInKeyWindow(kind: .todo) }
-        }
-        let codeObserver = NotificationCenter.default.addObserver(
-            forName: .stickyRequestInsertCode, object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.insertInKeyWindow(kind: .code) }
-        }
-        let fileObserver = NotificationCenter.default.addObserver(
-            forName: .stickyRequestInsertFileReference, object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.insertFileReferenceInKeyWindow() }
-        }
-        let captureObserver = NotificationCenter.default.addObserver(
-            forName: .stickyRequestCaptureScreenshot, object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.captureScreenshotInKeyWindow() }
-        }
-        insertionObservers = [codeObserver, fileObserver, captureObserver]
     }
 
     deinit {
         if let displayObserver {
             NotificationCenter.default.removeObserver(displayObserver)
         }
-        if let insertionObserver {
-            NotificationCenter.default.removeObserver(insertionObserver)
-        }
-        for observer in insertionObservers {
-            NotificationCenter.default.removeObserver(observer)
-        }
     }
 
     // MARK: - 003 T032 (SC-004): Edit/Insert menu dispatch
+
+    /// R3.2 (remediation roadmap 2026-08-14): direct menu-command entry
+    /// points — the Insert menu previously dispatched through string
+    /// NotificationCenter names defined in SettingsView; the coordinator
+    /// is a direct @State dependency of the app, so the calls are typed
+    /// and dropped-request-free (no window open = no-op, same as before).
+    public func insertTodoInKeyWindow() { insertInKeyWindow(kind: .todo) }
+    public func insertCodeInKeyWindow() { insertInKeyWindow(kind: .code) }
 
     private enum InsertionKind {
         case todo
@@ -144,7 +121,7 @@ public final class NoteWindowCoordinator {
         return NoteWindowDerivations.resolveInsertionTarget(blocks: host.blocks, context: context)
     }
 
-    private func insertFileReferenceInKeyWindow() {
+    public func insertFileReferenceInKeyWindow() {
         guard let host = keyHost() else { return }
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
@@ -155,12 +132,25 @@ public final class NoteWindowCoordinator {
         Task { await host.insertFileReferenceBlock(url: url, target: target) }
     }
 
-    private func captureScreenshotInKeyWindow() {
+    /// R1.6 (remediation roadmap 2026-08-14): the "New Note from Region
+    /// Capture" menu path (and the toolbar Capture action) — the region
+    /// capture flow on the key window's host.
+    public func captureRegionInKeyWindow() {
         guard let host = keyHost() else { return }
         // FR-131: capture permission is requested on invocation; the host
-        // presents the region/window capture flow.
+        // presents the region capture flow.
         let target = insertionTarget(for: host)
         Task { await host.captureRegion(target: target) }
+    }
+
+    /// R1.6 (remediation roadmap 2026-08-14): the "New Note from Window
+    /// Capture" menu path — the system window picker flow on the key
+    /// window's host. Previously the menu item created a blank note and
+    /// silently never captured.
+    public func captureWindowInKeyWindow() {
+        guard let host = keyHost() else { return }
+        let target = insertionTarget(for: host)
+        Task { await host.captureWindow(target: target) }
     }
 
     /// Opens (or focuses) the note's window. Returns the window.
@@ -259,7 +249,7 @@ public final class NoteWindowCoordinator {
 
         // FR-007a: the new note window receives keyboard focus immediately.
         window.makeKeyAndOrderFront(nil)
-        NSApplication.shared.activate(ignoringOtherApps: true)
+        NSApplication.shared.activate()
         // FR-017a/Q6 (verified pattern 2026-08-10): the SwiftUI hosting
         // view propagates its intrinsic minimum (ScrollView → ~0) during
         // the first layout pass, overriding the min set earlier. Force that
@@ -590,114 +580,7 @@ public struct NoteWindowContent: View {
                     textSize: ReadableTheme.textSize(for: note)
                 )
                 VStack(spacing: 0) {
-                    RichTextBlockView(
-                        note: note,
-                        editorTypography: editorTypography,
-                        blocks: host.blocks,
-                        onAppearanceChange: { updated in
-                            host.updateAppearance(updated)
-                        },
-                        onBlocksChanged: { newBlocks in
-                            host.updateBlocks(newBlocks)
-                        },
-                        onStructuralBlocksChanged: { newBlocks in
-                            // 004 修复: editor-side structural changes (e.g.
-                            // FR-050a empty-block removal) register ONE undo
-                            // group through the host.
-                            host.updateBlocksStructural(newBlocks)
-                        },
-                        onInsertTodo: {
-                            Task { await host.insertTodoBlock(target: toolbarInsertionTarget()) }
-                        },
-                        onInsertCode: {
-                            Task { await host.insertCodeBlock(target: toolbarInsertionTarget()) }
-                        },
-                        onInsertFileReference: {
-                            pickAndInsertFileReference()
-                        },
-                        onCaptureScreenshot: {
-                            captureScreenshot()
-                        },
-                        todoProvider: { blockId in
-                            await host.todoItem(forBlock: blockId)
-                        },
-                        onToggleTodo: { blockId in
-                            // Completion flips from the CURRENT state.
-                            if let item = await host.todoItem(forBlock: blockId) {
-                                await host.setTodoComplete(blockId: blockId, isComplete: !item.isComplete)
-                            }
-                        },
-                        onDeleteTodo: { blockId in
-                            await host.deleteTodo(blockId: blockId)
-                        },
-                        onIndentTodo: { blockId in
-                            await host.indentTodo(blockId: blockId)
-                        },
-                        onOutdentTodo: { blockId in
-                            await host.outdentTodo(blockId: blockId)
-                        },
-                        onMoveTodo: { blockId, direction in
-                            await host.reorderTodo(blockId: blockId, direction: direction)
-                        },
-                        onEmptyTodoExit: { blockId in
-                            // FR-050a: the emptied todo merges away on
-                            // cursor exit — host-side so the TodoItem row
-                            // round-trips with the block in one undo group.
-                            await host.removeEmptiedTodoBlock(blockId: blockId)
-                        },
-                        onDeleteCode: { blockId in
-                            // 004 修复 (第二轮): the code block's hover-menu
-                            // Delete — host-side structural deletion (ONE
-                            // undo group re-inserts it on ⌘Z, FR-141a
-                            // immediate persist).
-                            await host.deleteBlock(id: blockId)
-                        },
-                        onFileAction: { blockId, action in
-                            await host.performFileAction(blockId: blockId, action: action)
-                        },
-                        onSetCover: { blockId, isCover in
-                            await host.setCover(blockId: blockId, isCover: isCover)
-                        },
-                        onUpdateCaption: { blockId, caption in
-                            await host.updateCaption(blockId: blockId, caption: caption)
-                        },
-                        onOpenViewer: {
-                            // T297: the viewer loads REAL asset bytes via
-                            // the composed AssetStore (thumbnail <100% zoom,
-                            // original ≥100%) and deletes the association
-                            // through the host (FR-094b cover nullification
-                            // at the persistence layer).
-                            MediaPresenters.presentScreenshotViewer(
-                                noteId: noteId,
-                                screenshots: host.screenshotPayloads(),
-                                imageProvider: { assetId in
-                                    try? await environment.assets.store?.readData(assetID: assetId)
-                                },
-                                onDeleteAssociation: { originalAssetId in
-                                    Task { await host.deleteScreenshotBlock(originalAssetId: originalAssetId) }
-                                }
-                            )
-                        },
-                        onEmbeddedImageAction: { blockId, action in
-                            await host.performEmbeddedImageAction(blockId: blockId, action: action)
-                        },
-                        // 004 修复: unified editing context — every block
-                        // editor shares the window-level UndoManager; a
-                        // fresh insert focuses the new block; todo rows
-                        // re-fetch their state on structural undo/redo.
-                        undoManager: host.undoManager,
-                        focusRequest: host.pendingFocusRequest,
-                        onFocusRequestHandled: {
-                            host.clearPendingFocusRequest()
-                        },
-                        onContinueDocument: {
-                            // 004 修复 (2026-08-14, P0): the document tail
-                            // was clicked — focus the trailing paragraph or
-                            // materialize a new one after the last block.
-                            Task { await host.continueDocument() }
-                        },
-                        todoRevision: host.undoRevision
-                    )
+                    makeRichTextBlockView(note: note, editorTypography: editorTypography, host: host)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 // 004 T013 (FR-003): the window title follows the host —
@@ -889,6 +772,135 @@ public struct NoteWindowContent: View {
 
     /// 004 US4: the current insertion target (editor caret/focus context
     /// via the selection bridge; degraded to `.append`).
+
+    /// R1.7 (remediation roadmap 2026-08-14): the rich-text block list with
+    /// every host callback wired. Extracted from the window-content VStack
+    /// so the large expression stays type-checkable (the compiler timed
+    /// out on the inline construction once the file-availability provider
+    /// was added).
+    @ViewBuilder
+    private func makeRichTextBlockView(
+        note: Note,
+        editorTypography: EditorTypography,
+        host: NoteWindowHostModel
+    ) -> some View {
+                    RichTextBlockView(
+                        note: note,
+                        editorTypography: editorTypography,
+                        blocks: host.blocks,
+                        onAppearanceChange: { updated in
+                            host.updateAppearance(updated)
+                        },
+                        onBlocksChanged: { newBlocks in
+                            host.updateBlocks(newBlocks)
+                        },
+                        onStructuralBlocksChanged: { newBlocks in
+                            // 004 修复: editor-side structural changes (e.g.
+                            // FR-050a empty-block removal) register ONE undo
+                            // group through the host.
+                            host.updateBlocksStructural(newBlocks)
+                        },
+                        onInsertTodo: {
+                            Task { await host.insertTodoBlock(target: toolbarInsertionTarget()) }
+                        },
+                        onInsertCode: {
+                            Task { await host.insertCodeBlock(target: toolbarInsertionTarget()) }
+                        },
+                        onInsertFileReference: {
+                            pickAndInsertFileReference()
+                        },
+                        onCaptureScreenshot: {
+                            captureScreenshot()
+                        },
+                        todoProvider: { blockId in
+                            await host.todoItem(forBlock: blockId)
+                        },
+                        onToggleTodo: { blockId in
+                            // Completion flips from the CURRENT state.
+                            if let item = await host.todoItem(forBlock: blockId) {
+                                await host.setTodoComplete(blockId: blockId, isComplete: !item.isComplete)
+                            }
+                        },
+                        onDeleteTodo: { blockId in
+                            await host.deleteTodo(blockId: blockId)
+                        },
+                        onIndentTodo: { blockId in
+                            await host.indentTodo(blockId: blockId)
+                        },
+                        onOutdentTodo: { blockId in
+                            await host.outdentTodo(blockId: blockId)
+                        },
+                        onMoveTodo: { blockId, direction in
+                            await host.reorderTodo(blockId: blockId, direction: direction)
+                        },
+                        onEmptyTodoExit: { blockId in
+                            // FR-050a: the emptied todo merges away on
+                            // cursor exit — host-side so the TodoItem row
+                            // round-trips with the block in one undo group.
+                            await host.removeEmptiedTodoBlock(blockId: blockId)
+                        },
+                        onDeleteCode: { blockId in
+                            // 004 修复 (第二轮): the code block's hover-menu
+                            // Delete — host-side structural deletion (ONE
+                            // undo group re-inserts it on ⌘Z, FR-141a
+                            // immediate persist).
+                            await host.deleteBlock(id: blockId)
+                        },
+                        onFileAction: { blockId, action in
+                            await host.performFileAction(blockId: blockId, action: action)
+                        },
+                        // R1.7 (remediation roadmap 2026-08-14): the real
+                        // FR-100 availability evaluator — the card
+                        // previously rendered a hardcoded "On another
+                        // device" state.
+                        fileAvailabilityProvider: { blockId in
+                            await host.fileAvailability(blockId: blockId)
+                        },
+                        onSetCover: { blockId, isCover in
+                            await host.setCover(blockId: blockId, isCover: isCover)
+                        },
+                        onUpdateCaption: { blockId, caption in
+                            await host.updateCaption(blockId: blockId, caption: caption)
+                        },
+                        onOpenViewer: {
+                            // T297: the viewer loads REAL asset bytes via
+                            // the composed AssetStore (thumbnail <100% zoom,
+                            // original ≥100%) and deletes the association
+                            // through the host (FR-094b cover nullification
+                            // at the persistence layer).
+                            MediaPresenters.presentScreenshotViewer(
+                                noteId: noteId,
+                                screenshots: host.screenshotPayloads(),
+                                imageProvider: { assetId in
+                                    try? await environment.assets.store?.readData(assetID: assetId)
+                                },
+                                onDeleteAssociation: { originalAssetId in
+                                    Task { await host.deleteScreenshotBlock(originalAssetId: originalAssetId) }
+                                }
+                            )
+                        },
+                        onEmbeddedImageAction: { blockId, action in
+                            await host.performEmbeddedImageAction(blockId: blockId, action: action)
+                        },
+                        // 004 修复: unified editing context — every block
+                        // editor shares the window-level UndoManager; a
+                        // fresh insert focuses the new block; todo rows
+                        // re-fetch their state on structural undo/redo.
+                        undoManager: host.undoManager,
+                        focusRequest: host.pendingFocusRequest,
+                        onFocusRequestHandled: {
+                            host.clearPendingFocusRequest()
+                        },
+                        onContinueDocument: {
+                            // 004 修复 (2026-08-14, P0): the document tail
+                            // was clicked — focus the trailing paragraph or
+                            // materialize a new one after the last block.
+                            Task { await host.continueDocument() }
+                        },
+                        todoRevision: host.undoRevision
+                    )
+    }
+
     private func toolbarInsertionTarget() -> InsertionTarget? {
         guard let host else { return nil }
         let context = EditorSelectionContext.current(for: noteId)

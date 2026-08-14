@@ -20,7 +20,7 @@ public enum NoteExportImport {
     @MainActor
     public static func exportNoteAsJSON(note: Note, blocks: [Block], assetBytes: [UUID: Data] = [:]) -> Bool {
         do {
-            let document = try NoteDocumentSerializer.exportDocument(note: note, blocks: blocks, assetBytes: assetBytes)
+            let document = NoteDocumentSerializer.exportDocument(note: note, blocks: blocks, assetBytes: assetBytes)
             let data = try NoteDocumentSerializer.encodeDocument(document)
             let panel = NSSavePanel()
             panel.allowedContentTypes = [.json]
@@ -37,20 +37,6 @@ public enum NoteExportImport {
     /// corrupted documents (no partial note); the caller inserts the parsed
     /// note through the repository path (T030). Returns the parsed note.
     @MainActor
-    public static func importNoteJSON() throws -> CanonicalNote? {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.json]
-        panel.allowsMultipleSelection = false
-        guard panel.runModal() == .OK, let url = panel.url else { return nil }
-        let data = try Data(contentsOf: url)
-        let document = try NoteDocumentSerializer.decodeDocument(from: data)
-        // Fail closed: reject documents that fail structural validation.
-        if let reason = NoteDocumentSerializer.validateForImport(document) {
-            throw NoteDocumentError.corruptedEnvelope(reason)
-        }
-        return document
-    }
-
     /// Copies the note as Markdown to the clipboard (FR-031).
     public static func copyNoteAsMarkdown(note: Note, blocks: [Block]) {
         let markdown = NoteMarkdownSerializer.markdown(note: note, blocks: blocks)

@@ -100,6 +100,11 @@ struct StickyNotesApp: App {
                     settingsSceneOpener = action
                 }
             }
+            .background {
+                OpenWindowActionCapture { action in
+                    windowOpener = action
+                }
+            }
         }
         .menuBarExtraStyle(.window)
 
@@ -132,9 +137,7 @@ struct StickyNotesApp: App {
 
         // MARK: - Menu commands (003 T011, FR-072/SC-017)
         //
-        // Built from MenuCommandCatalog (the SC-017 single source of
-        // truth); actions reuse the existing model/coordinator methods and
-        // notification-based dispatch — no new command manager.
+
         .commands {
             CommandGroup(replacing: .appInfo) {
                 Button("About Sticky Notes") {
@@ -165,11 +168,11 @@ struct StickyNotesApp: App {
                 }
 
                 Button("New Note from Region Capture") {
-                    createNoteAndCapture()
+                    createNoteAndCapture(.region)
                 }
 
                 Button("New Note from Window Capture") {
-                    createNoteAndCapture()
+                    createNoteAndCapture(.window)
                 }
             }
 
@@ -200,21 +203,21 @@ struct StickyNotesApp: App {
             // commands (the persistent "Add Block" control is removed).
             CommandMenu("Insert") {
                 Button("Add Todo") {
-                    postInsertion(.stickyRequestInsertTodo)
+                    coordinator?.insertTodoInKeyWindow()
                 }
                 .keyboardShortcut("t", modifiers: [.command, .shift])
 
                 Button("Add Block") {
-                    postInsertion(.stickyRequestInsertCode)
+                    coordinator?.insertCodeInKeyWindow()
                 }
                 .keyboardShortcut("c", modifiers: [.command, .shift])
 
                 Divider()
                 Button("Add File Reference…") {
-                    postInsertion(.stickyRequestInsertFileReference)
+                    coordinator?.insertFileReferenceInKeyWindow()
                 }
                 Button("Capture Screenshot…") {
-                    postInsertion(.stickyRequestCaptureScreenshot)
+                    coordinator?.captureRegionInKeyWindow()
                 }
                 // 004 T035 (FR-010): the unified image insertion path.
                 Button("Insert Image…") {
@@ -301,7 +304,7 @@ struct StickyNotesApp: App {
         Task { @MainActor in
             guard let libraryModel else { return }
             guard let id = await libraryModel.createBlankNote() else { return }
-            NSApplication.shared.activate(ignoringOtherApps: true)
+            NSApplication.shared.activate()
             openNoteWindow(noteId: id)
         }
     }
@@ -325,19 +328,38 @@ struct StickyNotesApp: App {
                 try? await repo.insert(block)
             }
             // FR-007a: shortcut/menu creation activates the app.
-            NSApplication.shared.activate(ignoringOtherApps: true)
+            NSApplication.shared.activate()
             openNoteWindow(noteId: id)
         }
     }
 
-    /// Region/window capture menu action: creates a new note and captures
-    /// into it.
-    private func createNoteAndCapture() {
+    /// Region/window capture menu action (R1.6, remediation roadmap
+    /// 2026-08-14): creates a note and REALLY captures into it. Previously
+    /// this created a blank note and silently never captured — the menu
+    /// items promised a capture that never happened. The host's
+    /// region/window flow handles the system picker + permission
+    /// (FR-131); the capture is triggered once the window is up and key.
+    private enum CaptureKind {
+        case region
+        case window
+    }
+
+    private func createNoteAndCapture(_ kind: CaptureKind) {
         Task { @MainActor in
             guard let libraryModel else { return }
             guard let id = await libraryModel.createBlankNote() else { return }
-            NSApplication.shared.activate(ignoringOtherApps: true)
+            NSApplication.shared.activate()
             openNoteWindow(noteId: id)
+            // The window opens asynchronously — wait until the note
+            // window is registered and key before starting the capture.
+            for _ in 0..<100 {
+                if NoteWindowBridge.registeredWindow(for: id)?.isKeyWindow == true { break }
+                try? await Task.sleep(nanoseconds: 20_000_000)
+            }
+            switch kind {
+            case .region: coordinator?.captureRegionInKeyWindow()
+            case .window: coordinator?.captureWindowInKeyWindow()
+            }
         }
     }
 
@@ -455,7 +477,7 @@ struct StickyNotesApp: App {
                 // left-click would (FR-001 path preserved). Activating the
                 // app first ensures the library window comes forward even
                 // when the Dock icon is hidden.
-                NSApplication.shared.activate(ignoringOtherApps: true)
+                NSApplication.shared.activate()
                 self.openLibraryFromDropdown()
             },
             openSettings: { self.openSettingsWindow() },
@@ -481,7 +503,7 @@ struct StickyNotesApp: App {
             // No status-item window found — the library is opened by the
             // user's next left-click. Activate the app so the icon is
             // visible and ready.
-            NSApplication.shared.activate(ignoringOtherApps: true)
+            NSApplication.shared.activate()
             return
         }
         // Synthesize a left-click at the icon's center to toggle the library
@@ -524,12 +546,24 @@ struct StickyNotesApp: App {
     /// Settings windows when the scene presented slower than the probe
     /// window (regression fixed 2026-08-14 by removing the probe entirely).
     @State private var settingsSceneOpener: OpenSettingsAction?
+    /// R3.1 (remediation roadmap 2026-08-14): the captured `openWindow`
+    /// environment action — About/Help now open through their SwiftUI
+    /// Window scenes (previously declared but never opened; every entry
+    /// point hand-built an NSWindow, a second window system).
+    @State private var windowOpener: OpenWindowAction?
+
+    /// Stable identity for the degenerate-case Settings fallback window
+    /// (R3.1 — title-based lookup could steal a user note window).
+    private static let settingsFallbackWindowIdentifier = "StickyNotes.SettingsFallback"
 
     private func openSettingsWindow() {
-        NSApplication.shared.activate(ignoringOtherApps: true)
-        // Reuse any existing settings window (scene- or fallback-created).
+        NSApplication.shared.activate()
+        // R3.1: never match by TITLE — note-window titles are user-derived
+        // first lines, so a note starting with "Settings" could be grabbed.
+        // Scene windows are idempotently focused by `openSettings`; the
+        // fallback window is identified by its stable identifier.
         if let existing = NSApp.windows.first(where: {
-            $0.title.contains("Settings")
+            $0.identifier == NSUserInterfaceItemIdentifier(Self.settingsFallbackWindowIdentifier)
         }) {
             existing.makeKeyAndOrderFront(nil)
             StickyLogger(category: .app).debug("open-settings", code: "existing-window")
@@ -565,6 +599,7 @@ struct StickyNotesApp: App {
         // Retain ownership (double-release guard — see openAboutWindow).
         window.isReleasedWhenClosed = false
         window.title = "Settings"
+        window.identifier = NSUserInterfaceItemIdentifier(Self.settingsFallbackWindowIdentifier)
         window.minSize = NSSize(
             width: SettingsWindowPolicy.minimumWidth,
             height: SettingsWindowPolicy.minimumHeight
@@ -579,8 +614,13 @@ struct StickyNotesApp: App {
     }
 
     private func openAboutWindow() {
-        // Opens the About window scene (fallback: order any existing one
-        // front).
+        // R3.1: the About SCENE is the primary path (idempotent focus);
+        // the manual window is only the degenerate fallback when the
+        // scene action was never captured.
+        if let opener = windowOpener {
+            opener(id: "about")
+            return
+        }
         if let window = NSApp.windows.first(where: { $0.title == "About Sticky Notes" }) {
             window.makeKeyAndOrderFront(nil)
         } else {
@@ -605,6 +645,12 @@ struct StickyNotesApp: App {
     /// Opens the Help panel (FR-004/FR-008 — reachable from the menu-bar
     /// interface, incl. when the Dock icon is disabled).
     private func openHelpWindow() {
+        // R3.1: the Help SCENE is the primary path; manual window is the
+        // degenerate fallback only.
+        if let opener = windowOpener {
+            opener(id: "help")
+            return
+        }
         if let window = NSApp.windows.first(where: { $0.title == "Sticky Notes Help" }) {
             window.makeKeyAndOrderFront(nil)
         } else {
@@ -688,7 +734,7 @@ struct StickyNotesApp: App {
         if let model = libraryModel {
             model.setSearchFocusRequested(true)
         }
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
     }
 
     /// Toggles the Notes/Trash destination (View > Trash).
@@ -707,16 +753,25 @@ struct StickyNotesApp: App {
         Button("Manual") { model?.setSort(.manual) }
     }
 
-    /// Posts a block-insertion request to the KEY note window (Edit/Insert
-    /// menu, 003 T032 — the coordinator dispatches to the focused host).
-    private func postInsertion(_ name: Notification.Name) {
-        NotificationCenter.default.post(name: name, object: nil)
-    }
 }
 
 /// Captures the `openSettings` environment action (macOS 14+) from inside
 /// the MenuBarExtra scene content so AppKit-side entry points (the
 /// menu-bar dropdown) can present the SwiftUI Settings scene.
+/// Captures the `openWindow` environment action (macOS 13+) from inside
+/// the MenuBarExtra scene content so AppKit-side entry points (menu
+/// commands, the menu-bar dropdown) can open the About/Help Window scenes
+/// (R3.1, remediation roadmap 2026-08-14).
+private struct OpenWindowActionCapture: View {
+    @Environment(\.openWindow) private var openWindow
+    let onCapture: (OpenWindowAction) -> Void
+
+    var body: some View {
+        Color.clear
+            .onAppear { onCapture(openWindow) }
+    }
+}
+
 private struct OpenSettingsActionCapture: View {
     @Environment(\.openSettings) private var openSettings
     let onCapture: (OpenSettingsAction) -> Void

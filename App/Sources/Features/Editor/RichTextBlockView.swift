@@ -53,6 +53,11 @@ public struct RichTextBlockView: View {
     /// undo group, FR-141a immediate persist).
     let onDeleteCode: (UUID) async -> Void
     let onFileAction: (UUID, FileReferenceAction) async -> Void
+    /// Evaluates the FR-100 availability of a file-reference block
+    /// (bookmark resolution via the host). Defaults to the unknown
+    /// state when no provider is wired (R1.7, remediation roadmap
+    /// 2026-08-14: the card previously hardcoded `.onAnotherDevice`).
+    let fileAvailabilityProvider: (UUID) async -> FileAvailability
     let onSetCover: (UUID?, Bool) async -> Void
     let onUpdateCaption: (UUID, String?) async -> Void
     let onOpenViewer: () -> Void
@@ -121,6 +126,7 @@ public struct RichTextBlockView: View {
         onEmptyTodoExit: @escaping (UUID) async -> Void = { _ in },
         onDeleteCode: @escaping (UUID) async -> Void = { _ in },
         onFileAction: @escaping (UUID, FileReferenceAction) async -> Void = { _, _ in },
+        fileAvailabilityProvider: @escaping (UUID) async -> FileAvailability = { _ in .onAnotherDevice },
         onSetCover: @escaping (UUID?, Bool) async -> Void = { _, _ in },
         onUpdateCaption: @escaping (UUID, String?) async -> Void = { _, _ in },
         onOpenViewer: @escaping () -> Void = {},
@@ -150,6 +156,7 @@ public struct RichTextBlockView: View {
         self.onEmptyTodoExit = onEmptyTodoExit
         self.onDeleteCode = onDeleteCode
         self.onFileAction = onFileAction
+        self.fileAvailabilityProvider = fileAvailabilityProvider
         self.onSetCover = onSetCover
         self.onUpdateCaption = onUpdateCaption
         self.onOpenViewer = onOpenViewer
@@ -394,9 +401,7 @@ public struct RichTextBlockView: View {
                 }
             )
         case .fileRef:
-            FileReferenceCardView(block: block, onAction: { action in
-                Task { await onFileAction(block.id, action) }
-            })
+            fileReferenceCard(block)
         case .screenshot:
             ScreenshotBlockView(block: block, onSetCover: { isCover in
                 Task { await onSetCover(block.id, isCover) }
@@ -593,15 +598,23 @@ public struct RichTextBlockView: View {
             onBlocksChanged(updated)
         }
     }
+
+    /// R1.7 (remediation roadmap 2026-08-14): the file-reference card with
+    /// the real FR-100 availability evaluator wired. Extracted from the
+    /// body switch so the large block-expression stays type-checkable.
+    @ViewBuilder
+    private func fileReferenceCard(_ block: Block) -> some View {
+        FileReferenceCardView(
+            block: block,
+            onAction: { action in
+                Task { await onFileAction(block.id, action) }
+            },
+            availabilityProvider: fileAvailabilityProvider
+        )
+    }
 }
 
 // MARK: - ContextualFormatBar (004 T039, FR-012/FR-013/FR-022/FR-029)
-
-/// The floating glass format row: appears while text is selected (or a
-/// format command is active), anchored over the editor, never stealing
-/// focus (FR-012/FR-029). Buttons are standard SwiftUI controls inside a
-/// single glass group (FR-022 — one grouped surface, not scattered
-/// capsules). The only custom glass in the feature (plan §5.2).
 struct ContextualFormatBar: View {
     @Bindable var bridge: EditorSelectionBridge
 

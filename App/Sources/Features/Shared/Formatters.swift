@@ -59,33 +59,3 @@ public enum DisplayFormatters {
         date.formatted(date: .abbreviated, time: .shortened)
     }
 }
-
-// MARK: - Card preview truncation (T256, FR-020a)
-
-/// FR-020a: the card body preview is truncated at 2 rendered lines with a
-/// trailing ellipsis, drawn from the FIRST rich-text block — never
-/// duplicating the generated summary title. Line-level at the card's current
-/// width; this helper approximates line breaks by a char budget per line
-/// (the SwiftUI view applies it at the rendered width via
-/// `lineLimit(2)` + truncation; the helper guarantees the SOURCE text is
-/// bounded so the summary title is never repeated).
-public enum CardPreview {
-    /// The first rich-text block's text (preview source), or nil.
-    public static func previewSource(from blocks: [Block]) -> String? {
-        for block in blocks.sorted(by: { $0.sortKey < $1.sortKey }) {
-            if case .richText(let doc) = block.payload {
-                let text = doc.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !text.isEmpty { return text }
-            }
-        }
-        return nil
-    }
-
-    /// Whether the preview duplicates the summary title (should never
-    /// happen — the summary derives from the same text; the VIEW shows
-    /// either the manual title or the summary, and the preview separately).
-    public static func duplicatesSummary(_ preview: String, summary: String?) -> Bool {
-        guard let summary else { return false }
-        return preview == summary
-    }
-}

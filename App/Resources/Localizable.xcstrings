@@ -2789,40 +2789,6 @@
         }
       }
     },
-    "Markdown shortcuts": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Markdown shortcuts"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Markdown 快捷输入"
-          }
-        }
-      }
-    },
-    "Type “# ” for a heading, “- ” for a bullet, “- [ ] ” for a todo, “**text**” for bold, “*text*” for italic, and three backticks for a code block. A single Undo (⌘Z) restores the exact Markdown you typed.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Type “# ” for a heading, “- ” for a bullet, “- [ ] ” for a todo, “**text**” for bold, “*text*” for italic, and three backticks for a code block. A single Undo (⌘Z) restores the exact Markdown you typed."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "输入“# ”创建标题、“- ”创建列表、“- [ ] ”创建待办、“**文字**”加粗、“*文字*”斜体，三个反引号创建代码块。按一次撤销（⌘Z）即可恢复原始 Markdown 语法。"
-          }
-        }
-      }
-    },
     "Search": {
       "extractionState": "manual",
       "localizations": {
@@ -2870,23 +2836,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "截图与文件"
-          }
-        }
-      }
-    },
-    "Add a screenshot or a file reference from a note's upper control area. Files are referenced, never copied. A screenshot viewer opens in its own window with zoom and caption editing.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Add a screenshot or a file reference from a note's upper control area. Files are referenced, never copied. A screenshot viewer opens in its own window with zoom and caption editing."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "在便笺上方控制区可添加截图或文件引用。文件以引用方式关联，不会复制。截图查看器会在独立窗口中打开，支持缩放和说明编辑。"
           }
         }
       }
@@ -6627,6 +6576,57 @@
           "stringUnit": {
             "state": "translated",
             "value": "恢复"
+          }
+        }
+      }
+    },
+    "Formatting": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Formatting"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文本格式"
+          }
+        }
+      }
+    },
+    "Select text and use the Format menu (⌘B bold, ⌘I italic, ⌘U underline) or the toolbar to style it. Text Size in the Format menu adjusts the whole note's font size.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select text and use the Format menu (⌘B bold, ⌘I italic, ⌘U underline) or the toolbar to style it. Text Size in the Format menu adjusts the whole note's font size."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选中文本后，用格式菜单（⌘B 加粗、⌘I 斜体、⌘U 下划线）或工具栏设置样式。格式菜单中的“字号”可调整整篇便笺的字体大小。"
+          }
+        }
+      }
+    },
+    "Add a screenshot or a file reference from the note window's toolbar or the Insert menu. Files are referenced, never copied. A screenshot viewer opens in its own window with zoom and caption editing.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add a screenshot or a file reference from the note window's toolbar or the Insert menu. Files are referenced, never copied. A screenshot viewer opens in its own window with zoom and caption editing."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从便笺窗口的工具栏或“插入”菜单添加截图或文件引用。文件以引用方式关联，不会复制。截图查看器会在独立窗口中打开，支持缩放和说明编辑。"
           }
         }
       }

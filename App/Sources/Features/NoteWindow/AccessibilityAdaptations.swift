@@ -31,31 +31,10 @@ public enum AccessibilityAnnouncements {
 
 /// A modifier that announces state changes (todo toggle, failed file
 /// access, failed capture — FR-132).
-public struct VoiceOverAnnouncementModifier: ViewModifier {
-    let announcement: String?
-    let trigger: Bool
-
-    public init(announcement: String?, trigger: Bool) {
-        self.announcement = announcement
-        self.trigger = trigger
-    }
-
-    public func body(content: Content) -> some View {
-        content
-            .onChange(of: trigger) { _, newValue in
-                if newValue, let announcement {
-                    AccessibilityAnnouncements.announce(announcement)
-                }
-            }
-    }
-}
 
 public extension View {
     /// Announces `announcement` once when `trigger` flips to true
     /// (FR-132/FR-180b).
-    func voiceOverAnnounce(_ announcement: String?, when trigger: Bool) -> some View {
-        modifier(VoiceOverAnnouncementModifier(announcement: announcement, trigger: trigger))
-    }
 }
 
 // MARK: - AccessibilityAdaptations (T172, Increased Contrast / Reduce Motion)
@@ -71,12 +50,5 @@ public enum AccessibilityAdaptations {
     /// Whether Increased Contrast is enabled (FR-044).
     public static var increasedContrastEnabled: Bool {
         NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
-    }
-
-    /// A stronger foreground when Increased Contrast is on (the Domain
-    /// contrast check still guarantees readability).
-    public static func effectiveForeground(note: Note) -> Color {
-        let base = ReadableTheme.foreground(for: note)
-        return increasedContrastEnabled ? (ReadableTheme.foreground(for: note)) : base
     }
 }
