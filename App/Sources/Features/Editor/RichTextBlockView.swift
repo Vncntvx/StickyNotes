@@ -599,11 +599,17 @@ public struct RichTextBlockView: View {
 
 /// The floating glass format row: appears while text is selected (or a
 /// format command is active), anchored over the editor, never stealing
-/// focus (FR-012/FR-029). Buttons are the SYSTEM glass button style
-/// (`.buttonStyle(.glass)`, FR-061 Rev 3 — interactive custom controls use
-/// the system glass button style instead of raw `glassEffect` layering);
-/// the tight HStack keeps them one coherent group (FR-022). This is the
-/// feature's custom-glass surface — no manual material/glassEffect layers.
+/// focus (FR-012/FR-029). ONE glass group — a single Capsule surface
+/// carrying the regular glass material (plan §5.2: the feature's only
+/// custom-glass surface) holding standard `.plain` buttons.
+///
+/// 2026-08-14 (T187 follow-up): the per-button `.buttonStyle(.glass)`
+/// variant was a REGRESSION — system glass buttons float nearly
+/// transparently over note paper, turning the row into an invisible
+/// but clickable control (user report). The grouped Capsule surface keeps
+/// the bar visible AND satisfies FR-061's "coherent group, not unrelated
+/// floating capsules" (five independent glass pills would violate it);
+/// `.plain` buttons inside ONE material surface avoid glass-on-glass.
 struct ContextualFormatBar: View {
     @Bindable var bridge: EditorSelectionBridge
 
@@ -620,7 +626,24 @@ struct ContextualFormatBar: View {
             }
             .padding(.horizontal, 6)
             .padding(.vertical, 4)
+            .background(formatBarMaterial)
+            .clipShape(Capsule())
             .accessibilityElement(children: .contain)
+        }
+    }
+
+    /// The single glass group surface (macOS 26.0+ glassEffect; the
+    /// deployment floor makes the fallback dead code, kept defensively).
+    /// The `.regularMaterial` fill is NOT redundant: it is what keeps the
+    /// surface visible over light note paper (2026-08-14 verified).
+    @ViewBuilder
+    private var formatBarMaterial: some View {
+        if #available(macOS 26.0, *) {
+            Capsule()
+                .fill(.regularMaterial)
+                .glassEffect(.regular, in: Capsule())
+        } else {
+            Capsule().fill(.regularMaterial)
         }
     }
 
@@ -635,10 +658,9 @@ struct ContextualFormatBar: View {
                 .font(.system(size: 12, weight: .medium))
                 .frame(width: 26, height: 22)
         }
-        // FR-061 (Rev 3, T187): the system glass button style — the
-        // standard control gets the system's Liquid Glass appearance and
-        // Reduce Transparency / appearance adaptation automatically.
-        .buttonStyle(.glass)
+        // `.plain` inside the ONE material surface — no glass-on-glass
+        // (FR-061), icons stay legible on the material (2026-08-14).
+        .buttonStyle(.plain)
         .help(help)
         .accessibilityLabel(help)
     }

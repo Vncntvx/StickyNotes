@@ -116,13 +116,16 @@ public struct BlockInsertionControl: View {
 
     /// The glass background (macOS 26.0+ — the deployment floor, so no
     /// availability guard is needed at compile time; the runtime handles
-    /// Reduce Transparency automatically). Rev 3 (T187): no redundant
-    /// `.regularMaterial` fill under the glass — `glassEffect` renders the
-    /// glass material itself (single layer, no material-on-glass).
+    /// Reduce Transparency automatically). 2026-08-14 (T187 follow-up):
+    /// the `.regularMaterial` fill is restored under the glass — a bare
+    /// `glassEffect` circle floats nearly invisible over note paper (same
+    /// regression as the format bar); the material keeps the control
+    /// visible while glassEffect adds the Liquid Glass finish.
     @ViewBuilder
     private var glassBackground: some View {
         if #available(macOS 26.0, *) {
             Circle()
+                .fill(.regularMaterial)
                 .glassEffect(.regular, in: Circle())
         } else {
             Circle().fill(.regularMaterial)
