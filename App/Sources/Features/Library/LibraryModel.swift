@@ -37,6 +37,8 @@ public final class LibraryModel {
         public let hasImage: Bool
         public let hasFileReference: Bool
         public let isConflictCopy: Bool
+        /// The conflict-copy label (FR-175); nil for non-conflict notes.
+        public let conflictLabel: String?
         public let syncWarning: Bool
 
         public var id: UUID { noteId }
@@ -178,7 +180,12 @@ public final class LibraryModel {
         isLoading = true
         defer { isLoading = false }
         do {
-            let lifecycle: NoteLifecycleState = scope == .trash ? .trashed : .active
+            // R2.1 (Phase 2): the library scope is [.active, .conflictCopy]
+            // (NoteLifecycle.libraryVisibleStates, FR-175) — conflict copies
+            // are visible and distinguishable in the library.
+            let lifecycleStates: Set<NoteLifecycleState> = scope == .trash
+                ? [.trashed]
+                : [.active, .conflictCopy]
             let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
             let noteIds: Set<UUID>?
             if !query.isEmpty {
@@ -206,7 +213,7 @@ public final class LibraryModel {
                 return
             }
             var fetched = try await environment.persistence.fetchCards(
-                lifecycle: lifecycle,
+                lifecycleStates: lifecycleStates,
                 sort: sort,
                 noteIds: noteIds
             )
@@ -233,6 +240,7 @@ public final class LibraryModel {
                     hasImage: row.hasImage,
                     hasFileReference: row.hasFileReference,
                     isConflictCopy: row.isConflictCopy,
+                    conflictLabel: row.conflictLabel,
                     syncWarning: row.syncWarning
                 )
             }

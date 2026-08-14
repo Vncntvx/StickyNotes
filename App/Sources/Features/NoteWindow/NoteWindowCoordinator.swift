@@ -187,7 +187,10 @@ public final class NoteWindowCoordinator {
         // titlebar renders NO title text — the in-content first line is
         // the single visible, editable title.
         window.title = NoteWindowDerivations.deriveWindowTitle(
-            noteTitle: note.title,
+            // R2.1 (Phase 2): a conflict copy without a manual title shows
+            // its conflict label in the window title (FR-175
+            // distinguishability).
+            noteTitle: note.title ?? (note.lifecycleState == .conflictCopy ? note.conflictLabel : nil),
             firstLine: NoteWindowDerivations.firstMeaningfulLine(blocks: [])
         )
         window.titlebarAppearsTransparent = true
@@ -863,6 +866,14 @@ public struct NoteWindowContent: View {
                             // 2026-08-14: 跨块模式下 Backspace/Delete — host
                             // 跨块删除（单 undo 组 + 焦点末块）。
                             await host.applySpanningDeletion(selection: selection)
+                        },
+                        onCopySpanningSelection: { selection in
+                            // R2.2 (Phase 2): ⌘C 跨块复制 — plain + RTF
+                            // （FR-053 仅受支持 marks）。
+                            EditorAppBridge.copySpanningSelection(
+                                blocks: host.blocks,
+                                selection: selection
+                            )
                         },
                         onDeleteCode: { blockId in
                             // 004 修复 (第二轮): the code block's hover-menu

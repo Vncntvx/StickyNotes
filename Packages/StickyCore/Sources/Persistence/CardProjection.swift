@@ -45,6 +45,8 @@ public struct NoteCardProjection: Sendable, Identifiable, Equatable {
     public let hasImage: Bool
     public let hasFileReference: Bool
     public let isConflictCopy: Bool
+    /// The conflict-copy label (FR-175) — nil for non-conflict notes.
+    public let conflictLabel: String?
     public let syncWarning: Bool             // partialAssetSyncFailure on any asset
 
     public var id: UUID { noteId }
@@ -63,6 +65,7 @@ public struct NoteCardProjection: Sendable, Identifiable, Equatable {
         hasImage: Bool,
         hasFileReference: Bool,
         isConflictCopy: Bool,
+        conflictLabel: String? = nil,
         syncWarning: Bool
     ) {
         self.noteId = noteId
@@ -78,6 +81,7 @@ public struct NoteCardProjection: Sendable, Identifiable, Equatable {
         self.hasImage = hasImage
         self.hasFileReference = hasFileReference
         self.isConflictCopy = isConflictCopy
+        self.conflictLabel = conflictLabel
         self.syncWarning = syncWarning
     }
 
@@ -111,6 +115,25 @@ public enum CardProjection {
     public static func fetchCardProjections(
         store: DatabaseStore,
         lifecycle: NoteLifecycleState,
+        sort: NoteSortKey,
+        limit: Int = maxRows,
+        noteIds: Set<UUID>? = nil
+    ) async throws -> [NoteCardProjection] {
+        try await fetchCardProjections(
+            store: store,
+            lifecycleStates: [lifecycle],
+            sort: sort,
+            limit: limit,
+            noteIds: noteIds
+        )
+    }
+
+    /// R2.1 (Phase 2): fetches cards for MULTIPLE lifecycle states in one
+    /// query (e.g. the library's [.active, .conflictCopy] — FR-175). The
+    /// single-lifecycle overload delegates here.
+    public static func fetchCardProjections(
+        store: DatabaseStore,
+        lifecycleStates: Set<NoteLifecycleState>,
         sort: NoteSortKey,
         limit: Int = maxRows,
         noteIds: Set<UUID>? = nil
@@ -206,16 +229,19 @@ public enum CardProjection {
                 return map
             }()
 
+            let placeholders = Array(repeating: "?", count: lifecycleStates.count).joined(separator: ",")
+            let stateArgs: [any DatabaseValueConvertible] = lifecycleStates.map(\.rawValue)
+            let finalArgs: [any DatabaseValueConvertible] = noteIds == nil ? stateArgs + [limit] : stateArgs
             let rows = try Row.fetchAll(
                 db,
                 sql: """
                     SELECT n.*
                     FROM note n
-                    WHERE n.lifecycleState = ?
+                    WHERE n.lifecycleState IN (\(placeholders))
                     \(Self.noteIdFilter(noteIds))
                     \(noteIds == nil ? "ORDER BY \(orderClause) LIMIT ?" : "ORDER BY \(orderClause)")
                     """,
-                arguments: noteIds == nil ? [lifecycle.rawValue, limit] : [lifecycle.rawValue]
+                arguments: StatementArguments(finalArgs)
             )
 
             return rows.compactMap { row -> NoteCardProjection? in
@@ -253,6 +279,7 @@ public enum CardProjection {
                     hasImage: ind.1,
                     hasFileReference: ind.2,
                     isConflictCopy: (row["lifecycleState"] ?? "") == NoteLifecycleState.conflictCopy.rawValue,
+                    conflictLabel: row["conflictLabel"],
                     syncWarning: syncWarnings.contains(noteId)
                 )
             }

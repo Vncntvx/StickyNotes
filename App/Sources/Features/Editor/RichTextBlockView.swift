@@ -61,6 +61,8 @@ public struct RichTextBlockView: View {
     /// 2026-08-14: 跨块模式下 Backspace/Delete → host 的跨块删除
     /// （deleteSpanningSelection，单 undo 组 + 焦点末块）。
     let onDeleteSpanningSelection: (CrossBlockSelection) async -> Void
+    /// R2.2 (Phase 2): 跨块模式下 ⌘C → host 的跨块复制（plain + RTF）。
+    let onCopySpanningSelection: (CrossBlockSelection) -> Void
     /// 004 修复 (第二轮): the code block's delete affordance (the hover
     /// ellipsis menu) — routed through the host's structural deletion (ONE
     /// undo group, FR-141a immediate persist).
@@ -141,6 +143,7 @@ public struct RichTextBlockView: View {
         onMergeBlock: @escaping (UUID) async -> Void = { _ in },
         onInsertParagraphAfterBlock: @escaping (UUID) async -> Void = { _ in },
         onDeleteSpanningSelection: @escaping (CrossBlockSelection) async -> Void = { _ in },
+        onCopySpanningSelection: @escaping (CrossBlockSelection) -> Void = { _ in },
         onDeleteCode: @escaping (UUID) async -> Void = { _ in },
         onFileAction: @escaping (UUID, FileReferenceAction) async -> Void = { _, _ in },
         fileAvailabilityProvider: @escaping (UUID) async -> FileAvailability = { _ in .onAnotherDevice },
@@ -175,6 +178,7 @@ public struct RichTextBlockView: View {
         self.onMergeBlock = onMergeBlock
         self.onInsertParagraphAfterBlock = onInsertParagraphAfterBlock
         self.onDeleteSpanningSelection = onDeleteSpanningSelection
+        self.onCopySpanningSelection = onCopySpanningSelection
         self.onDeleteCode = onDeleteCode
         self.onFileAction = onFileAction
         self.fileAvailabilityProvider = fileAvailabilityProvider
@@ -412,6 +416,10 @@ public struct RichTextBlockView: View {
                           let selection = bridge.crossBlockSelection else { return }
                     Task { await onDeleteSpanningSelection(selection) }
                 },
+                onCopySpanningSelection: { selection in
+                    // R2.2: ⌘C 跨块复制。
+                    onCopySpanningSelection(selection)
+                },
                 todoRevision: todoRevision
             )
         case .code:
@@ -549,6 +557,10 @@ public struct RichTextBlockView: View {
                     guard let bridge = selectionBridge,
                           let selection = bridge.crossBlockSelection else { return }
                     Task { await onDeleteSpanningSelection(selection) }
+                },
+                onCopySpanningSelection: { selection in
+                    // R2.2: ⌘C 跨块复制。
+                    onCopySpanningSelection(selection)
                 }
             )
             .frame(maxWidth: .infinity, alignment: .topLeading)

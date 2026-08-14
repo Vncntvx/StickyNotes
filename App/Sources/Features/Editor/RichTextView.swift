@@ -130,6 +130,9 @@ public struct RichTextView: NSViewRepresentable {
     /// 2026-08-14: 跨块模式下 Backspace/Delete → host 的跨块删除
     /// （deleteSpanningSelection，单 undo 组 + 焦点末块）。
     let onDeleteSpanningSelection: (() -> Void)?
+    /// R2.2 (Phase 2): invoked on ⌘C while a cross-block selection is
+    /// active — the host copies the spanning selection (plain + RTF).
+    let onCopySpanningSelection: ((CrossBlockSelection) -> Void)?
 
     public init(
         document: RichTextDocument,
@@ -152,7 +155,8 @@ public struct RichTextView: NSViewRepresentable {
         onMergeIntoPrevious: (() -> Void)? = nil,
         onInsertParagraphAfterSelf: (() -> Void)? = nil,
         onSelectAllInNote: (() -> Void)? = nil,
-        onDeleteSpanningSelection: (() -> Void)? = nil
+        onDeleteSpanningSelection: (() -> Void)? = nil,
+        onCopySpanningSelection: ((CrossBlockSelection) -> Void)? = nil
     ) {
         self.document = document
         self.editorTypography = editorTypography
@@ -175,6 +179,7 @@ public struct RichTextView: NSViewRepresentable {
         self.onInsertParagraphAfterSelf = onInsertParagraphAfterSelf
         self.onSelectAllInNote = onSelectAllInNote
         self.onDeleteSpanningSelection = onDeleteSpanningSelection
+        self.onCopySpanningSelection = onCopySpanningSelection
     }
 
     public func makeCoordinator() -> Coordinator {
@@ -769,6 +774,15 @@ public struct RichTextView: NSViewRepresentable {
             )
         }
 
+        /// R2.2 (Phase 2): ⌘C 在跨块选区模式 → 跨块复制（FR-054）。
+        func handleCopy() -> Bool {
+            guard let bridge = liveBridge,
+                  let selection = bridge.crossBlockSelection,
+                  !selection.selections.isEmpty else { return false }
+            parent.onCopySpanningSelection?(selection)
+            return true
+        }
+
         /// Return（Q5-A/Q6-B/Q9-A）：仅特殊块（todo）编辑器、块尾无选中、
         /// 非 Shift、非 IME 时插入正文块；其余（中间 Return / Shift+Return
         /// / 组合中）保持默认换行。
@@ -1321,6 +1335,10 @@ protocol BlockKeyCommandHandling: AnyObject {
     /// 拖选越过当前块边界 → 跨块拖选（源块钉住、目标块随拖入点、中间块
     /// 全选）；拖回本块返回 false（默认拖选恢复）。
     func handleCrossBlockDrag(event: NSEvent) -> Bool
+    /// R2.2 (Phase 2): ⌘C 在跨块选区模式下 → 跨块复制（plain + RTF，
+    /// FR-053/FR-054）；无跨块选区返回 false（系统复制）。CodeTextView
+    /// 实现返回 false（code 无跨块上下文）。
+    func handleCopy() -> Bool
 }
 
 // MARK: - IntrinsicSizingTextView (004 修复 2026-08-14, P0)
@@ -1446,6 +1464,15 @@ final class NotePaperTextView: IntrinsicSizingTextView {
         if modifiers.isEmpty,
            let handler = blockKeyHandler,
            MainActor.assumeIsolated({ handler.handleTypingReplacement(character: event.charactersIgnoringModifiers) }) {
+            return
+        }
+        // R2.2 (Phase 2): ⌘C with an active cross-block selection copies the
+        // spanning selection (plain + RTF, FR-054) instead of the system
+        // per-block copy.
+        if modifiers == [.command],
+           event.charactersIgnoringModifiers?.lowercased() == "c",
+           let handler = blockKeyHandler,
+           MainActor.assumeIsolated({ handler.handleCopy() }) {
             return
         }
         super.keyDown(with: event)

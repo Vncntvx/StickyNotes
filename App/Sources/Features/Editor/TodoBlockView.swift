@@ -1,5 +1,6 @@
 import SwiftUI
 import Domain
+import EditorCore
 import SystemBridge
 
 // MARK: - Todo first-line-center alignment (004 修复 2026-08-14, P1)
@@ -80,6 +81,8 @@ public struct TodoBlockView: View {
     let onSelectAllInNote: (() -> Void)?
     /// 2026-08-14: 跨块模式下 Backspace/Delete → host 跨块删除。
     let onDeleteSpanningSelection: (() -> Void)?
+    /// R2.2 (Phase 2): ⌘C 跨块复制透传。
+    let onCopySpanningSelection: ((CrossBlockSelection) -> Void)?
     /// 004 修复: host undo/redo revision — re-fetches the TodoItem so the
     /// checkbox follows structural undo/redo.
     let todoRevision: Int
@@ -116,6 +119,7 @@ public struct TodoBlockView: View {
         onInsertParagraphAfterSelf: (() -> Void)? = nil,
         onSelectAllInNote: (() -> Void)? = nil,
         onDeleteSpanningSelection: (() -> Void)? = nil,
+        onCopySpanningSelection: ((CrossBlockSelection) -> Void)? = nil,
         todoRevision: Int = 0
     ) {
         self.block = block
@@ -138,6 +142,7 @@ public struct TodoBlockView: View {
         self.onInsertParagraphAfterSelf = onInsertParagraphAfterSelf
         self.onSelectAllInNote = onSelectAllInNote
         self.onDeleteSpanningSelection = onDeleteSpanningSelection
+        self.onCopySpanningSelection = onCopySpanningSelection
         self.todoRevision = todoRevision
         // 004 修复 (2026-08-14, P1): the first-frame seed — the nominal
         // body font's line center (ascender−descender)/2. PR1: the seed and
@@ -229,7 +234,8 @@ public struct TodoBlockView: View {
                 onMergeIntoPrevious: onMergeIntoPrevious,
                 onInsertParagraphAfterSelf: onInsertParagraphAfterSelf,
                 onSelectAllInNote: onSelectAllInNote,
-                onDeleteSpanningSelection: onDeleteSpanningSelection
+                onDeleteSpanningSelection: onDeleteSpanningSelection,
+                onCopySpanningSelection: onCopySpanningSelection
             )
             // Pin the vertical size to the editor's intrinsic — the row
             // proposes its full height (marker hit frame + alignment

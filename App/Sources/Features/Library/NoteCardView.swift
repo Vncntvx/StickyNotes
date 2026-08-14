@@ -55,10 +55,11 @@ public struct NoteCardView: View {
                             .accessibilityLabel("Sync warning")
                     }
                     if card.isConflictCopy {
-                        Image(systemName: "exclamationmark.circle")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .accessibilityLabel("Conflict copy")
+                        // R2.1 (Phase 2): the FR-175 labeled badge component
+                        // replaces the bare icon (conflict copies are now
+                        // visible in the library — previously the component
+                        // was dead code, audit D-1).
+                        ConflictCopyBadge(label: card.conflictLabel)
                     }
                 }
 

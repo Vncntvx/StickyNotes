@@ -282,6 +282,10 @@ public struct CodeTextView: NSViewRepresentable {
         /// 跨块替换仅富文本编辑器参与——code 块不拦截字符输入。
         func handleTypingReplacement(character: String?) -> Bool { false }
 
+        /// R2.2 (Phase 2): code 编辑器无跨块复制上下文（选区状态在正文
+        /// bridge）——不拦截 ⌘C，系统复制当前 code 文本。
+        func handleCopy() -> Bool { false }
+
         /// 2026-08-14 (Q1-A): 拖选越过本块边界 → 跨块拖选（code 文本同样
         /// 参与跨块选区）。
         func handleCrossBlockDrag(event: NSEvent) -> Bool {

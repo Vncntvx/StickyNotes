@@ -31,9 +31,11 @@ public struct FullTextSearch: Sendable {
     /// Trashed/permanentlyDeleted/conflictCopy notes are excluded by default;
     /// the Trash scope is a separate query.
     public func searchActiveNotes(query: String, limit: Int = 100) async throws -> [SearchResult] {
+        // R2.1 (Phase 2): the library scope is [.active, .conflictCopy]
+        // (FR-175) — conflict copies are searchable like active notes.
         try await search(
             query: query,
-            lifecycleFilter: "note.lifecycleState = 'active'",
+            lifecycleFilter: "note.lifecycleState IN ('active', 'conflictCopy')",
             limit: limit
         )
     }

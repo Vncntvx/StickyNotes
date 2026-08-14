@@ -238,6 +238,16 @@ public struct PersistenceServices: Sendable {
         sort: NoteSortKey,
         noteIds: Set<UUID>? = nil
     ) async throws -> [NoteCardProjection] {
+        try await fetchCards(lifecycleStates: [lifecycle], sort: sort, noteIds: noteIds)
+    }
+
+    /// R2.1 (Phase 2): multi-lifecycle card fetch (library shows
+    /// [.active, .conflictCopy], FR-175).
+    public func fetchCards(
+        lifecycleStates: Set<NoteLifecycleState>,
+        sort: NoteSortKey,
+        noteIds: Set<UUID>? = nil
+    ) async throws -> [NoteCardProjection] {
         // R1.10 (remediation roadmap 2026-08-14): a missing store is a
         // FAILURE (the database is unavailable), not an empty library —
         // silently returning [] made every pre-bootstrap/placeholder load
@@ -246,7 +256,7 @@ public struct PersistenceServices: Sendable {
         guard let store else { throw StickyError.persistence(.databaseOpenFailed) }
         return try await CardProjection.fetchCardProjections(
             store: store,
-            lifecycle: lifecycle,
+            lifecycleStates: lifecycleStates,
             sort: sort,
             noteIds: noteIds
         )
