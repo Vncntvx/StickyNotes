@@ -583,6 +583,9 @@ public struct NoteWindowContent: View {
                     makeRichTextBlockView(note: note, editorTypography: editorTypography, host: host)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
+                // R1.4 (T017): media block views load their real 256px
+                // thumbnails through the composed AssetStore.
+                .environment(\.noteAssetStore, environment.assets.store)
                 // 004 T013 (FR-003): the window title follows the host —
                 // host→window only, on title edits and on block changes
                 // (first-line derivation).

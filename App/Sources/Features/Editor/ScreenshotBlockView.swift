@@ -1,5 +1,7 @@
 import SwiftUI
+import AppKit
 import Domain
+import AssetStore
 
 // MARK: - ScreenshotBlockView + EmbeddedImageBlockView (T168/T292, US7)
 //
@@ -25,20 +27,27 @@ public struct ScreenshotBlockView: View {
     let onSetCover: (Bool) -> Void
     let onUpdateCaption: (String?) -> Void
     let onViewLarger: () -> Void
+    /// Test-injectable thumbnail loader; nil uses the environment
+    /// `noteAssetStore` (R1.4 T017).
+    var thumbnailLoader: (@Sendable (UUID) async throws -> Data?)?
 
     @State private var caption: String?
     @State private var isCover = false
+    @State private var thumbnailData: Data?
+    @Environment(\.noteAssetStore) private var assetStore
 
     public init(
         block: Block,
         onSetCover: @escaping (Bool) -> Void = { _ in },
         onUpdateCaption: @escaping (String?) -> Void = { _ in },
-        onViewLarger: @escaping () -> Void = {}
+        onViewLarger: @escaping () -> Void = {},
+        thumbnailLoader: (@Sendable (UUID) async throws -> Data?)? = nil
     ) {
         self.block = block
         self.onSetCover = onSetCover
         self.onUpdateCaption = onUpdateCaption
         self.onViewLarger = onViewLarger
+        self.thumbnailLoader = thumbnailLoader
     }
 
     public var body: some View {
@@ -48,9 +57,7 @@ public struct ScreenshotBlockView: View {
                     .fill(.quaternary.opacity(0.4))
                     .frame(height: 120)
                     .overlay {
-                        Image(systemName: "camera")
-                            .font(.title2)
-                            .foregroundStyle(.secondary)
+                        thumbnailFrame
                     }
                     .overlay(alignment: .topTrailing) {
                         if isCover {
@@ -92,8 +99,36 @@ public struct ScreenshotBlockView: View {
             if case .screenshot(let payload) = block.payload {
                 caption = payload.caption
                 isCover = payload.isCover
+                await loadThumbnail(for: payload)
             }
         }
+    }
+
+    /// R1.4 (T017): the inline frame renders the REAL 256px thumbnail
+    /// (FR-094a, SC-008 — never the full-resolution original). The
+    /// placeholder appears only when the thumbnail is absent or failed.
+    @ViewBuilder
+    private var thumbnailFrame: some View {
+        if let thumbnailData, let image = NSImage(data: thumbnailData) {
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+        } else {
+            Image(systemName: "camera")
+                .font(.title2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func loadThumbnail(for payload: ScreenshotPayload) async {
+        let state = MediaThumbnailResolver.renderState(for: .screenshot(payload))
+        let loader = thumbnailLoader ?? { [assetStore] id -> Data? in
+            guard let store = assetStore else { return nil }
+            return try await store.readData(assetID: id)
+        }
+        thumbnailData = await MediaThumbnailResolver.loadThumbnail(state: state, provider: loader)
     }
 }
 
@@ -102,12 +137,18 @@ public struct ScreenshotBlockView: View {
 public struct EmbeddedImageBlockView: View {
     let block: Block
     let onAction: (EmbeddedImageAction) -> Void
+    /// Test-injectable thumbnail loader; nil uses the environment
+    /// `noteAssetStore` (R1.4 T017).
+    var thumbnailLoader: (@Sendable (UUID) async throws -> Data?)?
 
     @State private var caption: String?
+    @State private var thumbnailData: Data?
+    @Environment(\.noteAssetStore) private var assetStore
 
-    public init(block: Block, onAction: @escaping (EmbeddedImageAction) -> Void = { _ in }) {
+    public init(block: Block, onAction: @escaping (EmbeddedImageAction) -> Void = { _ in }, thumbnailLoader: (@Sendable (UUID) async throws -> Data?)? = nil) {
         self.block = block
         self.onAction = onAction
+        self.thumbnailLoader = thumbnailLoader
     }
 
     public var body: some View {
@@ -116,9 +157,7 @@ public struct EmbeddedImageBlockView: View {
                 .fill(.quaternary.opacity(0.4))
                 .frame(height: 120)
                 .overlay {
-                    Image(systemName: "photo")
-                        .font(.title2)
-                        .foregroundStyle(.secondary)
+                    thumbnailFrame
                 }
 
             if let caption, !caption.isEmpty {
@@ -142,7 +181,34 @@ public struct EmbeddedImageBlockView: View {
         .task {
             if case .image(let payload) = block.payload {
                 caption = payload.caption
+                await loadThumbnail(for: payload)
             }
         }
+    }
+
+    /// R1.4 (T017): real 256px thumbnail (FR-094a, SC-008); placeholder
+    /// only when absent/failed.
+    @ViewBuilder
+    private var thumbnailFrame: some View {
+        if let thumbnailData, let image = NSImage(data: thumbnailData) {
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+        } else {
+            Image(systemName: "photo")
+                .font(.title2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func loadThumbnail(for payload: EmbeddedImagePayload) async {
+        let state = MediaThumbnailResolver.renderState(for: .image(payload))
+        let loader = thumbnailLoader ?? { [assetStore] id -> Data? in
+            guard let store = assetStore else { return nil }
+            return try await store.readData(assetID: id)
+        }
+        thumbnailData = await MediaThumbnailResolver.loadThumbnail(state: state, provider: loader)
     }
 }
