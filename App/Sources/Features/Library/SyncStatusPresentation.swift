@@ -185,22 +185,11 @@ public enum SyncStatusResolver {
         )
     }
 
-    /// Maps a sanitized code back to the ProviderError category (only the
-    /// codes the mapping branches on are reconstructed; the rest are nil).
+    /// R2.5 (Phase 2): maps a sanitized code back to the ProviderError
+    /// category via the Core single-source API (the local hardcoded table
+    /// was removed — drift risk, audit A-8).
     private static func error(fromCode code: String) -> ProviderError? {
-        switch code {
-        case "sync.provider.auth": return .auth
-        case "sync.provider.forbidden": return .forbidden
-        case "sync.provider.network": return .network
-        case "sync.provider.server": return .server
-        case "sync.provider.conflict": return .conflict
-        case "sync.provider.clockSkew": return .clockSkew
-        case "sync.provider.corrupt": return .corrupt
-        case "sync.provider.schemaUnsupported": return .schemaUnsupported
-        case "sync.provider.wrongVault": return .wrongVault
-        case "sync.provider.tls": return .tls
-        default: return nil
-        }
+        ProviderError.fromSanitizedCode(code)
     }
 
     private static func isRepositoryDamage(_ error: ProviderError) -> Bool {

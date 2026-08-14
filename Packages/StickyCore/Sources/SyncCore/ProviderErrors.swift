@@ -35,6 +35,30 @@ public enum ProviderError: Error, Sendable, Equatable {
     case unmapped(String)
     case unknown
 
+    /// R2.5 (Phase 2): the inverse of `sanitizedCode` — reconstructs the
+    /// category from a sanitized code string (the App's status surface
+    /// receives codes from the coordinator, never raw errors). Unknown
+    /// codes return nil. Single source of truth for the code↔category
+    /// mapping (previously duplicated in the App layer).
+    public static func fromSanitizedCode(_ code: String) -> ProviderError? {
+        switch code {
+        case "sync.provider.auth": return .auth
+        case "sync.provider.forbidden": return .forbidden
+        case "sync.provider.conditionalFailed": return .conditionalFailed
+        case "sync.provider.notFound": return .notFound
+        case "sync.provider.conflict": return .conflict
+        case "sync.provider.network": return .network
+        case "sync.provider.server": return .server
+        case "sync.provider.clockSkew": return .clockSkew
+        case "sync.provider.corrupt": return .corrupt
+        case "sync.provider.schemaUnsupported": return .schemaUnsupported
+        case "sync.provider.canceled": return .canceled
+        case "sync.provider.tls": return .tls
+        case "sync.provider.wrongVault": return .wrongVault
+        default: return nil
+        }
+    }
+
     /// Stable sanitized code for logs/diagnostics (`sync.provider.<code>`).
     public var sanitizedCode: String {
         switch self {

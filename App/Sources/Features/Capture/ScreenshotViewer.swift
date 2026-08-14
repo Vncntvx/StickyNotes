@@ -8,7 +8,7 @@ import Domain
 // screenshot viewer opens in an independent, borderless, note-style window
 // (several viewers MAY coexist; images drag out). Zoom is bounded 25%–400%
 // in 25% steps (scroll/pinch + ⌘+/⌘- equivalents); double-click toggles
-// actual size (100%) ↔ fit-to-window; arrow keys navigate between the same
+// actual size (100%) ↔ 50% (R2.4); arrow keys navigate between the same
 // note's screenshots; Return (or double-click on a screenshot) enters
 // caption editing. The viewer never activates the captured application
 // (FR-095).
@@ -44,7 +44,6 @@ public enum ScreenshotZoom {
 public struct ScreenshotViewer: View {
     let noteId: UUID
     let screenshots: [ScreenshotPayload]
-    let openScreenshot: (Int) -> Void
     /// T297: resolves asset bytes (thumbnail/original) by asset id. The App
     /// wires the composed AssetStore.
     let imageProvider: (UUID) async throws -> Data?
@@ -60,13 +59,11 @@ public struct ScreenshotViewer: View {
     public init(
         noteId: UUID,
         screenshots: [ScreenshotPayload],
-        openScreenshot: @escaping (Int) -> Void = { _ in },
         imageProvider: @escaping (UUID) async throws -> Data? = { _ in nil },
         onDeleteAssociation: @escaping (UUID) -> Void = { _ in }
     ) {
         self.noteId = noteId
         self.screenshots = screenshots
-        self.openScreenshot = openScreenshot
         self.imageProvider = imageProvider
         self.onDeleteAssociation = onDeleteAssociation
     }
@@ -154,7 +151,8 @@ public struct ScreenshotViewer: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .scaleEffect(zoom)   // bounded 25–400%
             .onTapGesture(count: 2) {
-                // Double-click toggles actual size ↔ fit-to-window.
+                // R2.4 (Phase 2): double-click toggles actual size (100%) ↔ 50% —
+                // the former "fit-to-window" claim never existed.
                 zoom = zoom == 1.0 ? 0.5 : 1.0
             }
             .focusable()
@@ -194,7 +192,6 @@ public struct ScreenshotViewer: View {
     private func navigate(to index: Int) {
         guard !screenshots.isEmpty else { return }
         currentIndex = min(max(index, 0), screenshots.count - 1)
-        openScreenshot(currentIndex)
     }
 
     // MARK: - Image loading (T297, FR-094a)

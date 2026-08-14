@@ -212,20 +212,11 @@ public final class LibraryModel {
                 cards = []
                 return
             }
-            var fetched = try await environment.persistence.fetchCards(
+            let fetched = try await environment.persistence.fetchCards(
                 lifecycleStates: lifecycleStates,
                 sort: sort,
                 noteIds: noteIds
             )
-            if !query.isEmpty && noteIds == nil {
-                // FR-024a prompt updates: in-memory fallback before the
-                // search service exists (pre-bootstrap only).
-                fetched = fetched.filter { card in
-                    (card.title ?? "").localizedCaseInsensitiveContains(query)
-                        || (card.generatedSummary ?? "").localizedCaseInsensitiveContains(query)
-                        || (card.previewSource ?? "").localizedCaseInsensitiveContains(query)
-                }
-            }
             let rows = fetched.map { row in
                 NoteCardRow(
                     noteId: row.noteId,

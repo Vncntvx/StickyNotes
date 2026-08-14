@@ -34,7 +34,6 @@ public enum MediaPresenters {
         window.contentView = NSHostingView(rootView: ScreenshotViewer(
             noteId: noteId,
             screenshots: screenshots,
-            openScreenshot: { _ in },
             imageProvider: imageProvider,
             onDeleteAssociation: onDeleteAssociation
         ))

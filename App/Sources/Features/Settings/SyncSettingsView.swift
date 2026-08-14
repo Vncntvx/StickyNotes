@@ -611,6 +611,13 @@ public struct SyncSettingsView: View {
         panel.nameFieldStringValue = Self.profileFileName()
         panel.message = String(localized: "Save a sync profile to join this vault from another Mac.")
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        // R2.5 (Phase 2): never silently export suite version 1 — when the
+        // vault is locked the suite version is unknown; refuse the export
+        // instead of writing a fabricated value.
+        guard let suiteVersion = syncCoordinator?.encryptionSuiteVersion else {
+            presentTransient(String(localized: "Unlock the vault to export a sync profile."), isError: true)
+            return
+        }
         do {
             // T032: the suite version comes from the actual vault (never
             // hardcoded); encode throws instead of writing an empty file.
@@ -619,7 +626,7 @@ public struct SyncSettingsView: View {
                 vaultId: configuration.vaultId,
                 vaultLocator: configuration.vaultLocator,
                 providerConfig: configuration.providerConfig,
-                encryptionSuiteVersion: syncCoordinator?.encryptionSuiteVersion ?? 1,
+                encryptionSuiteVersion: suiteVersion,
                 originDeviceName: AppDevice.current().displayName
             )
             try wire.write(to: url, options: .atomic)

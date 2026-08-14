@@ -196,6 +196,8 @@ public struct FileReferenceCardView: View {
     public init(
         block: Block,
         onAction: @escaping (FileReferenceAction) -> Void = { _ in },
+        // R2.3 (Phase 2): test convenience default only — production
+        // passes the real FR-100 evaluator (audit S-6).
         availabilityProvider: @escaping (UUID) async -> FileAvailability = { _ in .onAnotherDevice }
     ) {
         self.block = block

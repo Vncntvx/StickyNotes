@@ -146,6 +146,10 @@ public struct RichTextBlockView: View {
         onCopySpanningSelection: @escaping (CrossBlockSelection) -> Void = { _ in },
         onDeleteCode: @escaping (UUID) async -> Void = { _ in },
         onFileAction: @escaping (UUID, FileReferenceAction) async -> Void = { _, _ in },
+        // R2.3 (Phase 2): the default is a TEST convenience ONLY — the
+        // production call site (NoteWindowCoordinator) always passes the
+        // real FR-100 evaluator; the silent `.onAnotherDevice` default was
+        // a misleading placeholder (audit S-6).
         fileAvailabilityProvider: @escaping (UUID) async -> FileAvailability = { _ in .onAnotherDevice },
         onSetCover: @escaping (UUID?, Bool) async -> Void = { _, _ in },
         onUpdateCaption: @escaping (UUID, String?) async -> Void = { _, _ in },
