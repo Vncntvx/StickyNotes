@@ -260,3 +260,5 @@ Prototypes/*/
 
 # Zcode
 .zcode/
+# Local git worktrees (skill: using-git-worktrees)
+.worktrees/
