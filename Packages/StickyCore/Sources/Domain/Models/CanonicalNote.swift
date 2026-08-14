@@ -76,10 +76,13 @@ public struct FileReferencePayload: Sendable, Equatable, Hashable {
 /// Embedded image payload: original + thumbnail asset ids, optional caption.
 public struct EmbeddedImagePayload: Sendable, Equatable, Hashable {
     public var originalAssetId: UUID
-    public var thumbnailAssetId: UUID
+    /// Nil when thumbnail generation failed (SC-008: the card grid NEVER
+    /// decodes a full-resolution original — an absent thumbnail renders a
+    /// degraded placeholder instead of falling back to the original).
+    public var thumbnailAssetId: UUID?
     public var caption: String?
 
-    public init(originalAssetId: UUID, thumbnailAssetId: UUID, caption: String? = nil) {
+    public init(originalAssetId: UUID, thumbnailAssetId: UUID? = nil, caption: String? = nil) {
         self.originalAssetId = originalAssetId
         self.thumbnailAssetId = thumbnailAssetId
         self.caption = caption
@@ -91,7 +94,9 @@ public struct EmbeddedImagePayload: Sendable, Equatable, Hashable {
 /// flag. At most one `isCover = true` per note (transactional).
 public struct ScreenshotPayload: Sendable, Equatable, Hashable {
     public var originalAssetId: UUID
-    public var thumbnailAssetId: UUID
+    /// Nil when thumbnail generation failed (SC-008 — never fall back to
+    /// the full-resolution original as the thumbnail).
+    public var thumbnailAssetId: UUID?
     public var appIconAssetId: UUID?
     public var applicationName: String?
     public var windowTitle: String?
@@ -101,7 +106,7 @@ public struct ScreenshotPayload: Sendable, Equatable, Hashable {
 
     public init(
         originalAssetId: UUID,
-        thumbnailAssetId: UUID,
+        thumbnailAssetId: UUID? = nil,
         appIconAssetId: UUID? = nil,
         applicationName: String? = nil,
         windowTitle: String? = nil,

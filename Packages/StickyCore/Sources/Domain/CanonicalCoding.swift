@@ -172,11 +172,11 @@ extension CanonicalBlockPayload: Codable {
             try container.encodeIfPresent(payload.caption, forKey: .caption)
         case .image(let payload):
             try container.encode(payload.originalAssetId, forKey: .originalAssetId)
-            try container.encode(payload.thumbnailAssetId, forKey: .thumbnailAssetId)
+            try container.encodeIfPresent(payload.thumbnailAssetId, forKey: .thumbnailAssetId)
             try container.encodeIfPresent(payload.caption, forKey: .caption)
         case .screenshot(let payload):
             try container.encode(payload.originalAssetId, forKey: .originalAssetId)
-            try container.encode(payload.thumbnailAssetId, forKey: .thumbnailAssetId)
+            try container.encodeIfPresent(payload.thumbnailAssetId, forKey: .thumbnailAssetId)
             try container.encodeIfPresent(payload.appIconAssetId, forKey: .appIconAssetId)
             try container.encodeIfPresent(payload.applicationName, forKey: .applicationName)
             try container.encodeIfPresent(payload.windowTitle, forKey: .windowTitle)
@@ -193,7 +193,7 @@ extension CanonicalBlockPayload: Codable {
         // screenshot is identified by `capturedAt`.
         if container.contains(.capturedAt) {
             let originalAssetId = try container.decode(UUID.self, forKey: .originalAssetId)
-            let thumbnailAssetId = try container.decode(UUID.self, forKey: .thumbnailAssetId)
+            let thumbnailAssetId = try container.decodeIfPresent(UUID.self, forKey: .thumbnailAssetId)
             let appIconAssetId = try container.decodeIfPresent(UUID.self, forKey: .appIconAssetId)
             let applicationName = try container.decodeIfPresent(String.self, forKey: .applicationName)
             let windowTitle = try container.decodeIfPresent(String.self, forKey: .windowTitle)
@@ -248,7 +248,7 @@ extension CanonicalBlockPayload: Codable {
         }
         if container.contains(.originalAssetId) {
             let originalAssetId = try container.decode(UUID.self, forKey: .originalAssetId)
-            let thumbnailAssetId = try container.decode(UUID.self, forKey: .thumbnailAssetId)
+            let thumbnailAssetId = try container.decodeIfPresent(UUID.self, forKey: .thumbnailAssetId)
             let caption = try container.decodeIfPresent(String.self, forKey: .caption)
             self = .image(EmbeddedImagePayload(
                 originalAssetId: originalAssetId,
@@ -340,13 +340,13 @@ extension EmbeddedImagePayload: Codable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.originalAssetId = try container.decode(UUID.self, forKey: .originalAssetId)
-        self.thumbnailAssetId = try container.decode(UUID.self, forKey: .thumbnailAssetId)
+        self.thumbnailAssetId = try container.decodeIfPresent(UUID.self, forKey: .thumbnailAssetId)
         self.caption = try container.decodeIfPresent(String.self, forKey: .caption)
     }
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(originalAssetId, forKey: .originalAssetId)
-        try container.encode(thumbnailAssetId, forKey: .thumbnailAssetId)
+        try container.encodeIfPresent(thumbnailAssetId, forKey: .thumbnailAssetId)
         try container.encodeIfPresent(caption, forKey: .caption)
     }
 }
@@ -365,7 +365,7 @@ extension ScreenshotPayload: Codable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.originalAssetId = try container.decode(UUID.self, forKey: .originalAssetId)
-        self.thumbnailAssetId = try container.decode(UUID.self, forKey: .thumbnailAssetId)
+        self.thumbnailAssetId = try container.decodeIfPresent(UUID.self, forKey: .thumbnailAssetId)
         self.appIconAssetId = try container.decodeIfPresent(UUID.self, forKey: .appIconAssetId)
         self.applicationName = try container.decodeIfPresent(String.self, forKey: .applicationName)
         self.windowTitle = try container.decodeIfPresent(String.self, forKey: .windowTitle)
@@ -376,7 +376,7 @@ extension ScreenshotPayload: Codable {
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(originalAssetId, forKey: .originalAssetId)
-        try container.encode(thumbnailAssetId, forKey: .thumbnailAssetId)
+        try container.encodeIfPresent(thumbnailAssetId, forKey: .thumbnailAssetId)
         try container.encodeIfPresent(appIconAssetId, forKey: .appIconAssetId)
         try container.encodeIfPresent(applicationName, forKey: .applicationName)
         try container.encodeIfPresent(windowTitle, forKey: .windowTitle)
