@@ -1,4 +1,5 @@
 import AppKit
+import CoreText
 import Domain
 
 // MARK: - FontPreferenceStore (T308, FR-043)
@@ -60,7 +61,7 @@ public struct NoteFontResolver {
         guard let preference else {
             return Self.systemFont(size: size, traits: traits)
         }
-        let family = preference.family(for: text)
+        let family = Self.family(preference: preference, for: text)
         return Self.font(family: family, size: size, traits: traits)
     }
 
@@ -84,8 +85,10 @@ public struct NoteFontResolver {
     /// Splits `text` into alternating non-CJK / CJK coverage segments, each
     /// with the font FR-043 assigns to it. Mixed Latin+CJK runs (e.g.
     /// "Hello 世界") therefore render English in the primary family and
-    /// Chinese in the fallback family within the same run. With no stored
-    /// preference the whole text is one system-font segment.
+    /// Chinese in the family the resolver assigns to CJK text within the
+    /// same run (2026-08-14: the PRIMARY family when it provides CJK
+    /// glyphs, else the fallback). With no stored preference the whole
+    /// text is one system-font segment.
     public func segmentedFonts(
         text: String,
         size: CGFloat,
@@ -103,14 +106,59 @@ public struct NoteFontResolver {
             let isCJK = FontPreference.containsCJK(String(scalars[index]))
             if isCJK != segmentIsCJK {
                 let segmentText = String(String.UnicodeScalarView(scalars[segmentStart..<index]))
-                segments.append((segmentText, Self.font(family: preference.family(for: segmentText), size: size, traits: traits)))
+                segments.append((segmentText, Self.font(family: Self.family(preference: preference, for: segmentText), size: size, traits: traits)))
                 segmentStart = index
                 segmentIsCJK = isCJK
             }
         }
         let finalText = String(String.UnicodeScalarView(scalars[segmentStart..<scalars.count]))
-        segments.append((finalText, Self.font(family: preference.family(for: finalText), size: size, traits: traits)))
+        segments.append((finalText, Self.font(family: Self.family(preference: preference, for: finalText), size: size, traits: traits)))
         return segments
+    }
+
+    // MARK: - FR-043 family selection (2026-08-14 CJK-aware)
+
+    /// The family that renders `text`: non-CJK text uses the primary
+    /// family; CJK text uses the PRIMARY family when it actually provides
+    /// CJK glyphs (a user-chosen Chinese font must apply to Chinese text —
+    /// matching the Settings preview's per-glyph `Font.custom` fallback),
+    /// otherwise the fallback family (the FR-043 mixed-rendering
+    /// guarantee for Latin-only primary families).
+    private static func family(preference: FontPreference, for text: String) -> String {
+        if FontPreference.containsCJK(text) {
+            if let primary = preference.primaryFamily, fontSupportsCJK(primary) {
+                return primary
+            }
+            return preference.fallbackFamily ?? FontPreference.systemDefault.fallbackFamily!
+        }
+        return preference.primaryFamily ?? FontPreference.systemDefault.primaryFamily!
+    }
+
+    // MARK: - CJK glyph coverage (cached per family)
+
+    /// Whether a font family provides CJK glyphs, sampled on a small
+    /// representative string. CoreText answers the "does this font cover
+    /// Chinese" question the per-glyph fallback chain would ask; the
+    /// result is cached per family (the list is bounded by the system font
+    /// catalog). Locked — the resolver is called from the editor and the
+    /// tests.
+    private static let cjkCoverageLock = NSLock()
+    private nonisolated(unsafe) static var cjkCoverageCache: [String: Bool] = [:]
+
+    private static func fontSupportsCJK(_ family: String) -> Bool {
+        cjkCoverageLock.lock()
+        defer { cjkCoverageLock.unlock() }
+        if let cached = cjkCoverageCache[family] { return cached }
+        let font = CTFontCreateWithName(family as CFString, 13, nil)
+        // 中文漢字 spans the common CJK unified ideographs the body text
+        // actually uses; all four glyphs must resolve (missing glyphs
+        // come back as 0).
+        let sample = Array("中文漢字".utf16)
+        var glyphs = [CGGlyph](repeating: 0, count: sample.count)
+        let supported = CTFontGetGlyphsForCharacters(font, sample, &glyphs, sample.count)
+            && glyphs.allSatisfy { $0 != 0 }
+        cjkCoverageCache[family] = supported
+        return supported
     }
 
     // MARK: - Helpers

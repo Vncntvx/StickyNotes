@@ -58,6 +58,55 @@ struct FontPreferenceApplicationTests {
         #expect(families[1].1 == "PingFang SC")
     }
 
+    // MARK: - CJK-aware primary resolution (2026-08-14 user report)
+
+    @Test func cjkTextUsesPrimaryFamilyWhenItCoversCJK() throws {
+        // User report 2026-08-14: choosing a CJK-capable body font (e.g.
+        // Wawati SC) changed Latin text in the editor but NOT Chinese text,
+        // while the Settings preview (per-glyph Font.custom fallback) did
+        // change. The resolver must apply the primary family to CJK text
+        // when the primary family actually provides CJK glyphs — the
+        // fallback remains the FR-043 guarantee when it does not.
+        resetPreference()
+        FontPreferenceStore.save(FontPreference(
+            primaryFamily: "Wawati SC",
+            fallbackFamily: "PingFang SC"
+        ))
+
+        let resolver = NoteFontResolver.load()
+        #expect(resolver.font(size: 13, traits: [], for: "中文测试").familyName == "Wawati SC",
+                "a CJK-covering primary family must render Chinese text (editor == preview)")
+        #expect(resolver.font(size: 13, traits: [], for: "Hello world").familyName == "Wawati SC",
+                "Latin text keeps the primary family")
+    }
+
+    @Test func cjkSegmentUsesPrimaryFamilyWhenItCoversCJK() throws {
+        resetPreference()
+        FontPreferenceStore.save(FontPreference(
+            primaryFamily: "Wawati SC",
+            fallbackFamily: "PingFang SC"
+        ))
+
+        let resolver = NoteFontResolver.load()
+        let segments = resolver.segmentedFonts(text: "Hello 世界", size: 13, traits: [])
+        #expect(segments.count == 2)
+        #expect(segments[1].segment == "世界")
+        #expect(segments[1].font.familyName == "Wawati SC")
+    }
+
+    @Test func cjkTextFallsBackWhenPrimaryLacksCJK() throws {
+        // The FR-043 mixed-rendering guarantee is unchanged for families
+        // WITHOUT CJK coverage: Helvetica renders Chinese via the fallback.
+        resetPreference()
+        FontPreferenceStore.save(FontPreference(
+            primaryFamily: "Helvetica",
+            fallbackFamily: "PingFang SC"
+        ))
+
+        let resolver = NoteFontResolver.load()
+        #expect(resolver.font(size: 13, traits: [], for: "中文测试").familyName == "PingFang SC")
+    }
+
     @Test func unsetPreferenceKeepsSystemFont() throws {
         resetPreference()
 

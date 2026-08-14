@@ -33,7 +33,10 @@ public struct NoteFontSection: View {
         Group {
             // FR-055/055a (Rev 3): the family choice over the system list.
             // LabeledContent gives the form-native label/value column
-            // alignment; the menu sits in the value column (bounded width).
+            // alignment; the menu sits in the value column. The picker is
+            // COMPACT (no fixed width — a stretched menu button centers its
+            // label and reads as floating mid-row; 2026-08-14 fix) so the
+            // LabeledContent value column holds it trailing-aligned.
             LabeledContent("Note body font") {
                 Picker("Note body font", selection: selection) {
                     ForEach(families, id: \.self) { family in
@@ -42,7 +45,7 @@ public struct NoteFontSection: View {
                 }
                 .pickerStyle(.menu)
                 .labelsHidden()
-                .frame(width: 240)
+                .fixedSize()
                 .help("Choose the font family for note body text. System Default uses the macOS system font; Chinese uses a matching system font automatically.")
             }
 
