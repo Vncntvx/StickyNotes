@@ -239,11 +239,14 @@ public struct SyncSettingsView: View {
     /// 003 T058 (FR-011/SC-012): the HUMAN-READABLE mapping — never the raw
     /// internal code (codes stay in the diagnostic export experience only).
     private var resolvedPresentation: SyncStatusPresentation? {
+        // R1.6 (remediation-phase1 T026): real state inputs — the locked /
+        // pending categories were previously unreachable here (hardcoded
+        // false, audit S-5).
         SyncStatusResolver.resolve(
             isConfigured: true,
             lastErrorCode: syncCoordinator?.lastErrorCode,
-            vaultLocked: false,
-            hasOfflineChangesPending: false,
+            vaultLocked: !(syncCoordinator?.isVaultUnlocked ?? true),
+            hasOfflineChangesPending: syncCoordinator?.isInProgress ?? false,
             summary: .empty
         )
     }

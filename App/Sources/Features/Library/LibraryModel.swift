@@ -98,7 +98,10 @@ public final class LibraryModel {
         guard let presentation = SyncStatusResolver.resolve(
             isConfigured: coordinator.isConfigured,
             lastErrorCode: coordinator.lastErrorCode,
-            vaultLocked: false,
+            // R1.6 (remediation-phase1 T026): the vault-locked state feeds
+            // the resolver — previously hardcoded `false`, which made the
+            // .needsUnlock category unreachable in production (audit S-5).
+            vaultLocked: !coordinator.isVaultUnlocked,
             hasOfflineChangesPending: coordinator.isInProgress,
             summary: .empty
         ) else {
@@ -114,13 +117,29 @@ public final class LibraryModel {
         bannerState.dismiss()
     }
 
-    /// Performs the banner's action (retry/unlock/…).
+    /// R1.6 (T026): wired handlers for banner actions that live outside the
+    /// library (the sync settings and the conflict-copy surface). The App
+    /// layer injects the real navigation; tests inject counters.
+    public var onOpenSyncSettings: () -> Void = {}
+    public var onRevealConflicts: () -> Void = {}
+
+    /// Performs the banner's action (retry/unlock/re-auth/conflicts/…).
+    /// R1.6 (T026): 4 of 5 categories were silent no-ops (`default: break`)
+    /// — every category now dispatches to a real handler (audit S-4).
     public func performBannerAction() {
         guard let category = bannerState.current?.category else { return }
         switch category {
         case .cannotConnect:
             Task { await syncCoordinator?.manualSync() }
-        default:
+        case .needsUnlock, .authFailed, .repositoryDamaged:
+            // Unlock / re-authenticate / advanced recovery all live in the
+            // sync settings surface.
+            onOpenSyncSettings()
+        case .conflictCopiesCreated:
+            onRevealConflicts()
+        case .pendingChanges, .historyAgedOut:
+            // Informational categories carry no action (FR-012 action
+            // column: nil).
             break
         }
     }

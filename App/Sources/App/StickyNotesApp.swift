@@ -430,6 +430,13 @@ struct StickyNotesApp: App {
                 await MainActor.run {
                     environment = env
                     let model = LibraryModel(environment: env)
+                    // R1.6 (T026): the sync-status banner's settings action
+                    // opens the real Settings window. Strong capture is safe
+                    // (the app struct lives for the process lifetime, same
+                    // as configureMenuBarDropdown's closures).
+                    model.onOpenSyncSettings = { [self] in
+                        self.openSettingsWindow()
+                    }
                     libraryModel = model
                     let coordinator = NoteWindowCoordinator(environment: env)
                     coordinator.deletionToast = { message in
