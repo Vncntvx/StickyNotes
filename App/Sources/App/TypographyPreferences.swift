@@ -13,6 +13,22 @@ public enum TextSpacingPreset: String, Codable, CaseIterable, Sendable, Equatabl
     case compact
     case standard
     case relaxed
+
+    /// The line-spacing metric applied as `NSParagraphStyle.lineSpacing`.
+    /// `nil` = write no paragraph style at all (the standard preset keeps
+    /// the current TextKit-default metrics byte-for-byte). The compact /
+    /// relaxed values are PROTOTYPE constants for visual tuning — they are
+    /// not architecture decisions (9/13/24 pt × Latin/CJK/emoji acceptance
+    /// decides the final values). Shared single source: the editor
+    /// (`EditorTypography.lineSpacing`) and the Settings preview both
+    /// consume it (FR-055 Rev 3).
+    public var lineSpacingValue: CGFloat? {
+        switch self {
+        case .compact: return -1.5
+        case .standard: return nil
+        case .relaxed: return 4.0
+        }
+    }
 }
 
 // MARK: - EditorTypography (Phase 2, 2026-08-14)
@@ -51,18 +67,11 @@ public struct EditorTypography: Equatable, Sendable {
         EditorTypography(fontPreference: nil, textSpacing: .standard, textSize: textSize)
     }
 
-    /// The spacing metric applied as `NSParagraphStyle.lineSpacing`.
-    /// `nil` = write no paragraph style at all (the standard preset keeps
-    /// the current TextKit-default metrics byte-for-byte). The compact /
-    /// relaxed values are PROTOTYPE constants for visual tuning — they are
-    /// not architecture decisions (9/13/24 pt × Latin/CJK/emoji acceptance
-    /// decides the final values).
+    /// The spacing metric applied as `NSParagraphStyle.lineSpacing` — the
+    /// single source is `TextSpacingPreset.lineSpacingValue` (shared with
+    /// the Settings preview, FR-055 Rev 3). `nil` = no paragraph style.
     public var lineSpacing: CGFloat? {
-        switch textSpacing {
-        case .compact: return -1.5
-        case .standard: return nil
-        case .relaxed: return 4.0
-        }
+        textSpacing.lineSpacingValue
     }
 }
 

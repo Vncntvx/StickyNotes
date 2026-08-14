@@ -44,10 +44,9 @@ public struct MenuBarLibraryScene: View {
     /// FR-009a (T246/T305): closes any open window(s) of a note the moment
     /// it is deleted from the library or Trash.
     let onCloseNoteWindows: (UUID) -> Void
-
-    /// Search-field focus (⌘F / searchAll / `stickynotes://search`): the
-    /// model's `searchFocusRequested` flag is consumed here (T025).
-    @FocusState private var searchFocused: Bool
+    /// FR-055 (Rev 3): the global typography observable — threaded to the
+    /// card grid so the card body preview follows the user's body font.
+    let typography: TypographyPreferences
 
     public init(
         model: LibraryModel,
@@ -56,7 +55,8 @@ public struct MenuBarLibraryScene: View {
         openAbout: @escaping () -> Void = {},
         openHelp: @escaping () -> Void = {},
         deletionToast: @escaping (String) -> Void = { _ in },
-        onCloseNoteWindows: @escaping (UUID) -> Void = { _ in }
+        onCloseNoteWindows: @escaping (UUID) -> Void = { _ in },
+        typography: TypographyPreferences = TypographyPreferences()
     ) {
         self.model = model
         self.openNote = openNote
@@ -65,6 +65,7 @@ public struct MenuBarLibraryScene: View {
         self.openHelp = openHelp
         self.deletionToast = deletionToast
         self.onCloseNoteWindows = onCloseNoteWindows
+        self.typography = typography
     }
 
     public var body: some View {
@@ -110,7 +111,7 @@ public struct MenuBarLibraryScene: View {
                         onCloseNoteWindows(noteId)
                     }
                 }
-            })
+            }, typography: typography)
                 .frame(minWidth: 340, minHeight: 320, idealHeight: 480)
         }
         .frame(width: 420)
@@ -172,14 +173,32 @@ public struct MenuBarLibraryScene: View {
             .labelsHidden()
             .fixedSize()
             .accessibilityLabel("Notes / Trash destination")
+
+            // FR-014b (003 T183 Rev 3): Empty Trash lives in a header "⋯"
+            // menu, Trash scope only — the grid never shifts between Notes
+            // and Trash. The destructive item requests the shared in-window
+            // confirmation (FR-026); disabled while Trash is empty.
+            if model.scope == .trash {
+                Menu {
+                    Button("Empty Trash…", role: .destructive) {
+                        model.requestEmptyTrashConfirmation()
+                    }
+                    .disabled(model.cards.isEmpty)
+                } label: {
+                    Image(systemName: "ellipsis")
+                }
+                .menuStyle(.borderlessButton)
+                .help("More trash actions")
+                .accessibilityLabel("More trash actions")
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
     }
 
-    /// Row 2 — search field (FR-003 prompt updates; ⌘F focus via
-    /// `model.searchFocusRequested`, T025) + sort popup (001 FR-022
-    /// modes).
+    /// Row 2 — native search field (FR-003/003a Rev 3: NSSearchField
+    /// bridge; ⌘F focus via `model.searchFocusRequested`) + sort popup
+    /// (001 FR-022 modes).
     private var searchRow: some View {
         HStack(spacing: 10) {
             searchField
@@ -200,40 +219,24 @@ public struct MenuBarLibraryScene: View {
         }
     }
 
-    /// The search field (FR-003 prompt updates; ⌘F focus via
-    /// `model.searchFocusRequested`, T025).
+    /// The NATIVE search field (FR-003/003a Rev 3, T184) — NSSearchField
+    /// bridged through NSViewRepresentable (system icon/clear/behaviors),
+    /// replacing the hand-drawn TextField + quaternary background. The
+    /// reload contract is unchanged: the binding writes `model.searchQuery`
+    /// and the `.onChange` performs the debounce-free immediate reload
+    /// (FR-024/024a). ⌘F / deep-link focus requests are consumed by the
+    /// bridge (`focusRequested` → first responder → flag reset).
     private var searchField: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-            TextField("Search notes", text: $model.searchQuery)
-                .textFieldStyle(.plain)
-                .focused($searchFocused)
-                .onChange(of: model.searchQuery) { _, newValue in
-                    // FR-024a prompt updates: debounce-free immediate
-                    // reload (in-memory filter, well under 100 ms).
-                    model.setSearchQuery(newValue)
-                }
-                .onChange(of: model.searchFocusRequested) { _, requested in
-                    if requested {
-                        searchFocused = true
-                        model.setSearchFocusRequested(false)
-                    }
-                }
-            if !model.searchQuery.isEmpty {
-                Button {
-                    model.searchQuery = ""
-                    model.setSearchQuery("")
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Clear search")
-            }
+        LibrarySearchField(
+            text: $model.searchQuery,
+            focusRequested: model.searchFocusRequested,
+            onFocusConsumed: { model.setSearchFocusRequested(false) }
+        )
+        .onChange(of: model.searchQuery) { _, newValue in
+            // FR-024a prompt updates: debounce-free immediate reload
+            // (in-memory filter, well under 100 ms).
+            model.setSearchQuery(newValue)
         }
-        .padding(6)
-        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
         .frame(maxWidth: .infinity)
     }
 }

@@ -2,70 +2,48 @@ import SwiftUI
 import AppKit
 import Domain
 
-// MARK: - NoteFontSection (003 T047, FR-055; Rev 2/Phase 5 2026-08-14)
+// MARK: - NoteFontSection (003 T047/T182, FR-055/055a Rev 3; 2026-08-14)
 //
-// Per tasks.md T047 and spec FR-055: a SINGLE user-facing "note font"
-// concept — one family field + automatic system fallback for CJK —
-// instead of implementation typography terms ("English font"/"Chinese
-// font"). The storage key is unchanged (001 FR-043).
+// Per tasks.md T047 and spec FR-055/055a (Rev 3): a SINGLE user-facing
+// "Note body font" concept — one choice over the SYSTEM font-family list
+// with automatic system fallback for CJK — instead of implementation
+// typography terms ("English font"/"Chinese font"). The storage key is
+// unchanged (001 FR-043).
 //
-// Phase 5 (2026-08-14): the field is a LOCAL DRAFT — commits to the
-// observable `TypographyPreferences` only on submit / focus loss / Reset,
-// so typing a family name never restyles every open note per keystroke.
-// The empty field IS the default state: `nil` preference = the macOS
-// system font (NOT FontPreference.systemDefault — that is only the
-// intra-preference fallback, and displaying it when unset was an existing
-// display/render mismatch this section now fixes). The Text Spacing row
-// commits immediately (each tap is a complete valid state).
+// Rev 3 (2026-08-14): the control is a native `Picker(.menu)` fed by
+// `NSFontManager.availableFontFamilies` — NOT a text field. "System
+// Default" is the first option and maps to the unset state (`nil`
+// preference = the macOS system font, NOT FontPreference.systemDefault —
+// that is only the intra-preference fallback). Selecting a family commits
+// immediately (there is no text input, so no draft/commit-on-focus-loss
+// path and no Reset button). Because the control is a Picker, the Settings
+// window no longer auto-focuses a text field on open. The Preview renders
+// a MULTI-LINE bilingual sample and applies the Text Spacing preset's
+// line-spacing value, so both typography settings are visible live.
 
 public struct NoteFontSection: View {
     /// The observable preference source (the bootstrap's single instance).
     let typography: TypographyPreferences
 
-    /// The LOCAL draft of the family name — committed on submit/focus loss.
-    @State private var draftFamily: String = ""
-    /// Whether the draft differs from the committed preference.
-    @State private var isDirty = false
-    /// 003 T043 (CHK031): a save failure surfaces as a non-blocking
-    /// localized notice; user data is never overwritten and the app
-    /// continues normally.
-    @State private var saveNotice: String?
-    /// The field's focus state (commit on focus loss).
-    @FocusState private var familyFieldFocused: Bool
-
     public init(typography: TypographyPreferences) {
         self.typography = typography
-        _draftFamily = State(initialValue: typography.fontPreference?.primaryFamily ?? "")
     }
 
     public var body: some View {
         Group {
-            // FR-055: ONE "note font" field (no implementation typography
-            // terms). The family name persists under the unchanged key.
-            // Polish round 2/3: LabeledContent rows give the form-native
-            // label/value column alignment — the field sits in the value
-            // column (trailing, bounded width) and the preview aligns to
-            // the same column; roundedBorder keeps the real interaction
-            // (direct typing) visibly editable.
-            LabeledContent("Note font") {
-                HStack(spacing: 8) {
-                    TextField("", text: $draftFamily, prompt: Text("Default"))
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 200)
-                        .focused($familyFieldFocused)
-                        .help("Type a font family name — for example, Helvetica Neue. Empty means Default (the system font).")
-                        .onSubmit { commitDraft() }
-                        .onChange(of: familyFieldFocused) { _, focused in
-                            if !focused { commitDraft() }
-                        }
-                    Button("Reset") {
-                        draftFamily = ""
-                        typography.setFontPreference(nil)
-                        isDirty = false
-                        saveNotice = nil
+            // FR-055/055a (Rev 3): the family choice over the system list.
+            // LabeledContent gives the form-native label/value column
+            // alignment; the menu sits in the value column (bounded width).
+            LabeledContent("Note body font") {
+                Picker("Note body font", selection: selection) {
+                    ForEach(families, id: \.self) { family in
+                        Text(family).tag(family)
                     }
-                    .disabled(draftFamily.isEmpty && typography.fontPreference == nil)
                 }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .frame(width: 240)
+                .help("Choose the font family for note body text. System Default uses the macOS system font; Chinese uses a matching system font automatically.")
             }
 
             // Phase 4/5: the three global text-spacing presets — a
@@ -85,55 +63,57 @@ public struct NoteFontSection: View {
                 .frame(width: 240)
             }
 
-            // FR-055: meaningful bilingual live preview (Latin + CJK
-            // rendered together with the system fallback), aligned to the
-            // same value column as the field.
+            // FR-055 (Rev 3): meaningful bilingual MULTI-LINE live preview —
+            // the sample spans three lines so the Text Spacing line-spacing
+            // effect is actually visible; font family and spacing both
+            // update immediately. Aligned to the same value column.
             LabeledContent("Preview") {
                 Text(FontPreferenceUI.bilingualPreviewSample)
-                    .font(.custom(committedFamily, size: 15, relativeTo: .body))
-            }
-
-            if let saveNotice {
-                Label(saveNotice, systemImage: "exclamationmark.triangle")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
+                    .font(previewFont)
+                    .lineSpacing(typography.textSpacing.lineSpacingValue ?? 0)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 240, alignment: .leading)
             }
         }
     }
 
-    /// The family the PREVIEW renders with (the committed preference, or
-    /// the system font when unset — empty means Default, not a literal
-    /// family name).
-    private var committedFamily: String {
-        typography.fontPreference?.primaryFamily ?? ""
-    }
-
-    private func commitDraft() {
-        let family = draftFamily.trimmingCharacters(in: .whitespacesAndNewlines)
-        draftFamily = family
-        if family.isEmpty {
-            typography.setFontPreference(nil)
-            saveNotice = nil
-            return
-        }
-        // Validate the family exists before committing (render-time
-        // fallback stays as the safety net for any race).
-        guard NSFont(name: family, size: 13) != nil else {
-            saveNotice = String(localized: "That font family was not found on this Mac. Your existing preference is unchanged.")
-            return
-        }
-        let preference = FontPreference(
-            primaryFamily: family,
-            fallbackFamily: typography.fontPreference?.fallbackFamily ?? FontPreference.systemDefault.fallbackFamily
+    /// The pickable options: "System Default" + sorted system families
+    /// (with the stored family retained when the system no longer provides
+    /// it — the selection must never dangle).
+    private var families: [String] {
+        NoteFontChoicePresentation.options(
+            families: NSFontManager.shared.availableFontFamilies,
+            storedFamily: typography.fontPreference?.primaryFamily
         )
-        // 003 T043 (CHK031): validate BEFORE writing — a failed encode must
-        // never overwrite the stored preference; surface non-blockingly.
-        guard (try? JSONEncoder().encode(preference)) != nil else {
-            saveNotice = String(localized: "Could not save the font preference. Your existing preference is unchanged.")
-            return
+    }
+
+    /// Maps the stored preference to the menu selection; selecting commits
+    /// immediately (each menu pick is a complete valid state).
+    private var selection: Binding<String> {
+        Binding(
+            get: { NoteFontChoicePresentation.selectedOption(for: typography.fontPreference?.primaryFamily) },
+            set: { option in
+                if let family = NoteFontChoicePresentation.family(from: option) {
+                    typography.setFontPreference(FontPreference(
+                        primaryFamily: family,
+                        fallbackFamily: typography.fontPreference?.fallbackFamily
+                            ?? FontPreference.systemDefault.fallbackFamily
+                    ))
+                } else {
+                    // "System Default": clear the stored preference — the
+                    // editor falls back to the macOS system font.
+                    typography.setFontPreference(nil)
+                }
+            }
+        )
+    }
+
+    /// The family the PREVIEW renders with; the system font when unset.
+    private var previewFont: Font {
+        if let family = typography.fontPreference?.primaryFamily {
+            return .custom(family, size: 15, relativeTo: .body)
         }
-        typography.setFontPreference(preference)
-        saveNotice = nil
+        return .body
     }
 }
 

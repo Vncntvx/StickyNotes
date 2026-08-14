@@ -69,6 +69,16 @@ public final class LibraryModel {
     /// the library view consumes it to focus the native search field.
     public private(set) var searchFocusRequested = false
 
+    // MARK: - Empty Trash confirmation (003 T183, FR-014b/026 Rev 3)
+
+    /// An Empty Trash confirmation request — the shared in-window
+    /// confirmation mechanism for the trash-scope header "⋯" menu, the
+    /// card grid, and the app-menu command (FR-072). The view renders the
+    /// `InlineConfirmationBar` while true (FR-026: dialogs invert the
+    /// MenuBarExtra window relationship on macOS 27); the model performs
+    /// the batch after confirmation.
+    public private(set) var emptyTrashConfirmationRequested = false
+
     // MARK: - Sync attention banner (003 T026 shell → T056 complete)
 
     /// The sync attention banner state machine (FR-010 dismiss/re-present
@@ -237,6 +247,11 @@ public final class LibraryModel {
         scope = newScope
         searchQuery = ""
         keyboardSelection = nil
+        // Rev 3 (T183): a pending Empty Trash confirmation must never leak
+        // into the library scope.
+        if newScope != .trash {
+            emptyTrashConfirmationRequested = false
+        }
         Task { await reload() }
     }
 
@@ -262,6 +277,18 @@ public final class LibraryModel {
     /// Requests search focus (⌘F / searchAll / deep link, 003 T025).
     public func setSearchFocusRequested(_ requested: Bool) {
         searchFocusRequested = requested
+    }
+
+    /// Requests the Empty Trash confirmation (header "⋯" menu / app menu,
+    /// 003 T183) — the grid renders the in-window confirmation bar.
+    public func requestEmptyTrashConfirmation() {
+        emptyTrashConfirmationRequested = true
+    }
+
+    /// Consumes the Empty Trash confirmation (confirm or cancel — the
+    /// action itself is performed by `emptyTrash()` from the view).
+    public func acknowledgeEmptyTrashConfirmation() {
+        emptyTrashConfirmationRequested = false
     }
 
     // MARK: - Actions

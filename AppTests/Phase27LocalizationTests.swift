@@ -16,7 +16,10 @@ import Foundation
     private static let requiredKeys: [String] = [
         "Help", "Sticky Notes Help", "Menu-bar first", "Auto-save",
         "Keyboard shortcuts", "Markdown shortcuts", "Screenshots and files",
-        "Synchronization", "Not configured", "Up to Date", "Automatic sync",
+        "Synchronization", "Not configured", "Up to Date",
+        "Automatic Sync", "Sync changes automatically", "Periodic sync",
+        "Off", "Every 5 minutes", "Every 15 minutes", "Every 30 minutes",
+        "Every hour",
         "Keep sync unlocked on this Mac", "Sync Now", "Syncing…",
         "Moved to Trash", "Permanently Deleted", "Sync not configured",
         "Sync issue", "Retry", "Sync ready", "Add Todo", "Add Code Block",
@@ -32,9 +35,10 @@ import Foundation
         "Configure Synchronization", "Provider", "WebDAV", "S3-compatible",
         "Vault password", "Test Connection", "Join", "Set Up",
         "Set Up Sync…", "Join Existing Vault…", "Join Another Vault…",
-        "Set Up New Storage Location…", "Disconnect Sync…",
+        "Set Up New Storage Location…", "Disconnect Sync…", "Manage…",
         "Export Diagnostic Bundle…", "Export Sync Profile…",
         "Last synced", "Storage", "Sync vault is locked", "Unlock…",
+        "Unlock the vault to sync manually or resume automatic sync. Your notes on this Mac are still available.",
         "Screen Recording", "Not Granted", "Enable…",
         "Disconnect Sync?", "Disconnect",
         // Settings polish round 2 (2026-08-14)
@@ -43,11 +47,11 @@ import Foundation
         "S3-compatible storage", "WebDAV storage", "Recovery",
         "Keeps sync unlocked using Keychain until you restart or lock the vault.",
         "When enabled, changes sync automatically. Periodic syncing is optional.",
-        // Typography settings (Phase 5, 2026-08-14)
-        "Text Spacing", "Compact", "Default", "Relaxed", "Reset",
-        "Note Appearance",
-        "That font family was not found on this Mac. Your existing preference is unchanged.",
-        "Type a font family name — for example, Helvetica Neue. Empty means Default (the system font).",
+        // Typography settings (Phase 5 + Rev 3, 2026-08-14)
+        "Text Spacing", "Compact", "Default", "Relaxed",
+        "Note Appearance", "Note body font", "System Default",
+        // Trash ⋯ menu (003 T183, 2026-08-14)
+        "More trash actions",
     ]
 
     @Test

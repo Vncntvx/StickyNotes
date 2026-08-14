@@ -86,23 +86,6 @@
         }
       }
     },
-    "Reset": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reset"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "重置"
-          }
-        }
-      }
-    },
     "Text Spacing": {
       "extractionState": "manual",
       "localizations": {
@@ -116,40 +99,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "文本间距"
-          }
-        }
-      }
-    },
-    "That font family was not found on this Mac. Your existing preference is unchanged.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "That font family was not found on this Mac. Your existing preference is unchanged."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "在此 Mac 上找不到该字体族。你的现有偏好保持不变。"
-          }
-        }
-      }
-    },
-    "Type a font family name — for example, Helvetica Neue. Empty means Default (the system font).": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Type a font family name — for example, Helvetica Neue. Empty means Default (the system font)."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "输入字体族名称——例如 Helvetica Neue。留空表示默认（系统字体）。"
           }
         }
       }
@@ -2959,23 +2908,6 @@
         }
       }
     },
-    "Automatic sync": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Automatic sync"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "自动同步"
-          }
-        }
-      }
-    },
     "Remember unlocked vault on this Mac": {
       "extractionState": "manual",
       "localizations": {
@@ -5373,23 +5305,6 @@
         }
       }
     },
-    "Note font": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Note font"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "笔记字体"
-          }
-        }
-      }
-    },
     "The 30-day recoverability guarantee no longer applies.": {
       "extractionState": "manual",
       "localizations": {
@@ -5454,23 +5369,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "高级"
-          }
-        }
-      }
-    },
-    "Could not save the font preference. Your existing preference is unchanged.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Could not save the font preference. Your existing preference is unchanged."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "无法保存字体偏好。你的现有偏好保持不变。"
           }
         }
       }
@@ -5968,23 +5866,6 @@
         }
       }
     },
-    "Sync frequency": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sync frequency"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "同步频率"
-          }
-        }
-      }
-    },
     "Syncs automatically a few seconds after changes, and at the interval you choose.": {
       "extractionState": "manual",
       "localizations": {
@@ -6461,23 +6342,6 @@
         }
       }
     },
-    "Unlock to resume syncing. Your notes on this Mac are still available.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Unlock to resume syncing. Your notes on this Mac are still available."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "解锁以继续同步。这台 Mac 上的笔记仍然可用。"
-          }
-        }
-      }
-    },
     "When enabled, changes sync automatically a few seconds after editing. You can also choose a periodic interval.": {
       "extractionState": "manual",
       "localizations": {
@@ -6644,6 +6508,244 @@
           "stringUnit": {
             "state": "translated",
             "value": "恢复"
+          }
+        }
+      }
+    },
+    "Note body font": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Note body font"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正文字体"
+          }
+        }
+      }
+    },
+    "System Default": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System Default"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系统默认"
+          }
+        }
+      }
+    },
+    "Choose the font family for note body text. System Default uses the macOS system font; Chinese uses a matching system font automatically.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose the font family for note body text. System Default uses the macOS system font; Chinese uses a matching system font automatically."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择便签正文字体的字体族。系统默认使用 macOS 系统字体；中文会自动使用匹配的系统字体。"
+          }
+        }
+      }
+    },
+    "More trash actions": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More trash actions"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更多回收站操作"
+          }
+        }
+      }
+    },
+    "Automatic Sync": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatic Sync"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动同步"
+          }
+        }
+      }
+    },
+    "Sync changes automatically": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync changes automatically"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有更改时自动同步"
+          }
+        }
+      }
+    },
+    "Periodic sync": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Periodic sync"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "定期同步"
+          }
+        }
+      }
+    },
+    "Off": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Off"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭"
+          }
+        }
+      }
+    },
+    "Every 5 minutes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every 5 minutes"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每 5 分钟"
+          }
+        }
+      }
+    },
+    "Every 15 minutes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every 15 minutes"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每 15 分钟"
+          }
+        }
+      }
+    },
+    "Every 30 minutes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every 30 minutes"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每 30 分钟"
+          }
+        }
+      }
+    },
+    "Every hour": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every hour"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每小时"
+          }
+        }
+      }
+    },
+    "Unlock the vault to sync manually or resume automatic sync. Your notes on this Mac are still available.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlock the vault to sync manually or resume automatic sync. Your notes on this Mac are still available."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解锁保险库即可手动同步或恢复自动同步。你在此 Mac 上的笔记仍然可用。"
+          }
+        }
+      }
+    },
+    "Manage…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "管理…"
           }
         }
       }

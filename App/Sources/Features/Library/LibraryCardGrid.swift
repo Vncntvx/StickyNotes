@@ -23,11 +23,17 @@ public struct LibraryCardGrid: View {
     /// Trash beyond recovery). The confirmation lives in this view
     /// (FR-026); the model performs the action.
     let onPermanentlyDelete: (UUID) -> Void
+    /// FR-055 (Rev 3): the global typography observable — the card body
+    /// preview follows the user's body font family. Reading the observable
+    /// here registers observation: cards restyle live when the preference
+    /// changes (the card title stays the system headline).
+    let typography: TypographyPreferences?
 
     /// The note awaiting single permanent-delete confirmation (FR-026).
     @State private var pendingPermanentDelete: UUID?
-    /// The note awaiting Empty Trash confirmation (FR-014b).
-    @State private var confirmingEmptyTrash = false
+    /// The Empty Trash confirmation (FR-014b) is MODEL-driven
+    /// (`model.emptyTrashConfirmationRequested`) — requested by the header
+    /// "⋯" menu / app menu (003 T183), rendered here in-window.
 
     /// FR-021 (003 T021): deterministic column count (replaces the 001
     /// fixed 3/2/1-at-600/400 constants). Content width = window width.
@@ -45,13 +51,15 @@ public struct LibraryCardGrid: View {
         openNote: @escaping (UUID) -> Void,
         onTrash: @escaping (UUID) -> Void = { _ in },
         onRestore: @escaping (UUID) -> Void = { _ in },
-        onPermanentlyDelete: @escaping (UUID) -> Void = { _ in }
+        onPermanentlyDelete: @escaping (UUID) -> Void = { _ in },
+        typography: TypographyPreferences? = nil
     ) {
         self.model = model
         self.openNote = openNote
         self.onTrash = onTrash
         self.onRestore = onRestore
         self.onPermanentlyDelete = onPermanentlyDelete
+        self.typography = typography
     }
 
     public var body: some View {
@@ -104,32 +112,20 @@ public struct LibraryCardGrid: View {
                         }
                     }
 
-                    // Trash destination: Empty Trash control above the grid
-                    // (FR-014b, 003 T023) — visually subordinate to Notes
-                    // (SC-006). The confirm step replaces the button in
-                    // place (in-window, FR-026).
-                    if model.scope == .trash {
-                        if confirmingEmptyTrash {
-                            InlineConfirmationBar(
-                                message: DeletionConfirmationPolicy.confirmation(for: .emptyTrash)?.message ?? "",
-                                confirmTitle: "Empty Trash"
-                            ) {
-                                confirmingEmptyTrash = false
-                                Task { _ = await model.emptyTrash() }
-                            } onCancel: {
-                                confirmingEmptyTrash = false
-                            }
-                        } else {
-                            HStack {
-                                Spacer()
-                                Button("Empty Trash…") {
-                                    confirmingEmptyTrash = true
-                                }
-                                .controlSize(.small)
-                                .accessibilityLabel("Empty Trash")
-                            }
-                            .padding(.horizontal, NoteCardMetrics.spacing)
-                            .padding(.top, NoteCardMetrics.spacing)
+                    // FR-014b (003 T183 Rev 3): Empty Trash moved into the
+                    // header "⋯" menu — no standalone row above the grid, so
+                    // Notes and Trash grids start at the same y. The
+                    // in-window confirmation bar (FR-026, never a dialog in
+                    // this window) renders here on request.
+                    if model.scope == .trash, model.emptyTrashConfirmationRequested {
+                        InlineConfirmationBar(
+                            message: DeletionConfirmationPolicy.confirmation(for: .emptyTrash)?.message ?? "",
+                            confirmTitle: "Empty Trash"
+                        ) {
+                            model.acknowledgeEmptyTrashConfirmation()
+                            Task { _ = await model.emptyTrash() }
+                        } onCancel: {
+                            model.acknowledgeEmptyTrashConfirmation()
                         }
                     }
 
@@ -141,6 +137,7 @@ public struct LibraryCardGrid: View {
                             NoteCardView(
                                 card: card,
                                 isKeyboardSelected: model.keyboardSelection == card.noteId,
+                                previewFontFamily: typography?.fontPreference?.primaryFamily,
                                 action: {
                                     openNote(card.noteId)
                                 }
@@ -202,10 +199,10 @@ public struct LibraryCardGrid: View {
                     if pendingPermanentDelete != nil {
                         pendingPermanentDelete = nil
                     }
-                    if confirmingEmptyTrash {
-                        confirmingEmptyTrash = false
+                    if model.emptyTrashConfirmationRequested {
+                        model.acknowledgeEmptyTrashConfirmation()
                     }
-                    return pendingPermanentDelete == nil && !confirmingEmptyTrash
+                    return pendingPermanentDelete == nil && !model.emptyTrashConfirmationRequested
                         ? .ignored
                         : .handled
                 }

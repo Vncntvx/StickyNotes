@@ -75,15 +75,78 @@ public enum ShortcutRecorderPolicy {
 }
 
 public enum FontPreferenceUI {
-    /// FR-055: ONE user-facing "note font" concept.
+    /// FR-055 (Rev 3): ONE user-facing "note body font" concept.
     public static let singleNoteFontConcept = true
     /// FR-055: no implementation typography terms in the user surface.
     public static let usesImplementationTypographyTerms = false
     /// FR-055: the primary family gets a system fallback automatically.
     public static let systemFallbackProvided = true
-    /// FR-055: a meaningful bilingual preview sample.
-    public static let bilingualPreviewSample = "Aa 中文"
+    /// FR-055 (Rev 3): a meaningful bilingual MULTI-LINE preview sample —
+    /// text spacing only affects inter-line spacing, so a single-line
+    /// sample cannot preview it. Not localized: it is a fixed sample string
+    /// for both languages (Latin + CJK mixed rendering).
+    public static let bilingualPreviewSample = "The quick brown fox jumps over the lazy dog.\n这是便签正文的预览文本。\n第二行文字用于预览行间距效果。"
     public static let bilingualPreviewEnabled = true
+}
+
+// MARK: - NoteFontChoicePresentation (Rev 3, 2026-08-14)
+
+/// Pure presentation for the "Note body font" choice (FR-055/055a Rev 3):
+/// maps the stored `FontPreference?` to a menu selection over the system
+/// font-family list. `nil` = "System Default" (the macOS system font — the
+/// reset semantics unchanged, 001 FR-043 storage key untouched).
+public enum NoteFontChoicePresentation {
+    /// The first menu option — the unset state.
+    public static let systemDefaultTitle = String(localized: "System Default")
+
+    /// The full option list: "System Default" + the system families sorted
+    /// case-insensitively, with the STORED family appended (when the running
+    /// system no longer provides it) so the selection binding never dangles.
+    public static func options(families: [String], storedFamily: String?) -> [String] {
+        let sorted = families.sorted {
+            $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
+        }
+        var list = [systemDefaultTitle]
+        list.append(contentsOf: sorted)
+        if let storedFamily, !sorted.contains(storedFamily), storedFamily != systemDefaultTitle {
+            list.append(storedFamily)
+        }
+        return list
+    }
+
+    /// The picker selection for a stored preference (`nil` → System Default).
+    public static func selectedOption(for storedFamily: String?) -> String {
+        storedFamily ?? systemDefaultTitle
+    }
+
+    /// The stored family a selected option represents (`nil` for System
+    /// Default — clears the preference).
+    public static func family(from option: String) -> String? {
+        option == systemDefaultTitle ? nil : option
+    }
+}
+
+/// FR-055 (Rev 3): the card body preview follows the user's body font
+/// family; the card TITLE keeps the system headline (information hierarchy).
+public enum CardBodyFont {
+    /// The family the card body preview renders with; `nil` = system caption.
+    public static func previewFamily(for preference: FontPreference?) -> String? {
+        preference?.primaryFamily
+    }
+}
+
+// MARK: - SyncSchedulePresentation (003 T185, FR-053 Rev 3)
+
+/// The periodic-sync schedule presentation. Rev 3: the schedule is a
+/// device-local preference (001 FR-152 — never touches remote state), so a
+/// locked vault MUST NOT disable configuring it; only the automatic-sync
+/// master switch does (FR-053 Rev 3 "disable only what is truly
+/// non-executable").
+public enum SyncSchedulePresentation {
+    /// Whether the Periodic sync picker is enabled.
+    public static func periodicPickerEnabled(autoSyncEnabled: Bool, isVaultUnlocked: Bool) -> Bool {
+        autoSyncEnabled
+    }
 }
 
 // MARK: - SyncLocationPresentation (Settings polish round 2/3, 2026-08-14)

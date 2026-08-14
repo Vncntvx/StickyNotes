@@ -65,7 +65,10 @@ struct StickyNotesApp: App {
                         // Trash closes its open window immediately.
                         onCloseNoteWindows: { noteId in
                             coordinator?.closeAll(noteId: noteId)
-                        }
+                        },
+                        // FR-055 (Rev 3): card body previews follow the
+                        // user's body font (bootstrap's single instance).
+                        typography: environment.typography
                     )
                     .overlay(alignment: .top) {
                         if let toast = toastPresenter.currentToast {
