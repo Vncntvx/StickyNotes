@@ -69,6 +69,10 @@ public struct VaultBootstrap: Sendable, Equatable, Codable {
     public func canonicalJSON() throws -> Data {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
+        // R3.6 (remediation roadmap 2026-08-14): sortedKeys +
+        // withoutEscapingSlashes — the project-wide canonical-JSON
+        // definition (previously a bare encoder).
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         return try encoder.encode(self)
     }
 
@@ -103,7 +107,7 @@ public enum VaultBootstrapService {
         secretStore: any SecretStore,
         isTestFixture: Bool = false
     ) async throws -> VaultBootstrap {
-        let salt = KeyDerivation.generateSalt()
+        let salt = try KeyDerivation.generateSalt()
         // When isTestFixture is true, use fast Argon2id params (64 KiB) to
         // keep the test suite fast. The production-minimum guard is bypassed.
         // When false, use the OWASP-recommended params (64 MiB) and enforce
@@ -136,10 +140,15 @@ public enum VaultBootstrapService {
             wrappedMasterKey: VaultBootstrap.WrappedKey(nonce: masterNonce, sealed: masterSealed),
             keyConfirmation: VaultBootstrap.WrappedKey(nonce: confNonce, sealed: confSealed)
         )
-
-        // Store the master key in the local secret store (remembered unlock
-        // is the app's choice; the raw key never leaves here unencrypted).
-        try secretStore.save(masterKey.withUnsafeBytes { Data($0) }, forKey: vaultKeySecretKey(vaultId: bootstrap.vaultId))
+        // R1.3 (remediation roadmap 2026-08-14): previously this saved the
+        // raw master key under a dedicated Keychain item that NOTHING ever
+        // read and NOTHING ever deleted — dead key material permanently
+        // bypassing the password. The only legitimate persisted master key
+        // is the remembered-unlock item, written explicitly by
+        // `enableRememberUnlock` with its own lifecycle (deleted by
+        // `lockVault`/`disableRememberUnlock`). The wrapped master key
+        // above is the persistence contract: the password (KEK) protects
+        // the random master key.
         return bootstrap
     }
 
@@ -197,7 +206,7 @@ public enum VaultBootstrapService {
         )
 
         // Fresh salt + params for the new password.
-        let salt = KeyDerivation.generateSalt()
+        let salt = try KeyDerivation.generateSalt()
         var parameters = Argon2Parameters.recommended
         parameters.salt = salt
         let newKEK = try await KeyDerivation.deriveKEK(password: newPassword, parameters: parameters)
@@ -211,11 +220,6 @@ public enum VaultBootstrapService {
         let (confNonce, confSealed) = try ObjectCrypto.wrap(masterKeyBytes: confirmationMarker, kek: newKEK)
         updated.keyConfirmation = VaultBootstrap.WrappedKey(nonce: confNonce, sealed: confSealed)
         return updated
-    }
-
-    /// Stable Keychain key for a vault's remembered-unlock secret.
-    public static func vaultKeySecretKey(vaultId: UUID) -> String {
-        "vault-master-key-\(vaultId.uuidString)"
     }
 }
 

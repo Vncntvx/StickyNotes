@@ -13,9 +13,10 @@ import Foundation
 //   retained for sync-safety).
 // - Empty-note auto-discard (FR-018/FR-019): a note that NEVER had content
 //   is auto-discarded on close; a note that PREVIOUSLY had content is NOT
-//   auto-deleted when its text becomes empty. The auto-discard rule lives
-//   in NoteLifecycleTests.swift (NoteAutoDiscard); this file owns the
-//   lifecycle state machine + 30-day expiry.
+//   auto-deleted when its text becomes empty. The rule is `NoteAutoDiscard`
+//   in this file (R1.8, remediation roadmap 2026-08-14: it previously
+//   lived in NoteLifecycleTests.swift — production behavior that was
+//   tested but never shipped, while the App duplicated a partial copy).
 //
 // Constitution VIII: tombstones are retained until sync-safety allows purge
 // (not a hard wall-clock purge that could resurrect a note). Constitution X:
@@ -133,5 +134,77 @@ public enum TrashExpiry {
         trashedNotes
             .filter { NoteLifecycle.isEligibleForPurge(trashedAt: $0.trashedAt, now: now) }
             .map(\.id)
+    }
+}
+
+// MARK: - Empty-note auto-discard (FR-018 / FR-019 / FR-012a)
+//
+// R1.8 (remediation roadmap 2026-08-14): migrated from the test target
+// (NoteLifecycleTests.swift) where it was defined but never shipped. The
+// App previously duplicated a partial copy (NoteWindowHostModel.isMeaningful,
+// missing the FR-013 prior-version check) — it now delegates here.
+
+/// Encodes the empty-note auto-discard rule. "Meaningful content" per
+/// FR-012a = (a) at least one non-whitespace Unicode character in the title
+/// field, OR (b) at least one non-whitespace Unicode character in any
+/// rich-text block, OR (c) the presence of any
+/// todo/image/screenshot/code-block/file-reference block regardless of text
+/// length. A single character qualifies; whitespace-only does NOT qualify
+/// (spaces, tabs, newlines, U+3000 ideographic space, etc.). A note that
+/// PREVIOUSLY held meaningful content but is now emptied is NOT auto-deleted
+/// (FR-013).
+public enum NoteAutoDiscard {
+    /// Returns `true` if the note contains meaningful content per FR-012a.
+    /// A previously-content note (a block with a non-nil `parentVersionId`)
+    /// is also considered to have had content (FR-013: not auto-deleted
+    /// when emptied).
+    public static func hadContent(_ note: Note, blocks: [Block]) -> Bool {
+        // (a) title with a non-whitespace character.
+        if let title = note.title, containsNonWhitespace(title) {
+            return true
+        }
+        for block in blocks {
+            switch block.payload {
+            case .richText(let doc):
+                // (b) non-whitespace text in a rich-text block.
+                if containsNonWhitespace(doc.text) { return true }
+                // Previously had content (FR-013): a block with a parent
+                // version was non-empty in a prior version.
+                if block.parentVersionId != nil { return true }
+            case .todo(let todo):
+                // (c) a todo block counts as content regardless of text
+                // length (structural block). But also check its text.
+                if containsNonWhitespace(todo.richText.text) { return true }
+                if block.parentVersionId != nil { return true }
+                // An empty todo block with no prior version still counts as
+                // a structural block per FR-012a (c).
+                return true
+            case .code(let code):
+                // (c) a code block counts as content; also check its text.
+                if containsNonWhitespace(code.text) { return true }
+                if block.parentVersionId != nil { return true }
+                return true
+            // Non-text blocks (fileRef, image, screenshot) count as content.
+            case .fileReference, .image, .screenshot:
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Returns `true` if the note should be auto-discarded on window close.
+    /// Per FR-018/FR-019/FR-012a: only notes that NEVER had meaningful
+    /// content are auto-discarded.
+    public static func shouldAutoDiscard(_ note: Note, blocks: [Block]) -> Bool {
+        // Trashed/permanentlyDeleted/conflictCopy notes are never auto-discarded.
+        guard note.lifecycleState == .active else { return false }
+        return !hadContent(note, blocks: blocks)
+    }
+
+    /// Returns `true` if the string contains at least one non-whitespace
+    /// Unicode character. Whitespace includes spaces, tabs, newlines,
+    /// U+3000 ideographic space, and all Unicode "White_Space" characters.
+    private static func containsNonWhitespace(_ string: String) -> Bool {
+        !string.allSatisfy { $0.isWhitespace }
     }
 }

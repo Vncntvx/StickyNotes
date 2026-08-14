@@ -50,6 +50,10 @@ public struct SyncedAssetBlob: Sendable, Codable, Equatable {
     public func canonicalJSON() throws -> Data {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
+        // R3.6 (remediation roadmap 2026-08-14): sortedKeys +
+        // withoutEscapingSlashes — the project-wide canonical-JSON
+        // definition (previously a bare encoder).
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         return try encoder.encode(self)
     }
 

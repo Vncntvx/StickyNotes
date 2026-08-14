@@ -105,6 +105,54 @@ public actor AssetStore {
         }
     }
 
+    // MARK: - Launch recovery (R1.1, remediation roadmap 2026-08-14)
+
+    /// Placeholder content type for records recovered from disk: the
+    /// on-disk layout stores only the opaque filename (the asset id), so
+    /// `contentType` — a registration-time fact — is not recoverable
+    /// without the DB metadata rows (whose repository is not wired yet).
+    /// Byte reads, hashing, dedup safety, and verify-before-delete are
+    /// unaffected; callers that need the real type should map id →
+    /// metadata once the Persistence asset table is populated.
+    private static let recoveredContentType = "application/octet-stream"
+
+    /// Rebuilds the in-memory record tables from the store's own
+    /// directories (launch recovery). The opaque filename IS the asset id
+    /// (`importData` writes `<kind>/<id.uuidString>`), so id, kind (the
+    /// directory), content hash, and byte size are fully recoverable from
+    /// disk; unreadable files are skipped (a later `readData` then reports
+    /// `.notFound` — the same semantics as a missing file). Returns the
+    /// recovered records.
+    ///
+    /// MUST run before `cleanupOrphans`: with the record tables empty,
+    /// every file on disk looks like an orphan and would be deleted.
+    @discardableResult
+    public func restoreFromDisk() throws -> [StoredAsset] {
+        let fm = FileManager.default
+        var recovered: [StoredAsset] = []
+        for kind in [AssetKind.original, .thumbnail, .appIcon] {
+            let dir = directory(for: kind)
+            let names = (try? fm.contentsOfDirectory(atPath: dir.path)) ?? []
+            for name in names {
+                guard let id = UUID(uuidString: name) else { continue }
+                let url = dir.appendingPathComponent(name)
+                guard let data = try? Data(contentsOf: url) else { continue }
+                let record = StoredAsset(
+                    id: id,
+                    kind: kind,
+                    contentType: Self.recoveredContentType,
+                    contentHash: Self.sha256Hex(data),
+                    byteSize: data.count,
+                    filename: name
+                )
+                recovered.append(record)
+                recordsByID[id] = record
+                filenameByContentKey[Self.contentKey(kind: kind, contentType: record.contentType, hash: record.contentHash)] = record
+            }
+        }
+        return recovered
+    }
+
     // MARK: - Import
 
     /// Imports raw bytes atomically: temp-write + fsync + rename + hash
@@ -285,6 +333,13 @@ public actor AssetStore {
     /// record (crash leftovers). Registered assets are never touched.
     /// Returns the removed filenames.
     public func cleanupOrphans() async throws -> [String] {
+        // R1.2 (remediation roadmap 2026-08-14): refuse to run against an
+        // empty record table. An unrecovered store (a fresh instance over
+        // an existing directory — the relaunch shape) sees EVERY file as
+        // an orphan; deleting would wipe the user's asset library.
+        // `restoreFromDisk` must populate the tables before cleanup is
+        // safe.
+        guard !recordsByID.isEmpty else { return [] }
         let fm = FileManager.default
         var removed: [String] = []
         let knownFilenames = Set(recordsByID.values.map(\.filename))

@@ -114,7 +114,7 @@ public enum NoteWindowBridge {
     public static func focusExisting(noteId: UUID) -> Bool {
         guard let window = registeredWindow(for: noteId) else { return false }
         window.makeKeyAndOrderFront(nil)
-        NSApplication.shared.activate(ignoringOtherApps: true)
+        NSApplication.shared.activate()
         return true
     }
 

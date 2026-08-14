@@ -89,14 +89,9 @@ public final class SQLiteNoteRepository: NoteRepository, BlockRepository, Sendab
             bumped.lastModifiedDeviceId = modifyingDeviceId
             bumped.modifiedAt = Date()
             try self.updateNoteRow(db, note: bumped)
-            // Refresh FTS title in case the user changed it.
-            try self.upsertSearchRow(
-                db,
-                noteId: bumped.id,
-                title: bumped.title ?? "",
-                body: "", summary: "", todos: "", code: "",
-                fileNames: "", captions: "", ocr: ""
-            )
+            // Refresh FTS title in case the user changed it (R1.4: title
+            // column only — never clobber the body/todos/code columns).
+            try self.updateSearchTitle(db, noteId: bumped.id, title: bumped.title ?? "")
         }
     }
 
@@ -619,6 +614,21 @@ public final class SQLiteNoteRepository: NoteRepository, BlockRepository, Sendab
     }
 
     // MARK: - FTS content row maintenance
+
+    /// R1.4 (remediation roadmap 2026-08-14): refreshes ONLY the title
+    /// column of the FTS content row — a plain metadata `update()` must
+    /// never clobber the body/todos/code columns (the full upsert below
+    /// replaces every column, so the old "refresh title" call silently
+    /// wiped searchability unless a reindex immediately followed).
+    private func updateSearchTitle(_ db: Database, noteId: UUID, title: String) throws {
+        try db.execute(
+            sql: """
+                INSERT INTO note_fts_content (noteId, title) VALUES (?, ?)
+                ON CONFLICT(noteId) DO UPDATE SET title = excluded.title
+                """,
+            arguments: [noteId.uuidString, title]
+        )
+    }
 
     /// Writes (or replaces) the FTS content row for a note. Called within a
     /// write transaction so the FTS5 trigger fires atomically with the note

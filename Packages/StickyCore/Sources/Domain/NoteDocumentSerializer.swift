@@ -29,14 +29,12 @@ public enum NoteDocumentError: Error, Sendable, Equatable {
     case unsupportedSchemaVersion(Int)
     case corruptedEnvelope(String)     // sanitized reason; never content
     case invalidDocumentData
-    case fileReferencePayloadCorrupt   // bookmark bytes / paths must never export
 
     public var sanitizedCode: String {
         switch self {
         case .unsupportedSchemaVersion: return "noteExport.unsupportedSchemaVersion"
         case .corruptedEnvelope:        return "noteExport.corruptedEnvelope"
         case .invalidDocumentData:      return "noteExport.invalidDocumentData"
-        case .fileReferencePayloadCorrupt: return "noteExport.fileReferencePayloadCorrupt"
         }
     }
 }
@@ -72,22 +70,17 @@ public enum NoteDocumentSerializer {
     /// asset IDs with no local bytes — the App layer then shows them as
     /// unavailable and relinks or removes them).
     ///
-    /// Throws `NoteDocumentError.fileReferencePayloadCorrupt` if any
-    /// file-reference payload carries bookmark/path data (defense-in-depth;
-    /// the payload type physically cannot carry them — this is the audit
-    /// guard for FR-105).
+    /// R1.9 (remediation roadmap 2026-08-14): the previous `throws` guard
+    /// for `fileReferencePayloadCorrupt` was a no-op — `FileReferencePayload`
+    /// physically carries only generic metadata (displayName/contentType/
+    /// approximateSize/originDeviceId/addedAt/caption), so no bookmark/path
+    /// data can ever be exported. The error case and the fake audit loop
+    /// are removed; the signature now reflects reality.
     public static func exportDocument(
         note: Note,
         blocks: [Block],
         assetBytes: [UUID: Data] = [:]
-    ) throws -> CanonicalNote {
-        for block in blocks {
-            if case .fileReference = block.payload {
-                // FileReferencePayload only has generic metadata — nothing
-                // to strip. The check exists as a boundary guard.
-                continue
-            }
-        }
+    ) -> CanonicalNote {
         return CanonicalNote(note: note, blocks: blocks)
     }
 

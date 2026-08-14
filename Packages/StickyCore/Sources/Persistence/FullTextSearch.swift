@@ -54,19 +54,13 @@ public struct FullTextSearch: Sendable {
         // to a plain `SELECT` for "show all" before the user types).
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
-
-        // Build a MATCH pattern that requires all tokens (AND semantics).
-        // FTS5 patterns support prefix matching with `*` suffixes for
-        // type-ahead. We keep it simple: each token is matched as a prefix.
-        let tokens = trimmed.split(whereSeparator: { $0.isWhitespace })
-        let pattern: String = tokens
-            .map { token in
-                // Escape FTS5 special characters by quoting the token; add
-                // `*` for prefix matching.
-                let escaped = String(token).replacingOccurrences(of: "\"", with: "\"\"")
-                return "\"\(escaped)\"*"
-            }
-            .joined(separator: " ")
+        // R3.5 (remediation roadmap 2026-08-14): GRDB's FTS5Pattern owns
+        // the quoting/prefix construction (all-tokens AND semantics with
+        // `*` type-ahead prefixes) — the hand-built MATCH pattern above
+        // re-implemented it without NEAR/phrase/tokenizer edge handling.
+        guard let pattern = FTS5Pattern(matchingAllPrefixesIn: trimmed) else {
+            return []
+        }
 
         return try await dbPool.read { db in
             // Build SQL with string concatenation to avoid GRDB's SQL
