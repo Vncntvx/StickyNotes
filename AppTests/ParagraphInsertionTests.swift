@@ -144,14 +144,8 @@ import SystemBridge
         try? FileManager.default.createDirectory(at: assetRoot, withIntermediateDirectories: true)
         let assetStore = try AssetStore(directoryURL: assetRoot)
         let env = AppEnvironment(
-            domain: DomainServices(),
             persistence: PersistenceServices(store: store),
-            editor: EditorServices(),
             assets: AssetServices(directoryURL: assetRoot, store: assetStore),
-            security: SecurityServices(),
-            sync: SyncServices(),
-            systemBridge: SystemBridgeServices(),
-            localPreferences: LocalPreferences(defaults: UserDefaults(suiteName: "test.paragraph.\(UUID().uuidString)") ?? .standard)
         )
         let model = LibraryModel(environment: env)
         guard let noteId = await model.createBlankNote() else {

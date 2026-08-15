@@ -31,16 +31,8 @@ import AppKit
         let store = try DatabaseStore.inMemory()
         try InitialSchema.migrator().migrate(store.dbPool)
         return AppEnvironment(
-            domain: DomainServices(),
             persistence: PersistenceServices(store: store),
-            editor: EditorServices(),
             assets: AssetServices(),
-            security: SecurityServices(),
-            sync: SyncServices(),
-            systemBridge: SystemBridgeServices(),
-            localPreferences: LocalPreferences(
-                defaults: UserDefaults(suiteName: "test.\(UUID().uuidString)") ?? .standard
-            )
         )
     }
 

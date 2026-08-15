@@ -25,16 +25,8 @@ import SecurityCore
             deviceId: UUID()
         )
         let env = AppEnvironment(
-            domain: DomainServices(),
             persistence: PersistenceServices(store: store),
-            editor: EditorServices(),
             assets: AssetServices(),
-            security: SecurityServices(),
-            sync: SyncServices(),
-            systemBridge: SystemBridgeServices(),
-            localPreferences: LocalPreferences(
-                defaults: UserDefaults(suiteName: "test.banner.\(UUID().uuidString)") ?? .standard
-            ),
             syncCoordinator: coordinator
         )
         return (env, coordinator)

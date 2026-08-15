@@ -28,14 +28,8 @@ import SystemBridge
         try? FileManager.default.createDirectory(at: assetRoot, withIntermediateDirectories: true)
         let assetStore = try AssetStore(directoryURL: assetRoot)
         let env = AppEnvironment(
-            domain: DomainServices(),
             persistence: PersistenceServices(store: store),
-            editor: EditorServices(),
             assets: AssetServices(directoryURL: assetRoot, store: assetStore),
-            security: SecurityServices(),
-            sync: SyncServices(),
-            systemBridge: SystemBridgeServices(),
-            localPreferences: LocalPreferences(defaults: UserDefaults(suiteName: "test.emptyexit.\(UUID().uuidString)") ?? .standard)
         )
         return (env, assetRoot)
     }

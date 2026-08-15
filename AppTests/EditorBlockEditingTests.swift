@@ -27,14 +27,8 @@ import AssetStore
             assetStore = try AssetStore(directoryURL: assetRoot)
         }
         return AppEnvironment(
-            domain: DomainServices(),
             persistence: PersistenceServices(store: store),
-            editor: EditorServices(),
             assets: AssetServices(directoryURL: assetRoot, store: assetStore),
-            security: SecurityServices(),
-            sync: SyncServices(),
-            systemBridge: SystemBridgeServices(),
-            localPreferences: LocalPreferences(defaults: UserDefaults(suiteName: "test.blocks.\(UUID().uuidString)") ?? .standard)
         )
     }
 

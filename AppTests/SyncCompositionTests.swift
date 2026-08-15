@@ -248,14 +248,8 @@ class InMemorySyncProvider: SyncProviderProtocol, @unchecked Sendable {
         let (coordinator, store, _) = try makeCoordinator(provider: provider)
         await coordinator.load()
         let env = AppEnvironment(
-            domain: DomainServices(),
             persistence: PersistenceServices(store: store),
-            editor: EditorServices(),
             assets: AssetServices(),
-            security: SecurityServices(),
-            sync: SyncServices(),
-            systemBridge: SystemBridgeServices(),
-            localPreferences: LocalPreferences(defaults: UserDefaults(suiteName: "test.sync.\(UUID().uuidString)") ?? .standard),
             syncCoordinator: coordinator
         )
         let model = LibraryModel(environment: env)

@@ -27,17 +27,8 @@ import SystemBridge
 /// that (R3.8, remediation roadmap 2026-08-14: the "foundation bring-up"
 /// framing was stale — Phases 2/3 landed).
 public struct AppEnvironment: Sendable {
-    public let domain: DomainServices
     public let persistence: PersistenceServices
-    public let editor: EditorServices
     public let assets: AssetServices
-    public let security: SecurityServices
-    public let sync: SyncServices
-    public let systemBridge: SystemBridgeServices
-    /// Device-local first-launch preferences (FR-014a, T207). Stored in App
-    /// Group UserDefaults; never synchronized, never in canonical JSON, never
-    /// in exported diagnostics.
-    public let localPreferences: LocalPreferences
     /// The sync composition root (T284/T285): vault configuration store +
     /// SyncEngine wiring + status. Nil before bootstrap. Main-actor-isolated
     /// (Sendable by global-actor isolation).
@@ -50,25 +41,13 @@ public struct AppEnvironment: Sendable {
     public let typography: TypographyPreferences
 
     public init(
-        domain: DomainServices,
         persistence: PersistenceServices,
-        editor: EditorServices,
         assets: AssetServices,
-        security: SecurityServices,
-        sync: SyncServices,
-        systemBridge: SystemBridgeServices,
-        localPreferences: LocalPreferences,
         syncCoordinator: SyncCoordinator? = nil,
         typography: TypographyPreferences = TypographyPreferences()
     ) {
-        self.domain = domain
         self.persistence = persistence
-        self.editor = editor
         self.assets = assets
-        self.security = security
-        self.sync = sync
-        self.systemBridge = systemBridge
-        self.localPreferences = localPreferences
         self.syncCoordinator = syncCoordinator
         self.typography = typography
     }
@@ -76,14 +55,8 @@ public struct AppEnvironment: Sendable {
     /// Placeholder used during foundation bring-up. Real composition
     /// replaces this once the foundational services exist.
     public static let placeholder = AppEnvironment(
-        domain: DomainServices.placeholder,
         persistence: PersistenceServices.placeholder,
-        editor: EditorServices.placeholder,
-        assets: AssetServices.placeholder,
-        security: SecurityServices.placeholder,
-        sync: SyncServices.placeholder,
-        systemBridge: SystemBridgeServices.placeholder,
-        localPreferences: LocalPreferences()
+        assets: AssetServices.placeholder
     )
 
     /// Bootstraps the database and composes the environment (T154).
@@ -142,14 +115,8 @@ public struct AppEnvironment: Sendable {
         await syncCoordinator.load()
 
         return AppEnvironment(
-            domain: DomainServices(),
             persistence: PersistenceServices(store: store),
-            editor: EditorServices(),
             assets: AssetServices(directoryURL: assetDirectory, store: assetStore),
-            security: SecurityServices(),
-            sync: SyncServices(),
-            systemBridge: SystemBridgeServices(),
-            localPreferences: LocalPreferences(),
             syncCoordinator: syncCoordinator,
             typography: TypographyPreferences.load()
         )
@@ -161,11 +128,10 @@ public struct AppEnvironment: Sendable {
 // Each grouping is a thin Sendable value that carries references to the
 // concrete services from the StickyCore modules. Concrete service types
 // land per tasks.md Phase 2 (foundational) and per-user-story phases.
-
-public struct DomainServices: Sendable {
-    public init() {}
-    public static let placeholder = DomainServices()
-}
+// R3.1 (remediation roadmap 2026-08-15): the five empty groupings
+// (DomainServices/EditorServices/SecurityServices/SyncServices/
+// SystemBridgeServices) were deleted — they held no services and were
+// never dereferenced (D-2/D-3). Only groupings with real slots remain.
 
 public struct PersistenceServices: Sendable {
     /// The open database store (nil until the app has bootstrapped).
@@ -191,17 +157,6 @@ public struct PersistenceServices: Sendable {
     public var todoRepository: (any TodoRepository)? {
         guard let store else { return nil }
         return SQLiteTodoRepository(store: store)
-    }
-
-    /// The tombstone repository (nil before bootstrap).
-    public var tombstoneRepository: (any TombstoneRepositoryProtocol)? {
-        guard let store else { return nil }
-        return SQLiteTombstoneRepository(store: store)
-    }
-
-    /// Card projections (lazy card-grid loading, T134/T172).
-    public var cardProjection: CardProjection.Type? {
-        store != nil ? CardProjection.self : nil
     }
 
     /// FTS-backed search (T042/T283): matches titles, body, todos, code,
@@ -263,11 +218,6 @@ public struct PersistenceServices: Sendable {
     }
 }
 
-public struct EditorServices: Sendable {
-    public init() {}
-    public static let placeholder = EditorServices()
-}
-
 public struct AssetServices: Sendable {
     /// The asset byte store root (nil until composed with a container URL).
     public let directoryURL: URL?
@@ -282,19 +232,4 @@ public struct AssetServices: Sendable {
     }
 
     public static let placeholder = AssetServices()
-}
-
-public struct SecurityServices: Sendable {
-    public init() {}
-    public static let placeholder = SecurityServices()
-}
-
-public struct SyncServices: Sendable {
-    public init() {}
-    public static let placeholder = SyncServices()
-}
-
-public struct SystemBridgeServices: Sendable {
-    public init() {}
-    public static let placeholder = SystemBridgeServices()
 }
