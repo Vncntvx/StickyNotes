@@ -189,10 +189,10 @@ public enum DiagnosticBundleGenerator {
     }
 
     /// Encodes the bundle to canonical JSON (stable keys, ISO 8601 UTC).
+    /// R3.3 (remediation roadmap 2026-08-15): converged on
+    /// Domain.CanonicalJSONEncoder — the single project-wide canonical
+    /// boundary (dates ISO 8601 UTC with millisecond precision + `Z`).
     public static func encode(_ bundle: DiagnosticBundle) throws -> Data {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-        encoder.dateEncodingStrategy = .iso8601
-        return try encoder.encode(bundle)
+        try CanonicalJSONEncoder().encode(bundle)
     }
 }

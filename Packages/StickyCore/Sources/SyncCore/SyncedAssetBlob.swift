@@ -48,17 +48,14 @@ public struct SyncedAssetBlob: Sendable, Codable, Equatable {
     }
 
     public func canonicalJSON() throws -> Data {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        // R3.6 (remediation roadmap 2026-08-14): sortedKeys +
-        // withoutEscapingSlashes — the project-wide canonical-JSON
-        // definition (previously a bare encoder).
-        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-        return try encoder.encode(self)
+        // R3.3 (remediation roadmap 2026-08-15): converged on
+        // Domain.CanonicalJSONEncoder (single project-wide canonical
+        // boundary — dates ISO 8601 UTC with `Z`).
+        try CanonicalJSONEncoder().encode(self)
     }
 
     public static func fromCanonicalJSON(_ data: Data) throws -> SyncedAssetBlob {
-        let decoder = JSONDecoder()
+        let decoder = CanonicalJSONDecoder()
         guard let decoded = try? decoder.decode(SyncedAssetBlob.self, from: data) else {
             throw StickyError.remoteCorruption(.invalidEnvelope)
         }

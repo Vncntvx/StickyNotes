@@ -28,17 +28,15 @@ public struct EncryptedEnvelope: Sendable, Equatable, Codable {
     }
 
     public func canonicalJSON() throws -> Data {
-        // R3.6 (remediation roadmap 2026-08-14): sortedKeys +
-        // withoutEscapingSlashes — the project-wide canonical-JSON
-        // definition (previously a bare encoder, i.e. a different
-        // "canonical" than every other envelope in the app).
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-        return try encoder.encode(self)
+        // R3.3 (remediation roadmap 2026-08-15): the project-wide canonical
+        // boundary is Domain.CanonicalJSONEncoder (sortedKeys +
+        // withoutEscapingSlashes + ISO 8601 UTC with `Z`); this type's
+        // encoder converged on it (previously a second hand-rolled encoder).
+        try CanonicalJSONEncoder().encode(self)
     }
 
     public static func fromCanonicalJSON(_ data: Data) throws -> EncryptedEnvelope {
-        let decoder = JSONDecoder()
+        let decoder = CanonicalJSONDecoder()
         guard let decoded = try? decoder.decode(EncryptedEnvelope.self, from: data) else {
             throw StickyError.remoteCorruption(.invalidEnvelope)
         }

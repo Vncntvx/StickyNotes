@@ -67,18 +67,16 @@ public struct VaultBootstrap: Sendable, Equatable, Codable {
 
     /// Canonical JSON encoding (stable keys, explicit schemaVersion).
     public func canonicalJSON() throws -> Data {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        // R3.6 (remediation roadmap 2026-08-14): sortedKeys +
-        // withoutEscapingSlashes — the project-wide canonical-JSON
-        // definition (previously a bare encoder).
-        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-        return try encoder.encode(self)
+        // R3.3 (remediation roadmap 2026-08-15): converged on
+        // Domain.CanonicalJSONEncoder — canonical dates are ISO 8601 UTC
+        // with millisecond precision + `Z` (the previous .iso8601 strategy
+        // dropped fractional seconds, producing different bytes than every
+        // other canonical boundary).
+        try CanonicalJSONEncoder().encode(self)
     }
 
     public static func fromCanonicalJSON(_ data: Data) throws -> VaultBootstrap {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        let decoder = CanonicalJSONDecoder()
         guard let decoded = try? decoder.decode(VaultBootstrap.self, from: data) else {
             throw StickyError.encryption(.corruptBootstrap)
         }
