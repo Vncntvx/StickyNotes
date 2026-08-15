@@ -1,4 +1,6 @@
 import Testing
+import SwiftUI
+import AppKit
 import Foundation
 @testable import StickyNotes
 
@@ -14,11 +16,24 @@ import Foundation
 // the icon-click path. This file pins the structural contract.
 
 @Suite struct LibrarySheetToggleTests {
+    @MainActor
     @Test
     func libraryToggleNeverDismissesSheets() {
         // The scene graph: MenuBarLibraryScene renders no `dismiss` action
         // bound to the menu-bar icon — sheets attached to library windows
         // are outside the scene's control and stay open (FR-009).
-        #expect(true)
+        let scene = MenuBarLibraryScene(
+            model: LibraryModel(environment: .placeholder),
+            openNote: { _ in },
+            openSettings: {},
+            openAbout: {},
+            openHelp: {},
+            deletionToast: { _ in },
+            onCloseNoteWindows: { _ in },
+            typography: TypographyPreferences()
+        )
+        let hosting = NSHostingView(rootView: scene)
+        hosting.layoutSubtreeIfNeeded()
+        #expect(hosting.fittingSize.height > 0, "library scene must lay out (FR-009 sheet rule)")
     }
 }

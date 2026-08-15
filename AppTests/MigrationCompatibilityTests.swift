@@ -156,8 +156,8 @@ import AssetStore
         let configStore = SQLiteVaultConfigurationStore(store: store)
         #expect(try await configStore.fetchConfiguration() == nil, "no config yet")
         // The store type still exists and loads/saves with the 001 schema —
-        // the redesign changed nothing in this layer (contracts/ README).
-        #expect(true)
+        // the redesign changed nothing in this layer (contracts/ README);
+        // the nil-fetch assertion above IS the contract pin.
     }
 
     // MARK: - 003 T070: font preference survives (FR-090)

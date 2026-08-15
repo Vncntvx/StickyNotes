@@ -60,8 +60,9 @@ import SystemBridge
             // Drain the runloop so AppKit's close processing + autorelease
             // pools flush — this is where the 2026-08-07 crash surfaced.
             try await Task.sleep(for: .milliseconds(50))
+            #expect(window?.isVisible == false || window?.windowNumber == 0,
+                    "window must be closed after the drain (iteration \(i))")
         }
-        #expect(true)
     }
 
     @Test
@@ -80,7 +81,8 @@ import SystemBridge
         try await Task.sleep(for: .milliseconds(100))
         coordinator.releaseWindowDelegate(noteId: note.id)
         NoteWindowBridge.unregister(noteId: note.id)
-        #expect(true)
+        #expect(window?.isVisible == false || window?.windowNumber == 0,
+                "window must be closed after release (did not double-release)")
     }
 
     // MARK: - T003 pre-redesign snapshots (003-macos27-liquid-glass-redesign)

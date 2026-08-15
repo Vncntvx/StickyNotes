@@ -75,7 +75,7 @@ import SystemBridge
         // The remembered frame is applied (restoreFrame runs async; poll).
         var matched = false
         for _ in 0..<50 {
-            try? await Task.sleep(nanoseconds: 50_000_000)
+            try? await Task.sleep(for: .milliseconds(50))
             if let window {
                 let frame = window.frame
                 if abs(frame.origin.x - 60) < 1, abs(frame.width - 360) < 1 {

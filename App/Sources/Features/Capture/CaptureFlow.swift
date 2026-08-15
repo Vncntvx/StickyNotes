@@ -64,7 +64,7 @@ public enum CaptureFlow {
             // The observer releases itself after the first callback; a hard
             // timeout keeps the caller from hanging if the picker stalls.
             Task {
-                try? await Task.sleep(nanoseconds: 300_000_000_000) // 5 min
+                try? await Task.sleep(for: .seconds(300)) // 5 min
                 observer.timeoutIfPending()
             }
         }

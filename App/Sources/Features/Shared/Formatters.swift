@@ -43,10 +43,14 @@ public enum DisplayFormatters {
     /// Absolute date ("Aug 1"; year included when in a previous calendar
     /// year per FR-020a).
     public static func absoluteDate(_ date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
-        let formatter = DateFormatter()
+        // R3.8: Date.FormatStyle replaces the per-call DateFormatter; the
+        // abbreviated month + day (year when in a previous calendar year)
+        // matches the previous "MMM d" / "MMM d, yyyy" output per-locale.
         let isPreviousYear = calendar.component(.year, from: date) < calendar.component(.year, from: now)
-        formatter.dateFormat = isPreviousYear ? "MMM d, yyyy" : "MMM d"
-        return formatter.string(from: date)
+        if isPreviousYear {
+            return date.formatted(.dateTime.month(.abbreviated).day().year())
+        }
+        return date.formatted(.dateTime.month(.abbreviated).day())
     }
 
     /// Locale-aware file size ("248 KB", "1.2 MB").

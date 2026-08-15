@@ -162,7 +162,7 @@ import Domain
             hosting.displayIfNeeded()
             last = deviation(hosting: hosting, todoEditor: todoEditor, typography: typography)
             if last < 1 { break }
-            try? await Task.sleep(nanoseconds: 20_000_000)
+            try? await Task.sleep(for: .milliseconds(20))
         }
         return last
     }
@@ -222,7 +222,7 @@ import Domain
             ))
             row.hosting.layoutSubtreeIfNeeded()
             row.hosting.displayIfNeeded()
-            try? await Task.sleep(nanoseconds: 30_000_000)
+            try? await Task.sleep(for: .milliseconds(30))
         }
         let editor = todoEditor(row.hosting, text: text)
         let last = await pollConvergence(row.hosting, todoEditor: editor, typography: typography(.standard))

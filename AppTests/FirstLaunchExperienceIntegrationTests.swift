@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 import Domain
+import SystemBridge
 @testable import StickyNotes
 
 // MARK: - First-launch experience integration tests (T204, FR-014a)
@@ -18,6 +19,11 @@ import Domain
         // T210: PermissionService.screenRecordingStatus() uses
         // CGPreflightScreenCaptureAccess (no prompt) and accessibilityStatus()
         // uses AXIsProcessTrusted (no prompt). Neither can fire a TCC prompt.
-        #expect(true)
+        // Call both probes — a prompt-firing implementation would hang or
+        // change TCC state; the preflight APIs return immediately.
+        let screen = PermissionService.screenRecordingStatus()
+        let accessibility = PermissionService.accessibilityStatus()
+        #expect(screen == .granted || screen == .notDetermined)
+        #expect(accessibility == .granted || accessibility == .notDetermined)
     }
 }

@@ -534,7 +534,7 @@ import SystemBridge
             codeFrame = frameInHosting(codeEditor, hosting)
             frameDelta = abs(todoFrame.height - todoNarrow.intrinsicContentSize.height)
             if frameDelta < 3 { break }
-            try await Task.sleep(nanoseconds: 20_000_000)
+            try await Task.sleep(for: .milliseconds(20))
         }
         #expect(frameDelta < 3,
                 "SwiftUI must apply the reflowed height to the todo editor frame (Δ\(frameDelta))")
@@ -699,7 +699,7 @@ import SystemBridge
                     converged = true
                     break
                 }
-                try await Task.sleep(nanoseconds: 20_000_000)
+                try await Task.sleep(for: .milliseconds(20))
             }
 
             #expect(converged,

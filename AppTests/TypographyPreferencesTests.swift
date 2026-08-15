@@ -116,7 +116,7 @@ import Domain
         // onChange fires at the end of the transaction — give the runloop
         // a bounded window.
         for _ in 0..<50 where !(textSpacingObserved.value && fontObserved.value) {
-            try await Task.sleep(nanoseconds: 10_000_000)
+            try await Task.sleep(for: .milliseconds(10))
         }
         defer {
             TextSpacingPreferenceStore.clear()

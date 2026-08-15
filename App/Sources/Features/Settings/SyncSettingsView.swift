@@ -503,7 +503,7 @@ public struct SyncSettingsView: View {
         vaultIDCopiedTask?.cancel()
         vaultIDCopied = true
         vaultIDCopiedTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            try? await Task.sleep(for: .seconds(2))
             guard !Task.isCancelled else { return }
             vaultIDCopied = false
         }
@@ -560,7 +560,7 @@ public struct SyncSettingsView: View {
         }
         AccessibilityAnnouncements.announce(message)
         transientTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            try? await Task.sleep(for: .seconds(5))
             guard !Task.isCancelled else { return }
             statusMessage = nil
             errorMessage = nil
@@ -595,9 +595,13 @@ public struct SyncSettingsView: View {
     }
 
     private static func profileFileName() -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyyMMdd-HHmmss"
-        return "stickynotes-sync-profile-\(formatter.string(from: Date())).json"
+        // R3.8: Date.FormatStyle verbatim (fixed pattern, en_US_POSIX) —
+        // replaces a per-call DateFormatter.
+        let stamp = Date().formatted(
+            .verbatim("yyyyMMdd-HHmmss", locale: Locale(identifier: "en_US_POSIX"),
+                      timeZone: .current, calendar: .current)
+        )
+        return "stickynotes-sync-profile-\(stamp).json"
     }
 
     /// T016 (FR-009/US2/AC1): writes a schema-v2 sync profile (protocol,
@@ -664,9 +668,11 @@ public struct SyncSettingsView: View {
         }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        panel.nameFieldStringValue = "stickynotes-diagnostics-\(formatter.string(from: Date())).json"
+        let stamp = Date().formatted(
+            .verbatim("yyyy-MM-dd", locale: Locale(identifier: "en_US_POSIX"),
+                      timeZone: .current, calendar: .current)
+        )
+        panel.nameFieldStringValue = "stickynotes-diagnostics-\(stamp).json"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             try data.write(to: url, options: .atomic)

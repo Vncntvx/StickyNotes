@@ -61,6 +61,9 @@ public enum PermissionService {
     /// the user invokes the feature (FR-131).
     @MainActor
     public static func requestScreenRecording() -> Bool {
+        // R3.9 Spike (ADR 2026-08-15): CGRequestScreenCaptureAccess is NOT
+        // deprecated on the macOS 27 SDK — it remains the authoritative
+        // request entry; CGPreflight* is the read-only (no-prompt) check.
         CGRequestScreenCaptureAccess()
     }
 

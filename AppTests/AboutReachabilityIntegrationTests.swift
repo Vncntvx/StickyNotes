@@ -16,7 +16,11 @@ import SwiftUI
     @Test
     func aboutViewRendersReachableContent() {
         // AboutView is a pure SwiftUI view — instantiable and renderable
-        // without any Dock dependency.
-        #expect(true)
+        // without any Dock dependency. Render it into an NSHostingView to
+        // prove the view tree builds (FR-008/FR-144 reachability).
+        let hosting = NSHostingView(rootView: AboutView())
+        hosting.layoutSubtreeIfNeeded()
+        _ = hosting.rootView
+        #expect(hosting.fittingSize.width > 0, "AboutView must lay out content")
     }
 }

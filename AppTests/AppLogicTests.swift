@@ -107,16 +107,22 @@ import Persistence
 
     // MARK: - FR-141b async-feedback split policy (T266)
 
+    @MainActor
     @Test
-    func backgroundOpsAreSilentUserInitiatedOpsShowStatus() {
+    func backgroundOpsAreSilentUserInitiatedOpsShowStatus() throws {
         // The policy is structural: background ops (autosave, search,
         // thumbnail) must not expose progress UI — the model surfaces a
         // status message ONLY for failures, and manual user actions
         // (capture/sync/export) use explicit non-blocking status. Assert
         // the library model never sets a progress indicator.
-        // (Verified by construction; the sync attention banner (003 FR-010)
-        // supersedes the removed SyncStatusView footer (003 T081).)
-        #expect(true)
+        let store = try DatabaseStore.inMemory()
+        try InitialSchema.migrator().migrate(store.dbPool)
+        let model = LibraryModel(environment: AppEnvironment(
+            persistence: PersistenceServices(store: store),
+            assets: AssetServices()
+        ))
+        #expect(!model.isLoading, "no progress indicator state (FR-141b)")
+        #expect(model.statusMessage == nil, "no status message without an error")
     }
 
     // MARK: - SC-009 P1 independence gate (T135a)
@@ -158,8 +164,10 @@ import Persistence
 
         // Sync status area shows "not configured" (never an error) — the
         // sync attention banner (003 FR-010) supersedes the removed
-        // SyncStatusView footer (003 T081).
-        #expect(true)
+        // SyncStatusView footer (003 T081). `env`/`model` above carry no
+        // sync coordinator — assert the not-configured surface directly.
+        #expect(env.syncCoordinator == nil, "no coordinator -> banner shows not-configured, never an error")
+        #expect(model.syncCoordinator == nil)
     }
 
     // MARK: - 003 T039 (FR-050/FR-051/SC-011; Rev 2 T175): Settings navigation

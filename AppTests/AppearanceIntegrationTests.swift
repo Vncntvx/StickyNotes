@@ -51,35 +51,22 @@ import Domain
 
         let custom = Note(colorKey: .custom, customColor: "#808080", lastModifiedDeviceId: Self.deviceId)
         // Mid-gray is borderline; the flag is computed from the Domain
-        // projection regardless of the outcome.
-        _ = ReadableTheme.customColorFailsContrast(custom)
-        #expect(true)
+        // projection regardless of the outcome — it must be a DECIDED
+        // Bool (never a crash), and the foreground must still render.
+        let fails = ReadableTheme.customColorFailsContrast(custom)
+        // Decided Bool (never a crash) — mid-gray may or may not fail, but
+        // the projection must produce a stable decision twice.
+        #expect(fails == ReadableTheme.customColorFailsContrast(custom))
+        let customFg = ReadableTheme.foreground(for: custom)
+        #expect(customFg != Color.clear)
     }
 
     // MARK: - 003 T030 (FR-045/FR-044)
-
-    @Test
-    func inactiveWindowDropsAccentRetention() {
-        // FR-045: an inactive note window must NOT retain accent emphasis
-        // on controls, emphasis, or floating controls — macOS-expected
-        // inactive appearance. The presentation model drives the controls;
-        // it must reduce emphasis when inactive.
-        #expect(NoteControlsPresentation.showsAccentWhenInactive == false,
-                "no inappropriate accent retention on inactive controls (FR-045)")
-    }
-
-    @Test
-    func floatingControlsHideWhenInactiveOrPointerLeaves() {
-        // FR-044/FR-061: floating controls hide when the window is
-        // inactive or the pointer leaves; never permanently obscure
-        // content.
-        #expect(NoteControlsPresentation.floatingControlsHideWhenInactive == true)
-        #expect(NoteControlsPresentation.floatingControlsHideOnPointerLeave == true)
-    }
-
-    @Test
-    func customControlsUseSFSymbolsOnly() {
-        // FR-064: icons are SF Symbols, never custom bitmaps.
-        #expect(NoteControlsPresentation.usesSFSymbolsOnly == true)
-    }
+    //
+    // R3.10 (T-3): the previous `NoteControlsPresentation` constant table
+    // was self-proving (declared true, asserted true, zero consumers) and
+    // was deleted. The FR-045/FR-044 behavior itself is pinned by the real
+    // rendering-path suites: NoteWindowLifecycleTests (key-window
+    // deactivation clears editor focus) and NoteToolbarStateTests
+    // (toolbar visibility states).
 }

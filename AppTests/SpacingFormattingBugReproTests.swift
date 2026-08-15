@@ -317,7 +317,7 @@ import Persistence
         for _ in 0..<100 {
             registered = EditorSelectionContext.bridges[noteId]
             if registered != nil { break }
-            try await Task.sleep(nanoseconds: 20_000_000)
+            try await Task.sleep(for: .milliseconds(20))
         }
         guard let liveBridge = registered else { throw BridgeError.notWired }
 
@@ -333,7 +333,7 @@ import Persistence
         (editor.delegate as? RichTextView.Coordinator)?.republishSelection()
         for _ in 0..<20 {
             if liveBridge.textView === editor { return liveBridge }
-            try await Task.sleep(nanoseconds: 20_000_000)
+            try await Task.sleep(for: .milliseconds(20))
         }
         // Test-host fallback: the app cannot reliably activate, so the
         // focus publish never carries hasFocus — wire the bridge directly.
@@ -390,7 +390,7 @@ import Persistence
         // Wait for the commit → host.updateBlocks → SwiftUI re-render →
         // updateNSView round trip.
         for _ in 0..<100 {
-            try await Task.sleep(nanoseconds: 20_000_000)
+            try await Task.sleep(for: .milliseconds(20))
         }
         let issues = spacingIssues(editor, expected: expectedSpacing(.relaxed)!)
         #expect(issues.isEmpty,
@@ -442,7 +442,7 @@ import Persistence
 
         liveBridge.applyMarks([.bold])
         for _ in 0..<100 {
-            try await Task.sleep(nanoseconds: 20_000_000)
+            try await Task.sleep(for: .milliseconds(20))
         }
         let issues = spacingIssues(editor, expected: expectedSpacing(.relaxed)!)
         #expect(issues.isEmpty,
@@ -547,7 +547,7 @@ import Persistence
         for _ in 0..<50 {
             if editor.selectedRange() == range { break }
             editor.setSelectedRange(range)
-            try await Task.sleep(nanoseconds: 20_000_000)
+            try await Task.sleep(for: .milliseconds(20))
         }
         #expect(editor.selectedRange() == range,
                 "precondition: the selection must survive until applyMarks (got \(editor.selectedRange()))")
@@ -568,7 +568,7 @@ import Persistence
         var boldApplied = false
         for _ in 0..<50 {
             liveBridge.applyMarks([.bold])
-            try await Task.sleep(nanoseconds: 100_000_000)
+            try await Task.sleep(for: .milliseconds(100))
             let probe = editor.textStorage?.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont
             if probe?.fontDescriptor.symbolicTraits.contains(.bold) == true {
                 boldApplied = true
@@ -593,7 +593,7 @@ import Persistence
         for _ in 0..<10 {
             guard undoManager.canUndo else { break }
             undoManager.undo()
-            try await Task.sleep(nanoseconds: 50_000_000)
+            try await Task.sleep(for: .milliseconds(50))
             if lineFragmentHeights(editor) == beforeHeights {
                 heightsRestored = true
                 break
@@ -603,7 +603,7 @@ import Persistence
                 "\(label): undo changed the laid-out line heights")
         undoManager.redo()
         for _ in 0..<20 {
-            try await Task.sleep(nanoseconds: 20_000_000)
+            try await Task.sleep(for: .milliseconds(20))
         }
         #expect(lineFragmentHeights(editor) == beforeHeights,
                 "\(label): redo changed the laid-out line heights")

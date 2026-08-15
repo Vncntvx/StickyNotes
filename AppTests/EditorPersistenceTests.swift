@@ -102,7 +102,7 @@ import os
         host.updateAppearance(note)
 
         // Wait for the immediate structural write.
-        try await Task.sleep(nanoseconds: 300_000_000)
+        try await Task.sleep(for: .milliseconds(300))
 
         let reopened = NoteWindowHostModel(noteId: noteId, environment: env)
         await reopened.load()
@@ -231,7 +231,7 @@ import os
             let deadline = Date().addingTimeInterval(timeout)
             while Date() < deadline {
                 if isSignaled { return true }
-                try? await Task.sleep(nanoseconds: 10_000_000)
+                try? await Task.sleep(for: .milliseconds(10))
             }
             return isSignaled
         }

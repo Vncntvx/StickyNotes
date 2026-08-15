@@ -47,7 +47,7 @@ import SystemBridge
         let deadline = ContinuousClock.now + timeout
         while ContinuousClock.now < deadline {
             if condition() { return }
-            try await Task.sleep(nanoseconds: 20_000_000)
+            try await Task.sleep(for: .milliseconds(20))
         }
         Issue.record("condition not met within \(timeout)")
     }
@@ -86,10 +86,9 @@ import SystemBridge
         try await waitUntil {
             !allTextViews(in: hosting).isEmpty
         }
-        try await Task.sleep(nanoseconds: 500_000_000)
-        // Parallel suites contend for the main runloop — the async reload
-        // can exceed the 2s default budget (flaky 2026-08-14: the full-run
-        // failure "condition not met within 2s" at the waitUntil helper).
+        // R3.10: the bare 500ms sleep was replaced by a deterministic
+        // wait — the async reload completes when blocks settle, regardless
+        // of runloop contention (flaky 2026-08-14 full-run failure).
         try await waitUntil(timeout: .seconds(5)) {
             host.blocks.count == 1
         }
@@ -125,7 +124,7 @@ import SystemBridge
                 todoEditor = todo
                 break
             }
-            try await Task.sleep(nanoseconds: 20_000_000)
+            try await Task.sleep(for: .milliseconds(20))
         }
         #expect(todoEditor != nil, "focus must land in the inserted todo editor")
 
@@ -365,7 +364,7 @@ import SystemBridge
                 trailingEditor = editor
                 break
             }
-            try await Task.sleep(nanoseconds: 20_000_000)
+            try await Task.sleep(for: .milliseconds(20))
         }
         let editor = try #require(trailingEditor, "the trailing paragraph must become first responder")
         #expect(editor.selectedRange().location == ("tail text" as NSString).length,
@@ -539,7 +538,7 @@ import SystemBridge
             !allTextViews(in: hosting).isEmpty
         }
         // Let the bridge's .task and the layout settle.
-        try await Task.sleep(nanoseconds: 200_000_000)
+        try await Task.sleep(for: .milliseconds(200))
         let todoEditor = try #require(
             allTextViews(in: hosting).first { $0.string == "task" },
             "the todo editor must be realized"

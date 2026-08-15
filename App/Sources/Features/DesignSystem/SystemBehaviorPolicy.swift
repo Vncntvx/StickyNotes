@@ -9,38 +9,17 @@ import SwiftUI
 // layer only, no decorative glass, no manual emulation, content surfaces
 // never glass, no glass-on-glass, clear glass never default).
 
-public enum SystemBehaviorPolicy {
-    /// SC-015/FR-062: custom controls are readable without translucency.
-    public static let readableWithoutTransparency = true
-    public static let usesTranslucencyForReadability = false
-    /// CHK038: Reduce Motion governs custom-control animations.
-    public static let reduceMotionGovernsAnimations = true
-    public static let animationsNonEssential = false
-    /// FR-062: borders appear under Increase Contrast / Show Borders.
-    public static let bordersUnderIncreaseContrast = true
-    /// 001 FR-044: selection/state never conveyed by color alone.
-    public static let selectionNeverColorOnly = true
-}
+// R3.10 (remediation roadmap 2026-08-15, T-3): the policy tables were
+// self-proving — every constant declared true and tests asserted the
+// declaration, with ZERO production consumers (audited 2026-08-15). All
+// constants except `customInteractiveControlsMayGlass` (consumed by
+// BlockInsertionControl) were deleted; the design discipline lives in the
+// review checklist (specs/001 plan.md) and the GlassUsagePolicy
+// consumption test.
 
 public enum GlassUsagePolicy {
-    /// SC-010: no decorative glass.
-    public static let noDecorativeGlass = true
-    /// SC-010: glass is the functional/control layer only.
-    public static let glassFunctionalLayerOnly = true
-    /// SC-019: no manual blur/gradient/border/shaders emulating Liquid
-    /// Glass where a system behavior exists.
-    public static let noManualEmulation = true
-    public static let systemEquivalentPreferred = true
-    /// SC-009: cards/content/editor surfaces are NOT glass.
-    public static let cardsNotGlass = true
-    public static let noteContentNotGlass = true
-    public static let editorSurfacesNotGlass = true
-    /// FR-061: no nested glass-on-glass.
-    public static let noGlassOnGlass = true
-    /// FR-061: clear glass never the default.
-    public static let clearGlassNotDefault = true
     /// FR-060/FR-044: glass MAY apply to custom interactive controls only;
-    /// system controls use the system's own glass.
+    /// system controls use the system's own glass. Consumed by
+    /// BlockInsertionControl (the insertion control's glass background).
     public static let customInteractiveControlsMayGlass = true
-    public static let systemControlsUseSystemGlass = true
 }

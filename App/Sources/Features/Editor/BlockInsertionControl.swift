@@ -140,23 +140,3 @@ public struct BlockInsertionControl: View {
             && (isCursorLineHovered || isTextSelected)
     }
 }
-
-// MARK: - NoteControlsPresentation (003 T033, FR-044/FR-045/FR-064)
-
-/// The floating note-controls presentation model: inactive-state behavior
-/// (FR-045), glass scoping (FR-044/061), hide-on-pointer-leave, SF Symbols
-/// only (FR-064). Asserted by T030.
-public enum NoteControlsPresentation {
-
-    /// FR-045: no inappropriate accent retention on inactive controls.
-    public static let showsAccentWhenInactive = false
-
-    /// FR-044: floating controls hide when the window is inactive.
-    public static let floatingControlsHideWhenInactive = true
-
-    /// FR-044: floating controls hide on pointer leave.
-    public static let floatingControlsHideOnPointerLeave = true
-
-    /// FR-064: icons are SF Symbols only (never custom bitmaps).
-    public static let usesSFSymbolsOnly = true
-}

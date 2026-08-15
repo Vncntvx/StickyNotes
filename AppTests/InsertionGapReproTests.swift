@@ -168,7 +168,7 @@ import Persistence
         // forced extra layout passes — one runloop turn, one layout.
         // (The previous poll-based harness masked the bug by forcing
         // repeated layout passes until convergence.)
-        try? await Task.sleep(nanoseconds: 50_000_000)
+        try? await Task.sleep(for: .milliseconds(50))
         hosting.layoutSubtreeIfNeeded()
         hosting.displayIfNeeded()
         let editorsFirst = collectTextViews(in: hosting)
@@ -197,13 +197,13 @@ import Persistence
                 convergedGap = gap
                 break
             }
-            try? await Task.sleep(nanoseconds: 20_000_000)
+            try? await Task.sleep(for: .milliseconds(20))
         }
 
         // Resize (the "拉宽" step) and measure again.
         hosting.frame = NSRect(x: 0, y: 0, width: 500, height: 700)
         for _ in 0..<25 {
-            try? await Task.sleep(nanoseconds: 20_000_000)
+            try? await Task.sleep(for: .milliseconds(20))
             hosting.layoutSubtreeIfNeeded()
             hosting.displayIfNeeded()
         }

@@ -58,7 +58,7 @@ import Persistence
         let deadline = ContinuousClock.now + timeout
         while ContinuousClock.now < deadline {
             if condition() { return }
-            try await Task.sleep(nanoseconds: 20_000_000)
+            try await Task.sleep(for: .milliseconds(20))
         }
         Issue.record("condition not met within \(timeout)")
     }
@@ -84,7 +84,7 @@ import Persistence
         window.makeKeyAndOrderFront(nil)
         hosting.layoutSubtreeIfNeeded()
         hosting.displayIfNeeded()
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await Task.sleep(for: .milliseconds(50))
         return (window, coordinator)
     }
 

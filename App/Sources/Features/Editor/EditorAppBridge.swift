@@ -18,10 +18,13 @@ import EditorCore
 //   (FR-053) via `CrossBlockSelectionCore`; range-delete removes only the
 //   selected characters and merges emptied blocks away per FR-050a.
 //
-// NOTE (platform limitation): SwiftUI `TextEditor` exposes no selection API,
-// so live selection interception is not possible on the macOS 26 surface;
-// the canonical-model operations are wired here and exercised by AppTests —
-// the same operations the EditorCore suites verify.
+// NOTE (platform limitation, R3.9 Spike ADR 2026-08-15): SwiftUI
+// `TextEditor` exposes no programmatic selection API on the macOS 26
+// surface; macOS 26's `AttributedTextSelection` is a display-only binding
+// for SwiftUI `Text`/`TextEditor` and cannot drive (or read) an AppKit
+// `NSTextView` editor, so the canonical-model operations are wired here and
+// exercised by AppTests — the same operations the EditorCore suites verify.
+// See Documentation/adr/2026-08-15-macos27-ecosystem-alignment.md.
 
 /// App-side wiring of the FR-050a/FR-054 EditorCore operations.
 public enum EditorAppBridge {

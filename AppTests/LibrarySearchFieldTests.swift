@@ -37,7 +37,10 @@ struct LibrarySearchFieldTests {
         #expect(text == "avocados")
     }
 
+    @MainActor
     @Test func cancelClearsTheQuery() {
+        // @MainActor: NSSearchField is an AppKit control and must be
+        // constructed on the main thread (Main Thread Checker, R3.10).
         var text = "avocados"
         let coordinator = LibrarySearchField.Coordinator(
             text: Binding(get: { text }, set: { text = $0 })

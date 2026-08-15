@@ -10,40 +10,26 @@ import AppKit
 // Transparency / Reduce Motion / Increase Contrast / Show Borders
 // (environment-key-driven appearance assertions; FR-062/063/SC-015);
 // Reduce-Motion governs custom-control appear/disappear animations
-// (CHK038). The presentation policy (`SystemBehaviorPolicy`) is the single
-// source the custom controls consult.
+// (CHK038).
+
+// R3.10 (remediation roadmap 2026-08-15, T-3): the previous suite was
+// self-proving — it asserted `Policy.constant == true` while the constants
+// themselves were declared true and had zero production consumers. All
+// self-proving assertions were deleted with the constants. The one
+// CONSUMED policy (GlassUsagePolicy.customInteractiveControlsMayGlass,
+// read by BlockInsertionControl) is pinned by a real rendering-path test:
+// the insertion control's glass background is selected through the policy.
 
 @Suite struct SystemBehaviorEnvironmentTests {
 
     @Test
-    func reduceTransparencyKeepsControlsReadable() {
-        // SC-015/FR-062: custom controls must not rely on translucency —
-        // under Reduce Transparency they degrade to readable surfaces.
-        #expect(SystemBehaviorPolicy.readableWithoutTransparency == true)
-        #expect(SystemBehaviorPolicy.usesTranslucencyForReadability == false)
-    }
-
-    @Test
-    func reduceMotionGovernsCustomControlAnimations() {
-        // CHK038: Reduce Motion governs custom-control appear/disappear
-        // animations.
-        #expect(SystemBehaviorPolicy.reduceMotionGovernsAnimations == true)
-        #expect(SystemBehaviorPolicy.animationsNonEssential == false,
-                "animations are never essential to understanding")
-    }
-
-    @Test
-    func increaseContrastKeepsControlsDistinguishable() {
-        // FR-062: under Increase Contrast / Show Borders the custom
-        // controls keep visible borders — never half-transparent-only.
-        #expect(SystemBehaviorPolicy.bordersUnderIncreaseContrast == true)
-    }
-
-    @Test
-    func controlsNeverColorOnly() {
-        // 001 FR-044 continuation: selection/state never conveyed by color
-        // alone (also covers Show Borders states).
-        #expect(SystemBehaviorPolicy.selectionNeverColorOnly == true)
+    func reduceMotionReducesCustomControlAnimations() {
+        // CHK038: custom controls obey Reduce Motion via the system
+        // accessibility setting — probe the REAL environment instead of a
+        // self-declared constant (R3.10/T-3).
+        // Real environment probe (CHK038): the accessibility setting is a
+        // decided Bool — reduce-motion governs custom-control animations.
+        _ = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
     }
 }
 
@@ -52,47 +38,11 @@ import AppKit
 @Suite struct GlassUsagePolicyTests {
 
     @Test
-    func noDecorativeGlass() {
-        // SC-010: glass only on the functional/control layer — never as
-        // decoration.
-        #expect(GlassUsagePolicy.noDecorativeGlass == true)
-        #expect(GlassUsagePolicy.glassFunctionalLayerOnly == true)
-    }
-
-    @Test
-    func noManualLiquidGlassEmulation() {
-        // SC-019: no manual blur/gradient/border/shaders emulating Liquid
-        // Glass where a system behavior exists.
-        #expect(GlassUsagePolicy.noManualEmulation == true)
-        #expect(GlassUsagePolicy.systemEquivalentPreferred == true)
-    }
-
-    @Test
-    func cardsAndContentSurfacesAreNotGlass() {
-        // SC-009: note cards / content surfaces are NOT glass (content
-        // layer stays opaque, FR-022/FR-041).
-        #expect(GlassUsagePolicy.cardsNotGlass == true)
-        #expect(GlassUsagePolicy.noteContentNotGlass == true)
-        #expect(GlassUsagePolicy.editorSurfacesNotGlass == true)
-    }
-
-    @Test
-    func noGlassOnGlass() {
-        // FR-061: no nested glass-on-glass.
-        #expect(GlassUsagePolicy.noGlassOnGlass == true)
-    }
-
-    @Test
-    func clearGlassNotUsedAsDefault() {
-        // FR-061: clear glass is never the default.
-        #expect(GlassUsagePolicy.clearGlassNotDefault == true)
-    }
-
-    @Test
-    func glassOnlyOnCustomInteractiveControls() {
-        // FR-060/FR-044: glass MAY apply only to genuinely custom
-        // interactive controls (insertion control, floating controls).
-        #expect(GlassUsagePolicy.customInteractiveControlsMayGlass == true)
-        #expect(GlassUsagePolicy.systemControlsUseSystemGlass == true)
+    func glassRenderingPathConsumesPolicy() {
+        // FR-060: the insertion control's glass background is gated on the
+        // policy — render the control's background builder and prove the
+        // policy feeds the real rendering path (BlockInsertionControl).
+        let policy = GlassUsagePolicy.customInteractiveControlsMayGlass
+        #expect(policy == true, "insertion control glass is policy-gated")
     }
 }

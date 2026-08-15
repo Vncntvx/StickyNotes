@@ -1,5 +1,7 @@
 import Testing
 import Foundation
+import Domain
+import Persistence
 @testable import StickyNotes
 
 // MARK: - Offline-completeness + dependency audit (T261, FR-142/FR-143/FR-190)
@@ -10,12 +12,31 @@ import Foundation
 // in code (FR-143/FR-190).
 
 @Suite struct OfflineCompletenessTests {
+    @MainActor
     @Test
     func localEditingNeverDependsOnNetwork() async throws {
-        // The P1 flow (create/edit/trash/restore/search) touches only the
-        // local GRDB store; SyncCore is an additive layer that is never
-        // constructed when sync is unconfigured (P1IndependenceGateTests).
-        #expect(true)
+        // FR-142 gate (R3.10): the P1 flow (create/edit/trash/restore)
+        // must complete against the local store with NO sync layer at all
+        // — a real behavioral run, not a by-construction claim. An
+        // unconfigured environment constructs no SyncCore provider, so no
+        // network dependency can be reached.
+        let store = try DatabaseStore.inMemory()
+        try InitialSchema.migrator().migrate(store.dbPool)
+        let model = LibraryModel(environment: AppEnvironment(
+            persistence: PersistenceServices(store: store),
+            assets: AssetServices()
+        ))
+        #expect(model.syncCoordinator == nil, "no sync layer when unconfigured (FR-142)")
+        guard let id = await model.createBlankNote() else {
+            Issue.record("offline create must succeed (FR-142)")
+            return
+        }
+        _ = await model.trash(noteId: id)
+        await model.reload()
+        #expect(model.cards.isEmpty, "trashed note leaves the library offline")
+        await model.restore(noteId: id)
+        await model.reload()
+        #expect(model.cards.contains { $0.noteId == id }, "restore succeeds offline")
     }
 
     @Test

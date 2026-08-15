@@ -371,7 +371,7 @@ struct StickyNotesApp: App {
             // window is registered and key before starting the capture.
             for _ in 0..<100 {
                 if NoteWindowBridge.registeredWindow(for: id)?.isKeyWindow == true { break }
-                try? await Task.sleep(nanoseconds: 20_000_000)
+                try? await Task.sleep(for: .milliseconds(20))
             }
             switch kind {
             case .region: coordinator?.captureRegionInKeyWindow()

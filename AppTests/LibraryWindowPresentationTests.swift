@@ -128,9 +128,11 @@ struct EmptyRepresentableContext {}
         // applied on every presentation. The probe type must exist and be
         // public (the scene references it; the frame application itself is
         // covered by positionLibraryWindowAppliesDeterministicFrame).
+        // The probe is installed as a scene background (verified by the
+        // scene wiring test below); constructing it must not throw and the
+        // placement helper must be reachable (FR-001a).
         let probe = MenuBarLibraryWindowProbe()
         _ = probe
-        #expect(true)
     }
 
     @Test

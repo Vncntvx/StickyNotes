@@ -11,10 +11,14 @@ import Domain
 
 @Suite struct ScopedAccessibilityLabelsTests {
     @Test
+    @MainActor
     func announcementsAvailableForUserInitiatedOps() {
         // AccessibilityAnnouncements.announce posts a VoiceOver
-        // announcementRequested notification (FR-180b).
-        #expect(true)
+        // announcementRequested notification (FR-180b). Prove the
+        // announcement helper executes without a main window (it falls
+        // back to the first window; nil windows are handled).
+        AccessibilityAnnouncements.announce("probe")
+        #expect(true, "announce() must not crash without a window (FR-180b)")
     }
 
     @Test

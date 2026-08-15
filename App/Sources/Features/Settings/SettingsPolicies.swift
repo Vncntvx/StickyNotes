@@ -61,18 +61,13 @@ public enum SettingsFailurePolicy {
     public static let noticeIsLocalized = true
 }
 public enum FontPreferenceUI {
-    /// FR-055 (Rev 3): ONE user-facing "note body font" concept.
-    public static let singleNoteFontConcept = true
-    /// FR-055: no implementation typography terms in the user surface.
-    public static let usesImplementationTypographyTerms = false
-    /// FR-055: the primary family gets a system fallback automatically.
-    public static let systemFallbackProvided = true
-    /// FR-055 (Rev 3): a meaningful bilingual MULTI-LINE preview sample —
+    /// R3.10 (T-3): the boolean "policy" constants were self-proving
+    /// (declared true, asserted true, zero consumers) and were deleted.
+    /// The consumed surface is the bilingual MULTI-LINE preview sample —
     /// text spacing only affects inter-line spacing, so a single-line
     /// sample cannot preview it. Not localized: it is a fixed sample string
     /// for both languages (Latin + CJK mixed rendering).
     public static let bilingualPreviewSample = "The quick brown fox jumps over the lazy dog.\n这是便签正文的预览文本。\n第二行文字用于预览行间距效果。"
-    public static let bilingualPreviewEnabled = true
 }
 
 // MARK: - NoteFontChoicePresentation (Rev 3, 2026-08-14)

@@ -78,7 +78,7 @@ import AssetStore
 
         // FR-094: set the cover (at most one per note).
         await host.setCover(blockId: blockId, isCover: true)
-        try await Task.sleep(nanoseconds: 300_000_000)
+        try await Task.sleep(for: .milliseconds(300))
 
         let reloaded = NoteWindowHostModel(noteId: noteId, environment: env)
         await reloaded.load()
@@ -86,7 +86,7 @@ import AssetStore
 
         // FR-094b: deleting the cover block nullifies the reference.
         await reloaded.deleteBlock(id: blockId)
-        try await Task.sleep(nanoseconds: 300_000_000)
+        try await Task.sleep(for: .milliseconds(300))
         let after = NoteWindowHostModel(noteId: noteId, environment: env)
         await after.load()
         #expect(after.note?.coverScreenshotBlockId == nil, "no dangling cover reference (FR-094b)")
@@ -106,7 +106,7 @@ import AssetStore
         let host = await freshHost(env: env, noteId: noteId)
 
         await host.updateCaption(blockId: blockId, caption: "my capture")
-        try await Task.sleep(nanoseconds: 300_000_000)
+        try await Task.sleep(for: .milliseconds(300))
         let blocks = try await env.persistence.noteRepository!.fetchBlocks(noteId: noteId)
         if case .screenshot(let payload) = blocks.first(where: { $0.id == blockId })?.payload {
             #expect(payload.caption == "my capture", "caption persists (FR-093)")

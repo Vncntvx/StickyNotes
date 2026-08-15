@@ -110,7 +110,7 @@ import Domain
 
     private func settle(_ hosting: NSView, turns: Int = 25) async {
         for _ in 0..<turns {
-            try? await Task.sleep(nanoseconds: 20_000_000)
+            try? await Task.sleep(for: .milliseconds(20))
             hosting.layoutSubtreeIfNeeded()
             hosting.displayIfNeeded()
         }

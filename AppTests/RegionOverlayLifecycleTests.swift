@@ -38,7 +38,8 @@ import AppKit
             // Drain the runloop so AppKit's close processing + autorelease
             // pools flush — this is where the 2026-08-09 crash surfaced.
             try await Task.sleep(for: .milliseconds(50))
+            #expect(window.windowNumber == 0 || !window.isVisible,
+                    "overlay must be closed after the drain")
         }
-        #expect(true)
     }
 }

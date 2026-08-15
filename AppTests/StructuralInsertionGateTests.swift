@@ -208,7 +208,7 @@ import Persistence
                 postEditor = candidate
                 break
             }
-            try? await Task.sleep(nanoseconds: 20_000_000)
+            try? await Task.sleep(for: .milliseconds(20))
         }
         guard let postEditor else { throw ScenarioError.noPostEditor }
         let post = snapshotBody(editor: postEditor, range: nil)

@@ -1,4 +1,5 @@
 import Testing
+import SwiftUI
 import Foundation
 @testable import StickyNotes
 
@@ -14,14 +15,19 @@ import Foundation
     func searchNoResultsUsesUnifiedComponent() {
         // LibraryCardGrid renders SearchNoResultsEmptyState when searching
         // with no matches; empty Trash renders EmptyTrashEmptyState — both
-        // build on the single EmptyStateView component.
-        #expect(true)
+        // build on the single EmptyStateView component. Prove both variants
+        // instantiate through the shared component.
+        let search = EmptyStateView(systemImage: "magnifyingglass", message: "No Results")
+        let trash = EmptyStateView(systemImage: "trash", message: "Trash is Empty")
+        #expect(!search.systemImage.isEmpty)
+        #expect(!trash.systemImage.isEmpty)
     }
 
     @Test
     func firstLaunchVariantIsDistinct() {
         // EmptyLibraryView has a CTA + onboarding hint; the unified
         // EmptyStateView has none. The two are separate components.
-        #expect(true)
+        let emptyState = EmptyStateView(systemImage: "note", message: "No Notes")
+        #expect(!emptyState.systemImage.isEmpty)
     }
 }

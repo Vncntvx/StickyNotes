@@ -130,13 +130,17 @@ struct FontPreferenceApplicationTests {
     // MARK: - 003 T042 (FR-055): single "note font" concept
 
     @Test func singleUserFacingNoteFontConcept() {
-        // FR-055: ONE user-facing "note font" concept — primary family with
-        // system fallback; no implementation typography terms ("English
-        // font"/"Chinese font" are gone from the user surface).
-        #expect(FontPreferenceUI.singleNoteFontConcept == true)
-        #expect(FontPreferenceUI.usesImplementationTypographyTerms == false,
-                "user surface must not expose implementation typography terms (FR-055)")
-        #expect(FontPreferenceUI.systemFallbackProvided == true)
+        // FR-055 (R3.10/T-3): the self-proving constant table was deleted;
+        // the real contract is the RENDERED surface — the font choice view
+        // exposes ONE family picker over the system list (no implementation
+        // typography split). Pin the option surface.
+        let families = ["PingFang SC", "Helvetica", "Courier"]
+        let options = NoteFontChoicePresentation.options(
+            families: families, storedFamily: "Helvetica"
+        )
+        #expect(options.first == NoteFontChoicePresentation.systemDefaultTitle)
+        #expect(options.contains("Helvetica"))
+        #expect(options.contains("PingFang SC"))
     }
 
     @Test func storageKeyUnchanged() {
@@ -154,6 +158,5 @@ struct FontPreferenceApplicationTests {
         #expect(sample.contains("The quick brown fox"), "Latin sample line")
         let hasCJK = sample.unicodeScalars.contains { (0x4E00...0x9FFF).contains($0.value) }
         #expect(hasCJK, "CJK sample line")
-        #expect(FontPreferenceUI.bilingualPreviewEnabled == true)
     }
 }

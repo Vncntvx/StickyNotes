@@ -982,7 +982,7 @@ public actor SyncDebouncer {
                     await self.fire()
                     return
                 }
-                try? await Task.sleep(nanoseconds: 50_000_000) // 50ms
+                try? await Task.sleep(for: .milliseconds(50))
             }
         }
     }

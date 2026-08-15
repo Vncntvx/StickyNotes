@@ -83,7 +83,7 @@ public final class NoteWindowHostModel {
         }
         tickTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 100_000_000)
+                try? await Task.sleep(for: .milliseconds(100))
                 guard let self else { return }
                 await self.autosave.tick()
             }

@@ -91,7 +91,7 @@ import Persistence
         let deadline = ContinuousClock.now + timeout
         while ContinuousClock.now < deadline {
             if await condition() { return }
-            try await Task.sleep(nanoseconds: 20_000_000)
+            try await Task.sleep(for: .milliseconds(20))
         }
         Issue.record("condition not met within \(timeout)")
     }
@@ -255,7 +255,7 @@ import Persistence
         // attaches — poll with awaits so the main actor processes the hops.
         for _ in 0..<100 {
             if handled { break }
-            try await Task.sleep(nanoseconds: 20_000_000)
+            try await Task.sleep(for: .milliseconds(20))
         }
         #expect(handled, "the focus request must be reported as handled")
         #expect(window.firstResponder === todoEditor, "the inserted block's editor must become first responder")

@@ -119,7 +119,7 @@ import Domain
             _ = try SyncProfileCodec.decode(garbage)
             Issue.record("corrupted profile MUST fail closed")
         } catch {
-            #expect(true)
+            // fail-closed: decoding threw (no partial profile returned)
         }
     }
 
@@ -132,7 +132,7 @@ import Domain
                 _ = try SyncProfileCodec.decode(wire)
                 Issue.record("schemaVersion \(bad) MUST fail closed (FR-010/US2/AC3)")
             } catch {
-                #expect(true)
+                // fail-closed: unsupported schemaVersion threw
             }
         }
     }
@@ -146,7 +146,7 @@ import Domain
             _ = try SyncProfileCodec.decode(wire)
             Issue.record("missing required field MUST fail closed")
         } catch {
-            #expect(true)
+            // fail-closed: missing required field threw
         }
     }
 

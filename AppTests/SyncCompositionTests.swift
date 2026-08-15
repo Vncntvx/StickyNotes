@@ -597,7 +597,7 @@ final class RepoLayoutInMemoryProvider: SyncProviderProtocol, @unchecked Sendabl
             )
             Issue.record("joining a location whose bootstrap is a different vault than the profile MUST fail closed (CHK025)")
         } catch StickyError.credentials(.wrongVault) {
-            #expect(true)
+            // fail-closed: the expected rejection surfaced (CHK025)
         } catch {
             Issue.record("unexpected error: \(error)")
         }
