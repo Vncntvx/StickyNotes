@@ -57,8 +57,11 @@ public final class SQLiteTodoRepository: TodoRepository, Sendable {
                     throw StickyError.persistence(.invalidPayload)
                 }
                 let parentDepth: Int = try self.fetchDepth(todoId: parentId, db: db) ?? 0
-                let newDepth = parentDepth + 1
-                if newDepth > TodoHierarchyMaxDepth {
+                let newDepth = TodoHierarchy.depth(
+                    ofParent: parentId,
+                    parentDepthProvider: { _ in parentDepth }
+                )
+                if newDepth > TodoHierarchy.maxDepth {
                     throw StickyError.persistence(.invalidPayload)
                 }
             }
@@ -124,8 +127,11 @@ public final class SQLiteTodoRepository: TodoRepository, Sendable {
                     throw StickyError.persistence(.invalidPayload)
                 }
                 let parentDepth: Int = try self.fetchDepth(todoId: parentId, db: db) ?? 0
-                newDepth = parentDepth + 1
-                if newDepth > TodoHierarchyMaxDepth {
+                newDepth = TodoHierarchy.depth(
+                    ofParent: parentId,
+                    parentDepthProvider: { _ in parentDepth }
+                )
+                if newDepth > TodoHierarchy.maxDepth {
                     throw StickyError.persistence(.invalidPayload)
                 }
             } else {
@@ -251,22 +257,30 @@ public final class SQLiteTodoRepository: TodoRepository, Sendable {
     }
 
     /// Returns `true` if making `candidateParent` the parent of `child`
-    /// would create a cycle. Walks the candidate's parent chain.
+    /// would create a cycle. Feeds the existing parent chain into the
+    /// Domain rule (`TodoHierarchy.wouldCreateCycle`) — the traversal
+    /// semantics are single-sourced in Domain (R3.5, A-5).
     private func wouldCreateCycle(child: UUID, candidateParent: UUID, noteId: UUID, db: Database) throws -> Bool {
+        // Build the parentOf map lazily as the Domain rule walks the chain.
+        var parentOf: [UUID: UUID?] = [:]
         var current: UUID? = candidateParent
         var steps = 0
         while let id = current {
-            if id == child { return true }
             let next: String? = try String.fetchOne(
                 db,
                 sql: "SELECT parentTodoId FROM todoItem WHERE id = ?",
                 arguments: [id.uuidString]
             )
-            current = next.flatMap { UUID(uuidString: $0) }
+            parentOf[id] = next.flatMap { UUID(uuidString: $0) }
+            current = parentOf[id] ?? nil
             steps += 1
-            if steps > 1024 { return true }
+            if steps > 1024 { break }  // defensive against corrupt chains
         }
-        return false
+        return TodoHierarchy.wouldCreateCycle(
+            child: child,
+            candidateParent: candidateParent,
+            parentOf: parentOf
+        )
     }
 
     /// Fetches the depth of a todo.
@@ -278,11 +292,3 @@ public final class SQLiteTodoRepository: TodoRepository, Sendable {
         )
     }
 }
-
-// MARK: - Hierarchy constants
-//
-// The max nesting depth per data-model.md §TodoItem ("depth ≤ maxDepth,
-// e.g. ≤ 6"). Lives here next to the repository; the Domain-layer rule
-// helpers used by tests live in the test target (TodoHierarchy).
-
-public let TodoHierarchyMaxDepth = 6

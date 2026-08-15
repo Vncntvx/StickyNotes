@@ -192,35 +192,3 @@ import Domain
         #expect(after.id == tId, "id stable across completion toggle (FR-071)")
     }
 }
-
-// MARK: - TodoHierarchy helpers (Domain)
-//
-// Pure-Domain hierarchy validation rules used by the repository. Lives in
-// the test target for now; the repository calls these. If the rules need to
-// be reused elsewhere they can move to Domain/Models/TodoHierarchy.swift.
-
-public enum TodoHierarchy {
-    /// Maximum nesting depth (data-model.md §TodoItem: "depth ≤ maxDepth,
-    /// e.g. ≤ 6").
-    public static let maxDepth = 6
-
-    /// Returns `true` if making `candidateParent` the parent of `child`
-    /// would create a cycle, given the existing `parentOf` map (todoId →
-    /// its current parent todoId).
-    public static func wouldCreateCycle(
-        child: UUID,
-        candidateParent: UUID,
-        parentOf: [UUID: UUID?]
-    ) -> Bool {
-        // A todo cannot be its own ancestor. Walk up the candidate's chain.
-        var current: UUID? = candidateParent
-        var steps = 0
-        while let id = current {
-            if id == child { return true }
-            current = parentOf[id] ?? nil
-            steps += 1
-            if steps > 1024 { return true }  // defensive against corrupt chains
-        }
-        return false
-    }
-}

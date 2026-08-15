@@ -6,7 +6,7 @@ import Persistence
 
 // MARK: - Todo nesting depth binding tests (T189, FR-072a clarified 2026-08-07)
 //
-// Per tasks.md T189: assert TodoHierarchyMaxDepth == 6; indent is disabled
+// Per tasks.md T189: assert TodoHierarchy.maxDepth == 6; indent is disabled
 // when the active todo is at depth 6; validation rejects any todo hierarchy
 // deeper than 6 levels; depth is counted from a top-level todo at depth 1.
 
@@ -14,7 +14,7 @@ import Persistence
 
     @Test
     func todoHierarchyMaxDepthIsSix() {
-        #expect(TodoHierarchyMaxDepth == 6)
+        #expect(TodoHierarchy.maxDepth == 6)
     }
 
     @Test
@@ -25,7 +25,7 @@ import Persistence
             lastModifiedDeviceId: UUID()
         )
         #expect(todo.depth == 0)
-        #expect(todo.depth <= TodoHierarchyMaxDepth)
+        #expect(todo.depth <= TodoHierarchy.maxDepth)
     }
 
     private func makeStore() throws -> DatabaseStore {
@@ -53,12 +53,12 @@ import Persistence
 
         // A todo at depth 6 (the max) is accepted.
         let todo = TodoItem(
-            noteId: noteId, blockId: blockId, depth: TodoHierarchyMaxDepth,
+            noteId: noteId, blockId: blockId, depth: TodoHierarchy.maxDepth,
             lastModifiedDeviceId: deviceId
         )
         try await repo.insert(todo)
         let fetched = try await repo.fetchTodo(blockId: blockId)
-        #expect(fetched?.depth == TodoHierarchyMaxDepth)
+        #expect(fetched?.depth == TodoHierarchy.maxDepth)
     }
 
     @Test
@@ -111,5 +111,85 @@ import Persistence
             // Rejection is expected (the repository validates depth ≤ 6).
             #expect(true)
         }
+    }
+}
+
+// MARK: - R3.5 production-vs-test drift regression (T022)
+//
+// The hierarchy rules are single-sourced in Domain (TodoHierarchy). These
+// tests pin the PRODUCTION rule's semantics directly — if the repository
+// ever stops using the Domain rule, the depth-7 rejection and cycle
+// detection below fail (the old test-target copy is gone).
+
+extension TodoDepthBindingTests {
+    @Test
+    func productionRuleRejectsDepthSevenReparent() async throws {
+        // Regression (R3.5/T022): the PRODUCTION rule must reject a
+        // reparent that would produce depth 7 — the same contract the
+        // deleted test-target copy enforced.
+        let store = try makeStore()
+        let repo = SQLiteTodoRepository(store: store)
+        let noteId = UUID()
+        let deviceId = UUID()
+        let noteRepo = SQLiteNoteRepository(store: store, fullTextSearch: FullTextSearch(dbPool: store.dbPool))
+        try await noteRepo.create(Note(id: noteId, lastModifiedDeviceId: deviceId))
+
+        // Chain of 7 todos (depth 0..6).
+        var parentId: UUID?
+        for i in 0..<7 {
+            let blockId = UUID()
+            let todoId = UUID()
+            try await noteRepo.insertBlock(Block(
+                id: blockId, noteId: noteId, kind: .todo, sortKey: i,
+                payload: .todo(TodoPayload(todoId: todoId, richText: .plain("lvl \(i)"))),
+                lastModifiedDeviceId: deviceId
+            ))
+            try await repo.insert(TodoItem(
+                id: todoId, noteId: noteId, blockId: blockId, parentTodoId: parentId,
+                sortKey: i, depth: i, lastModifiedDeviceId: deviceId
+            ))
+            parentId = todoId
+        }
+
+        let childBlockId = UUID()
+        let childTodoId = UUID()
+        try await noteRepo.insertBlock(Block(
+            id: childBlockId, noteId: noteId, kind: .todo, sortKey: 100,
+            payload: .todo(TodoPayload(todoId: childTodoId, richText: .plain("child"))),
+            lastModifiedDeviceId: deviceId
+        ))
+        try await repo.insert(TodoItem(
+            id: childTodoId, noteId: noteId, blockId: childBlockId,
+            sortKey: 100, depth: 0, lastModifiedDeviceId: deviceId
+        ))
+
+        // Reparent the depth-0 child under the depth-6 todo → depth 7.
+        do {
+            try await repo.reparent(todoId: childTodoId, newParentId: parentId, deviceId: deviceId)
+            Issue.record("production rule MUST reject depth-7 reparent (R3.5)")
+        } catch StickyError.persistence(.invalidPayload) {
+            #expect(true)
+        } catch {
+            Issue.record("unexpected error: \(error)")
+        }
+    }
+
+    @Test
+    func productionRuleDetectsCycles() {
+        // The Domain rule (single source) rejects a cycle: A→B→A.
+        let child = UUID(uuidString: "10000000-0000-4000-8000-000000000001")!
+        let candidate = UUID(uuidString: "10000000-0000-4000-8000-000000000002")!
+        let parentOf: [UUID: UUID?] = [
+            candidate: child,  // candidate's parent is the child → cycle
+        ]
+        #expect(TodoHierarchy.wouldCreateCycle(
+            child: child, candidateParent: candidate, parentOf: parentOf
+        ))
+        // No cycle: candidate's chain does not reach the child.
+        let other = UUID(uuidString: "10000000-0000-4000-8000-000000000003")!
+        let acyclic: [UUID: UUID?] = [candidate: other, other: nil]
+        #expect(!TodoHierarchy.wouldCreateCycle(
+            child: child, candidateParent: candidate, parentOf: acyclic
+        ))
     }
 }
