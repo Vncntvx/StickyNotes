@@ -1,5 +1,4 @@
 import Foundation
-import CryptoKit
 
 // MARK: - Remote manifest models (T110)
 //
@@ -95,16 +94,4 @@ public enum RemoteLayout {
         name.count == 32 && name.allSatisfy { $0.isHexDigit }
     }
 
-    /// The deterministic remote object name for a vault's bootstrap object
-    /// (T002/T004, plan §Bootstrap object name): a pure function of the
-    /// opaque vault locator (SHA-256 of the locator, hex-encoded), so the
-    /// CREATE path uploads under exactly the name the JOIN path fetches. The
-    /// hash is one-way and shape-identical to opaque object names — it
-    /// reveals no semantic type and cannot be inverted to the locator
-    /// (constitution VII), and never collides with the fixed manifest object
-    /// name (`ManifestStore.manifestObjectName` = "manifest").
-    public static func bootstrapObjectName(for locator: String) -> String {
-        let digest = SHA256.hash(data: Data(locator.utf8))
-        return digest.map { String(format: "%02x", $0) }.joined()
-    }
 }
