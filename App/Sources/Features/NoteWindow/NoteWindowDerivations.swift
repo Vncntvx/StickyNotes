@@ -159,39 +159,6 @@ public enum NoteWindowDerivations {
         return String(document.text[..<newline])
     }
 
-    /// The first meaningful content line across the note's blocks (004
-    /// FR-003 — mirrors `NoteSummary` extraction semantics: first
-    /// non-empty rich-text/todo/code line, else file display name /
-    /// caption / "Screenshot" / "Image").
-    public static func firstMeaningfulLine(blocks: [Block]) -> String {
-        let ordered = blocks.sorted { $0.sortKey < $1.sortKey }
-        for block in ordered {
-            switch block.payload {
-            case .richText(let doc):
-                let line = firstLine(of: doc).trimmingCharacters(in: .whitespacesAndNewlines)
-                if !line.isEmpty { return line }
-            case .todo(let payload):
-                let line = firstLine(of: payload.richText).trimmingCharacters(in: .whitespacesAndNewlines)
-                if !line.isEmpty { return line }
-            case .code(let payload):
-                let line = payload.text
-                    .split(whereSeparator: \.isNewline)
-                    .first
-                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
-                if !line.isEmpty { return line }
-            case .fileReference(let payload):
-                if !payload.displayName.isEmpty { return payload.displayName }
-            case .screenshot(let payload):
-                if let caption = payload.caption, !caption.isEmpty { return caption }
-                return String(localized: "Screenshot")
-            case .image(let payload):
-                if let caption = payload.caption, !caption.isEmpty { return caption }
-                return String(localized: "Image")
-            }
-        }
-        return ""
-    }
-
     // MARK: Block ordering (004 修复 2026-08-14, P0)
 
     /// The note's blocks in canonical order: ascending sortKey, ties broken
@@ -353,18 +320,6 @@ public enum NoteWindowDerivations {
         "\(Int((value * 100).rounded()))%"
     }
 
-    /// Step-exact opacity clamp (0.00–1.00, 0.05 steps — 004 Q8). Integer-
-    /// percent arithmetic so every step equals the exact Double literal
-    /// (e.g. `clampedOpacity(0.60) == 0.60`) — Domain's
-    /// `OpacityBounds.clamped` multiplies the inexact `0.05` step and
-    /// returns 0.6000000000000001.
-    public static func clampedOpacity(_ value: Double) -> Double {
-        let rawPercent = Int((value * 100).rounded())
-        let clamped = min(max(rawPercent, 0), 100)
-        let stepped = Int((Double(clamped) / 5.0).rounded()) * 5
-        return Double(min(max(stepped, 0), 100)) / 100.0
-    }
-
     // MARK: Toolbar visibility priority (004 FR-015a, data-model.md §4.5)
 
     /// The fixed semantic priority mapping (004 T065, 2026-08-13 user
@@ -436,7 +391,7 @@ public enum NoteWindowDerivations {
         var updated = base
         updated.colorKey = colorKey
         updated.customColor = customColor
-        updated.transparency = clampedOpacity(transparency)
+        updated.transparency = NoteAppearance.OpacityBounds.clamped(transparency)
         return updated
     }
 

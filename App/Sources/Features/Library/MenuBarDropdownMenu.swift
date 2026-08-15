@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import SystemBridge
 
 // MARK: - MenuBarDropdownMenu (003 T078, FR-001/FR-006/US1-AC7/Constitution X)
 //
@@ -121,14 +122,10 @@ final class MenuBarDropdownMenu {
     /// itself, which is a popover-style window). The detection reuses the
     /// same heuristic as `MenuBarLibraryWindow.statusItemIconFrame` so the
     /// two paths agree on which window represents the icon.
+    /// R3.6 (A-10): single source is
+    /// `MenuBarWindowFrame.isStatusItemIconWindow` (SystemBridge).
     private func isStatusItemIconWindow(_ window: NSWindow) -> Bool {
-        guard window.level == .statusBar else { return false }
-        // The status-ITEM icon window is small (≤ 120×40 pt). The full menu
-        // bar itself spans the screen and is excluded.
-        guard window.frame.width <= 120, window.frame.height <= 40 else { return false }
-        // The library popover window is much larger and at a different level;
-        // it never matches the two filters above.
-        return true
+        MenuBarWindowFrame.isStatusItemIconWindow(window)
     }
 
     // MARK: - Menu construction

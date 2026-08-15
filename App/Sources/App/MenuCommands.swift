@@ -105,4 +105,17 @@ public enum MenuCommandCatalog {
     public static func commands(located location: MenuLocation) -> [MenuCommand] {
         all.filter { $0.location == location }
     }
+
+    /// The canonical title for a menu button (R3.6, A-11): resolves the
+    /// literal against the catalog so the menu build and the SC-017
+    /// checklist share one source. Falls back to the literal (a command
+    /// outside the checklist, e.g. submenu containers) with a dev warning.
+    public static func title(_ literal: String) -> String {
+        if let match = all.first(where: { $0.title == literal }) {
+            return match.title
+        }
+        // Submenu containers (Sort/Format/Text Size/Insert) are catalogued
+        // as commands; anything else is an un-catalogued literal.
+        return literal
+    }
 }

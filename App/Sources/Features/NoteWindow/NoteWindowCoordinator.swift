@@ -191,7 +191,7 @@ public final class NoteWindowCoordinator {
             // its conflict label in the window title (FR-175
             // distinguishability).
             noteTitle: note.title ?? (note.lifecycleState == .conflictCopy ? note.conflictLabel : nil),
-            firstLine: NoteWindowDerivations.firstMeaningfulLine(blocks: [])
+            firstLine: NoteSummary.firstMeaningfulLine(for: [])
         )
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
@@ -327,7 +327,7 @@ public final class NoteWindowCoordinator {
               let window = NoteWindowBridge.registeredWindow(for: noteId) else { return }
         window.title = NoteWindowDerivations.deriveWindowTitle(
             noteTitle: host.note?.title,
-            firstLine: NoteWindowDerivations.firstMeaningfulLine(blocks: host.blocks)
+            firstLine: NoteSummary.firstMeaningfulLine(for: host.blocks)
         )
     }
 

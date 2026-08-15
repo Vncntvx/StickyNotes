@@ -356,20 +356,13 @@ public enum MenuBarLibraryWindow {
     /// addressable; the rightmost 32pt of the menu bar is a reliable
     /// approximation for a right-aligned status item).
     private static func statusItemIconFrame(on screen: NSScreen) -> NSRect? {
+        // R3.6 (A-10): window identification is single-sourced in
+        // `MenuBarWindowFrame.isStatusItemIconWindow`; the extra
+        // className/floating-panel clauses were redundant (the level+size
+        // predicate already excludes the full menu bar and the library
+        // window). The on-screen display check stays (coordinate space).
         guard let menuBarWindow = NSApp.windows.first(where: { window in
-            guard window.className.contains("StatusBarWindow") ||
-                  window.isFloatingPanel == false && window.level == .statusBar else {
-                return false
-            }
-            // Only a status-ITEM-sized window is usable: the menu-bar
-            // window itself spans the full bar (origin at the screen's
-            // left edge), which would mis-place the library (FR-001a
-            // deterministic positioning).
-            guard window.frame.width <= 120, window.frame.height <= 40 else { return false }
-            // The status-bar window may live on a different display
-            // (multi-display setups), where its frame is in a different
-            // coordinate space. Only use it when it is actually on the
-            // target screen.
+            guard MenuBarWindowFrame.isStatusItemIconWindow(window) else { return false }
             guard let statusScreen = window.screen, statusScreen === screen else { return false }
             return true
         }) else {

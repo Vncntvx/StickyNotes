@@ -445,7 +445,7 @@ final class NoteToolbarController: NSObject, NSToolbarDelegate {
     @objc private func applyOpacityStep(_ sender: NSMenuItem) {
         guard let host, let step = sender.representedObject as? Double else { return }
         var updated = host.note ?? .init(lastModifiedDeviceId: DeviceIdentity.current.id)
-        updated.transparency = NoteWindowDerivations.clampedOpacity(step)
+        updated.transparency = NoteAppearance.OpacityBounds.clamped(step)
         host.updateAppearance(updated)
         coordinator?.updateNotePaper(noteId: noteId)
     }

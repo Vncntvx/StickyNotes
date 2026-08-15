@@ -58,15 +58,56 @@ public enum NoteSummary {
                 if let caption = payload.caption, !caption.isEmpty {
                     return clip(caption)
                 }
-                return "Screenshot"
+                return String(localized: "Screenshot")
             case .image(let payload):
                 if let caption = payload.caption, !caption.isEmpty {
                     return clip(caption)
                 }
-                return "Image"
+                return String(localized: "Image")
             }
         }
         return nil
+    }
+
+    /// The first meaningful LINE across the note's blocks (R3.6, 004
+    /// FR-003): the first non-empty rich-text/todo/code line, else file
+    /// display name / caption / localized "Screenshot" / "Image". This is
+    /// the window-title line variant of `generatedSummary` — the single
+    /// extraction implementation lives here (previously duplicated in
+    /// `NoteWindowDerivations.firstMeaningfulLine`, audit A-4).
+    public static func firstMeaningfulLine(for blocks: [Block]) -> String {
+        let ordered = blocks.sorted { $0.sortKey < $1.sortKey }
+        for block in ordered {
+            switch block.payload {
+            case .richText(let doc):
+                let line = doc.text
+                    .split(whereSeparator: \.isNewline)
+                    .first
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+                if !line.isEmpty { return line }
+            case .todo(let payload):
+                let line = payload.richText.text
+                    .split(whereSeparator: \.isNewline)
+                    .first
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+                if !line.isEmpty { return line }
+            case .code(let payload):
+                let line = payload.text
+                    .split(whereSeparator: \.isNewline)
+                    .first
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+                if !line.isEmpty { return line }
+            case .fileReference(let payload):
+                if !payload.displayName.isEmpty { return payload.displayName }
+            case .screenshot(let payload):
+                if let caption = payload.caption, !caption.isEmpty { return caption }
+                return String(localized: "Screenshot")
+            case .image(let payload):
+                if let caption = payload.caption, !caption.isEmpty { return caption }
+                return String(localized: "Image")
+            }
+        }
+        return ""
     }
 
     /// Returns `Note.title` if present, otherwise the generated summary, or

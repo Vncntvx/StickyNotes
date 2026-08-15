@@ -38,18 +38,18 @@ import Domain
 
     @Test
     func opacityClampsToBounds() {
-        #expect(NoteWindowDerivations.clampedOpacity(-0.20) == 0.0, "clamps below the floor")
-        #expect(NoteWindowDerivations.clampedOpacity(1.30) == 1.00, "clamps above the ceiling")
-        #expect(NoteWindowDerivations.clampedOpacity(0.60) == 0.60, "steps stay exactly equal to their Double literal")
-        #expect(NoteWindowDerivations.clampedOpacity(0.0) == 0.0)
-        #expect(NoteWindowDerivations.clampedOpacity(1.00) == 1.00)
+        #expect(NoteAppearance.OpacityBounds.clamped(-0.20) == 0.0, "clamps below the floor")
+        #expect(NoteAppearance.OpacityBounds.clamped(1.30) == 1.00, "clamps above the ceiling")
+        #expect(NoteAppearance.OpacityBounds.clamped(0.60) == 0.60, "steps stay exactly equal to their Double literal")
+        #expect(NoteAppearance.OpacityBounds.clamped(0.0) == 0.0)
+        #expect(NoteAppearance.OpacityBounds.clamped(1.00) == 1.00)
     }
 
     @Test
     func opacitySnapsToNearestStep() {
         // 0.05-step quantization (FR-041a).
-        #expect(NoteWindowDerivations.clampedOpacity(0.625) == 0.65)
-        #expect(NoteWindowDerivations.clampedOpacity(0.626) == 0.65)
+        #expect(NoteAppearance.OpacityBounds.clamped(0.625) == 0.65)
+        #expect(NoteAppearance.OpacityBounds.clamped(0.626) == 0.65)
     }
 
     @Test

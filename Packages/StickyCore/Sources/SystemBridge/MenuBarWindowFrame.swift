@@ -62,4 +62,23 @@ public enum MenuBarWindowFrame {
     /// The distance between the window's top edge and the bottom of the
     /// menu bar, per FR-001a (4 pt). Exposed for tests.
     public static func topOffset() -> CGFloat { menuBarGap }
+
+    // MARK: - Status-item window identification (R3.6, A-10)
+    //
+    // The SwiftUI `MenuBarExtra(.window)` scene creates a small `NSWindow`
+    // at `.statusBar` level for the status-item ICON, distinct from the
+    // library window (a larger popover-style window). This predicate is the
+    // SINGLE source of truth for "is this the app's status-item icon
+    // window?" — previously the heuristic was duplicated in
+    // MenuBarDropdownMenu.isStatusItemIconWindow and
+    // MenuBarLibraryScene.statusItemIconFrame (audit A-10).
+
+    /// Returns `true` if `window` is the app's own status-item icon window:
+    /// at `.statusBar` level and sized like an icon (≤ 120×40 pt — the full
+    /// menu-bar window spans the screen and is excluded).
+    public static func isStatusItemIconWindow(_ window: NSWindow) -> Bool {
+        guard window.level == .statusBar else { return false }
+        guard window.frame.width <= 120, window.frame.height <= 40 else { return false }
+        return true
+    }
 }

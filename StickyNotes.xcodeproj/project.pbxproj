@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		01F69423C2CB3F77ACBA69DA /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B989CFC1B772DCC1FD5E74F6 /* SettingsView.swift */; };
+		022A27E1384EA10311BB86F1 /* SummaryLocalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52596C4D8F0ABAC03DE48D6E /* SummaryLocalizationTests.swift */; };
 		0253C53A6A5428DFEFE7807A /* OfflineCompletenessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66A152530F86B2F096020DF8 /* OfflineCompletenessTests.swift */; };
 		0263FC3587E7BDB83ADB7B4A /* TextSpacingPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCF515A6240E50B2145D7E69 /* TextSpacingPresentationTests.swift */; };
 		02CAAD5AA98EC60B5D30BC25 /* ScreenshotViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30B531FA942D96036B11AE30 /* ScreenshotViewer.swift */; };
@@ -246,6 +247,7 @@
 		50162E9CA34419A4324617FD /* EmptyLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyLibraryView.swift; sourceTree = "<group>"; };
 		50D146C3CD8FE7998F4808EB /* DeletionConfirmationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeletionConfirmationTests.swift; sourceTree = "<group>"; };
 		52436AFC7237351A381EE3FA /* RegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RegressionTests.swift; sourceTree = "<group>"; };
+		52596C4D8F0ABAC03DE48D6E /* SummaryLocalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummaryLocalizationTests.swift; sourceTree = "<group>"; };
 		53498824F72CB453617B8546 /* NoteWindowCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteWindowCoordinator.swift; sourceTree = "<group>"; };
 		54324F2C3634AAF7B7F5CAAC /* SyncAttentionBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncAttentionBanner.swift; sourceTree = "<group>"; };
 		577DDD347B8719124D33FE3B /* TitleDerivationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TitleDerivationTests.swift; sourceTree = "<group>"; };
@@ -546,6 +548,7 @@
 				7BDD1C81C895AC8A84EFD8F3 /* SpacingFloorStabilizationTests.swift */,
 				90F86645AD0895BD5F55ACF5 /* SpacingFormattingBugReproTests.swift */,
 				5B3C9DE1E6BDB71FAA9D526B /* StructuralInsertionGateTests.swift */,
+				52596C4D8F0ABAC03DE48D6E /* SummaryLocalizationTests.swift */,
 				B3789B6CB93CA4F1A5D7D853 /* SyncBannerSemanticsTests.swift */,
 				238D8FE16B06923FB561C0B3 /* SyncCompositionTests.swift */,
 				F47BDB69337B2BF3061A9ADB /* SyncCoordinatorUnlockTests.swift */,
@@ -852,6 +855,7 @@
 				6DD984B7F49685161783944A /* SpacingFloorStabilizationTests.swift in Sources */,
 				BF04A5EDDFDDE59F72C7B2C0 /* SpacingFormattingBugReproTests.swift in Sources */,
 				ED382D4561D5030198E3BEE5 /* StructuralInsertionGateTests.swift in Sources */,
+				022A27E1384EA10311BB86F1 /* SummaryLocalizationTests.swift in Sources */,
 				2F59C8DBBFF2BC15F3CBE645 /* SyncBannerSemanticsTests.swift in Sources */,
 				5DAE9DB23601424BB994A099 /* SyncCompositionTests.swift in Sources */,
 				4D4012BF87D0B7AAB4E74DD5 /* SyncCoordinatorUnlockTests.swift in Sources */,
@@ -951,7 +955,7 @@
 /* Begin PBXTargetDependency section */
 		023059DFD5F7CABCA47FBFA2 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			productRef = "TEMP_FC6E6229-54B4-4A00-941E-DE7F26FE6928" /* SystemBridge */;
+			productRef = "TEMP_6E375945-1967-4AAF-BB37-7494DD05006E" /* SystemBridge */;
 		};
 		208B5F7C95E524C074BFEA21 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -960,19 +964,19 @@
 		};
 		2CCA10F60EAE0ABC186D9562 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			productRef = "TEMP_1B640EFB-5A6C-4E7E-98A4-9FC76D45E920" /* GRDB */;
+			productRef = "TEMP_846C0EB7-8317-45CC-8931-FDC23DC81298" /* GRDB */;
 		};
 		7C31425EBA1B9D2B171A038D /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			productRef = "TEMP_768D897B-6D3D-4A8C-A1B1-F7E85286D77D" /* Domain */;
+			productRef = "TEMP_C07D381B-0681-42C7-A38B-36EFF8E01DC7" /* Domain */;
 		};
 		BEAF6103BFDCA24A3D04399C /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			productRef = "TEMP_54BBCDD3-8E88-412E-9F97-529E7170241E" /* Persistence */;
+			productRef = "TEMP_2789FEFB-53BE-44B9-A09E-DCA5F39FB2FA" /* Persistence */;
 		};
 		E955A8F681F660898712CB65 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			productRef = "TEMP_91456F57-136F-4099-A30C-4E09AC2CBEC2" /* EditorCore */;
+			productRef = "TEMP_C907CDFC-1432-4DF2-9C7C-73570023F9F9" /* EditorCore */;
 		};
 /* End PBXTargetDependency section */
 
@@ -1269,26 +1273,26 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = SystemBridge;
 		};
-		"TEMP_1B640EFB-5A6C-4E7E-98A4-9FC76D45E920" /* GRDB */ = {
+		"TEMP_2789FEFB-53BE-44B9-A09E-DCA5F39FB2FA" /* Persistence */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Persistence;
+		};
+		"TEMP_6E375945-1967-4AAF-BB37-7494DD05006E" /* SystemBridge */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SystemBridge;
+		};
+		"TEMP_846C0EB7-8317-45CC-8931-FDC23DC81298" /* GRDB */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 0A7913A0291CE7CDB8AEF30F /* XCRemoteSwiftPackageReference "GRDB.swift" */;
 			productName = GRDB;
 		};
-		"TEMP_54BBCDD3-8E88-412E-9F97-529E7170241E" /* Persistence */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = Persistence;
-		};
-		"TEMP_768D897B-6D3D-4A8C-A1B1-F7E85286D77D" /* Domain */ = {
+		"TEMP_C07D381B-0681-42C7-A38B-36EFF8E01DC7" /* Domain */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = Domain;
 		};
-		"TEMP_91456F57-136F-4099-A30C-4E09AC2CBEC2" /* EditorCore */ = {
+		"TEMP_C907CDFC-1432-4DF2-9C7C-73570023F9F9" /* EditorCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = EditorCore;
-		};
-		"TEMP_FC6E6229-54B4-4A00-941E-DE7F26FE6928" /* SystemBridge */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = SystemBridge;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

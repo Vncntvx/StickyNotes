@@ -117,14 +117,16 @@ public enum CardProjection {
         lifecycle: NoteLifecycleState,
         sort: NoteSortKey,
         limit: Int = maxRows,
-        noteIds: Set<UUID>? = nil
+        noteIds: Set<UUID>? = nil,
+        previewPayloadDecoder: (@Sendable (Data) -> CanonicalBlockPayload?)? = nil
     ) async throws -> [NoteCardProjection] {
         try await fetchCardProjections(
             store: store,
             lifecycleStates: [lifecycle],
             sort: sort,
             limit: limit,
-            noteIds: noteIds
+            noteIds: noteIds,
+            previewPayloadDecoder: previewPayloadDecoder
         )
     }
 
@@ -136,7 +138,8 @@ public enum CardProjection {
         lifecycleStates: Set<NoteLifecycleState>,
         sort: NoteSortKey,
         limit: Int = maxRows,
-        noteIds: Set<UUID>? = nil
+        noteIds: Set<UUID>? = nil,
+        previewPayloadDecoder: (@Sendable (Data) -> CanonicalBlockPayload?)? = nil
     ) async throws -> [NoteCardProjection] {
         try await store.read { db in
             let orderClause: String
@@ -147,6 +150,35 @@ public enum CardProjection {
             case .manual:   orderClause = "n.manualSortKey ASC"
             }
 
+            // R3.7 (remediation roadmap 2026-08-15, A-9): fetch the TARGET
+            // note set FIRST (lifecycle + optional limit), then constrain
+            // every aggregation to that set. Previously the aggregations
+            // scanned the whole block/todo tables — decoding richText
+            // payloads of trashed notes and notes beyond the row bound
+            // ("bounded loads" only bounded the final note-row fetch).
+            let placeholders = Array(repeating: "?", count: lifecycleStates.count).joined(separator: ",")
+            let stateArgs: [any DatabaseValueConvertible] = lifecycleStates.map(\.rawValue)
+            let finalArgs: [any DatabaseValueConvertible] = noteIds == nil ? stateArgs + [limit] : stateArgs
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT n.*
+                    FROM note n
+                    WHERE n.lifecycleState IN (\(placeholders))
+                    \(Self.noteIdFilter(noteIds))
+                    \(noteIds == nil ? "ORDER BY \(orderClause) LIMIT ?" : "ORDER BY \(orderClause)")
+                    """,
+                arguments: StatementArguments(finalArgs)
+            )
+            // The id set the aggregations are bounded to (the returned rows).
+            let targetNoteIds = rows.compactMap { row -> UUID? in
+                guard let id = UUID(uuidString: row["id"] ?? "") else { return nil }
+                return id
+            }
+            // "IN ()" is invalid SQL — empty result short-circuits.
+            guard !targetNoteIds.isEmpty else { return [] }
+            let idList = targetNoteIds.map { "'\($0.uuidString)'" }.joined(separator: ",")
+
             // Todo aggregates per note (counts only — never todo rows).
             let todoAgg: [UUID: (completed: Int, total: Int)] = try {
                 let rows = try Row.fetchAll(
@@ -156,6 +188,7 @@ public enum CardProjection {
                                SUM(CASE WHEN isComplete THEN 1 ELSE 0 END) AS completed,
                                COUNT(*) AS total
                         FROM todoItem
+                        WHERE noteId IN (\(idList))
                         GROUP BY noteId
                         """
                 )
@@ -177,6 +210,7 @@ public enum CardProjection {
                                SUM(CASE WHEN kind = 'image' THEN 1 ELSE 0 END) > 0 AS hasImage,
                                SUM(CASE WHEN kind = 'fileRef' THEN 1 ELSE 0 END) > 0 AS hasFile
                         FROM block
+                        WHERE noteId IN (\(idList))
                         GROUP BY noteId
                         """
                 )
@@ -197,6 +231,7 @@ public enum CardProjection {
                         FROM asset a
                         JOIN screenshotAssociation s ON s.originalAssetId = a.id OR s.thumbnailAssetId = a.id
                         WHERE a.syncFailureState != 'none'
+                          AND s.noteId IN (\(idList))
                         """
                 )
                 return Set(rows.compactMap { UUID(uuidString: $0["noteId"] ?? "") })
@@ -211,6 +246,7 @@ public enum CardProjection {
                         SELECT noteId, payload
                         FROM block
                         WHERE kind = 'richText'
+                          AND noteId IN (\(idList))
                         ORDER BY noteId, sortKey ASC
                         """
                 )
@@ -221,28 +257,14 @@ public enum CardProjection {
                     guard map[noteId] == nil else { continue }  // first only
                     guard let payloadString: String = row["payload"],
                           let data = payloadString.data(using: .utf8),
-                          let payload = try? decoder.decode(CanonicalBlockPayload.self, from: data),
+                          let payload = previewPayloadDecoder?(data)
+                              ?? (try? decoder.decode(CanonicalBlockPayload.self, from: data)),
                           case .richText(let doc) = payload else { continue }
                     let text = doc.text.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !text.isEmpty { map[noteId] = text }
                 }
                 return map
             }()
-
-            let placeholders = Array(repeating: "?", count: lifecycleStates.count).joined(separator: ",")
-            let stateArgs: [any DatabaseValueConvertible] = lifecycleStates.map(\.rawValue)
-            let finalArgs: [any DatabaseValueConvertible] = noteIds == nil ? stateArgs + [limit] : stateArgs
-            let rows = try Row.fetchAll(
-                db,
-                sql: """
-                    SELECT n.*
-                    FROM note n
-                    WHERE n.lifecycleState IN (\(placeholders))
-                    \(Self.noteIdFilter(noteIds))
-                    \(noteIds == nil ? "ORDER BY \(orderClause) LIMIT ?" : "ORDER BY \(orderClause)")
-                    """,
-                arguments: StatementArguments(finalArgs)
-            )
 
             return rows.compactMap { row -> NoteCardProjection? in
                 guard let noteId = UUID(uuidString: row["id"] ?? "") else { return nil }

@@ -39,7 +39,7 @@ struct StickyNotesApp: App {
                     bootstrapError.label
                         .padding()
                     Divider()
-                    Button("Quit Sticky Notes") {
+                    Button(MenuCommandCatalog.title("Quit Sticky Notes")) {
                         NSApplication.shared.terminate(nil)
                     }
                     .keyboardShortcut("q")
@@ -81,7 +81,7 @@ struct StickyNotesApp: App {
                     Text("Sticky Notes — setup in progress")
                         .padding()
                     Divider()
-                    Button("Quit Sticky Notes") {
+                    Button(MenuCommandCatalog.title("Quit Sticky Notes")) {
                         NSApplication.shared.terminate(nil)
                     }
                     .keyboardShortcut("q")
@@ -143,7 +143,7 @@ struct StickyNotesApp: App {
 
         .commands {
             CommandGroup(replacing: .appInfo) {
-                Button("About Sticky Notes") {
+                Button(MenuCommandCatalog.title("About Sticky Notes")) {
                     openAboutWindow()
                 }
             }
@@ -154,39 +154,39 @@ struct StickyNotesApp: App {
                 // the system group so exactly one item exists; the system
                 // action (showSettingsWindow:) is a no-op for LSUIElement
                 // apps on macOS 27 beta (verified 2026-08-08).
-                Button("Settings…") {
+                Button(MenuCommandCatalog.title("Settings…")) {
                     openSettingsWindow()
                 }
                 .keyboardShortcut(",", modifiers: .command)
             }
 
             CommandGroup(replacing: .newItem) {
-                Button("New Note") {
+                Button(MenuCommandCatalog.title("New Note")) {
                     createNoteFromShortcut()
                 }
                 .keyboardShortcut("n", modifiers: .command)
 
-                Button("New Note from Clipboard") {
+                Button(MenuCommandCatalog.title("New Note from Clipboard")) {
                     handleClipboardNoteShortcut()
                 }
 
-                Button("New Note from Region Capture") {
+                Button(MenuCommandCatalog.title("New Note from Region Capture")) {
                     createNoteAndCapture(.region)
                 }
 
-                Button("New Note from Window Capture") {
+                Button(MenuCommandCatalog.title("New Note from Window Capture")) {
                     createNoteAndCapture(.window)
                 }
             }
 
             CommandGroup(after: .newItem) {
                 Divider()
-                Button("Move to Trash") {
+                Button(MenuCommandCatalog.title("Move to Trash")) {
                     moveFocusedNoteToTrash()
                 }
                 .keyboardShortcut(KeyEquivalent.delete, modifiers: .command)
 
-                Button("Delete Forever…") {
+                Button(MenuCommandCatalog.title("Delete Forever…")) {
                     permanentlyDeleteFocusedNote()
                 }
 
@@ -194,85 +194,85 @@ struct StickyNotesApp: App {
                 // from the menu bar; Restore/Empty Trash act on the library's
                 // keyboard selection / shared confirmation mechanism.
                 Divider()
-                Button("Restore") {
+                Button(MenuCommandCatalog.title("Restore")) {
                     restoreFocusedNote()
                 }
-                Button("Empty Trash…") {
+                Button(MenuCommandCatalog.title("Empty Trash…")) {
                     requestEmptyTrashFromMenu()
                 }
-                Button("Sync Now") {
+                Button(MenuCommandCatalog.title("Sync Now")) {
                     syncNowFromMenu()
                 }
             }
 
             CommandGroup(after: .saveItem) {
-                Button("Close Note Window") {
+                Button(MenuCommandCatalog.title("Close Note Window")) {
                     closeKeyNoteWindow()
                 }
                 .keyboardShortcut("w", modifiers: .command)
             }
 
-            CommandMenu("Sort") {
+            CommandMenu(MenuCommandCatalog.title("Sort")) {
                 sortSubmenu()
             }
 
             // 003 T032 (SC-004): block insertion via Edit/Insert menu
             // commands (the persistent "Add Block" control is removed).
-            CommandMenu("Insert") {
-                Button("Add Todo") {
+            CommandMenu(MenuCommandCatalog.title("Insert")) {
+                Button(MenuCommandCatalog.title("Add Todo")) {
                     coordinator?.insertTodoInKeyWindow()
                 }
                 .keyboardShortcut("t", modifiers: [.command, .shift])
 
-                Button("Add Block") {
+                Button(MenuCommandCatalog.title("Add Block")) {
                     coordinator?.insertCodeInKeyWindow()
                 }
                 .keyboardShortcut("c", modifiers: [.command, .shift])
 
                 Divider()
-                Button("Add File Reference…") {
+                Button(MenuCommandCatalog.title("Add File Reference…")) {
                     coordinator?.insertFileReferenceInKeyWindow()
                 }
-                Button("Capture Screenshot…") {
+                Button(MenuCommandCatalog.title("Capture Screenshot…")) {
                     coordinator?.captureRegionInKeyWindow()
                 }
                 // 004 T035 (FR-010): the unified image insertion path.
-                Button("Insert Image…") {
+                Button(MenuCommandCatalog.title("Insert Image…")) {
                     insertImageInKeyWindow()
                 }
             }
 
             // 004 T040 (FR-012): Format menu — the stable formatting entry
             // point (contextual row + shortcuts always work; FR-011).
-            CommandMenu("Format") {
-                Button("Bold") {
+            CommandMenu(MenuCommandCatalog.title("Format")) {
+                Button(MenuCommandCatalog.title("Bold")) {
                     coordinator?.applyMarksInKeyWindow([.bold])
                 }
                 .keyboardShortcut("b", modifiers: .command)
 
-                Button("Italic") {
+                Button(MenuCommandCatalog.title("Italic")) {
                     coordinator?.applyMarksInKeyWindow([.italic])
                 }
                 .keyboardShortcut("i", modifiers: .command)
 
-                Button("Underline") {
+                Button(MenuCommandCatalog.title("Underline")) {
                     coordinator?.applyMarksInKeyWindow([.underline])
                 }
                 .keyboardShortcut("u", modifiers: .command)
 
                 Divider()
-                Button("Strikethrough") {
+                Button(MenuCommandCatalog.title("Strikethrough")) {
                     coordinator?.applyMarksInKeyWindow([.strikethrough])
                 }
-                Button("Code Style") {
+                Button(MenuCommandCatalog.title("Code Style")) {
                     coordinator?.applyMarksInKeyWindow([.inlineCode])
                 }
 
                 Divider()
                 // FR-043a: whole-note text size, 9–24 (001 semantics).
-                Menu("Text Size") {
+                Menu(MenuCommandCatalog.title("Text Size")) {
                     ForEach(NoteAppearance.TextSizeBounds.allSizes, id: \.self) { size in
-                        Button("\(size) pt") {
+                        Button(MenuCommandCatalog.title("\(size) pt")) {
                             coordinator?.setTextSizeInKeyWindow(size)
                         }
                     }
@@ -282,26 +282,26 @@ struct StickyNotesApp: App {
             CommandGroup(after: .toolbar) {
                 // 004 T021 (FR-007/FR-026): Always on Top as a menu command
                 // (toggle, acting on the key note window).
-                Button("Always on Top") {
+                Button(MenuCommandCatalog.title("Always on Top")) {
                     coordinator?.toggleAlwaysOnTopInKeyWindow()
                 }
 
-                Button("Search") {
+                Button(MenuCommandCatalog.title("Search")) {
                     focusLibrarySearch()
                 }
                 .keyboardShortcut("f", modifiers: .command)
 
-                Button("Trash") {
+                Button(MenuCommandCatalog.title("Trash")) {
                     toggleTrashDestination()
                 }
 
-                Button("Show/Hide Note Windows") {
+                Button(MenuCommandCatalog.title("Show/Hide Note Windows")) {
                     toggleNoteWindows()
                 }
             }
 
             CommandGroup(replacing: .help) {
-                Button("Help") {
+                Button(MenuCommandCatalog.title("Help")) {
                     openHelpWindow()
                 }
             }
@@ -522,7 +522,8 @@ struct StickyNotesApp: App {
         // directly, but activating the app + a best-effort click on the
         // status-item icon window reuses the SwiftUI toggle path.
         guard let statusItemWindow = NSApp.windows.first(where: {
-            $0.level == .statusBar && $0.frame.width <= 120 && $0.frame.height <= 40
+            // R3.6 (A-10): single source is MenuBarWindowFrame.
+            MenuBarWindowFrame.isStatusItemIconWindow($0)
         }) else {
             // No status-item window found — the library is opened by the
             // user's next left-click. Activate the app so the icon is
@@ -793,10 +794,10 @@ struct StickyNotesApp: App {
     @ViewBuilder
     private func sortSubmenu() -> some View {
         let model = libraryModel
-        Button("Recently Modified") { model?.setSort(.modified) }
-        Button("Created") { model?.setSort(.created) }
-        Button("Title") { model?.setSort(.title) }
-        Button("Manual") { model?.setSort(.manual) }
+        Button(MenuCommandCatalog.title("Recently Modified")) { model?.setSort(.modified) }
+        Button(MenuCommandCatalog.title("Created")) { model?.setSort(.created) }
+        Button(MenuCommandCatalog.title("Title")) { model?.setSort(.title) }
+        Button(MenuCommandCatalog.title("Manual")) { model?.setSort(.manual) }
     }
 
 }

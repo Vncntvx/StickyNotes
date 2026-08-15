@@ -27,7 +27,7 @@ struct AppearancePanelView: View {
     init(note: Note, onAppearanceChange: @escaping (Note) -> Void) {
         self.note = note
         self.onAppearanceChange = onAppearanceChange
-        _transparency = State(initialValue: NoteWindowDerivations.clampedOpacity(note.transparency))
+        _transparency = State(initialValue: NoteAppearance.OpacityBounds.clamped(note.transparency))
         _colorKey = State(initialValue: note.colorKey)
         _customColor = State(initialValue: note.customColor)
     }
@@ -146,7 +146,7 @@ struct AppearancePanelView: View {
                     value: Binding(
                         get: { transparency },
                         set: { newValue in
-                            let stepped = NoteWindowDerivations.clampedOpacity(newValue)
+                            let stepped = NoteAppearance.OpacityBounds.clamped(newValue)
                             transparency = stepped
                             onAppearanceChange(NoteWindowDerivations.composeAppearance(
                                 base: note,
