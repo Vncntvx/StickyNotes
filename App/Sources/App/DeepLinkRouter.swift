@@ -1,6 +1,4 @@
-import SwiftUI
-import AppKit
-import Domain
+import Foundation
 
 // MARK: - DeepLinkRouter (T169, contracts/deep-links.md)
 //

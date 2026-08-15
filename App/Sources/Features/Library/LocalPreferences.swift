@@ -53,21 +53,7 @@ public final class LocalPreferences: @unchecked Sendable {    private let defaul
             dismissed: defaults.bool(forKey: Key.onboardingHintDismissed),
             hasCreatedFirstNote: defaults.bool(forKey: Key.hasCreatedFirstNote)
         )
-    }
-
-    /// Persists the first-launch state to UserDefaults.
-    public func saveFirstLaunchState(_ state: FirstLaunchState) {
-        defaults.set(state.seen, forKey: Key.onboardingHintSeen)
-        defaults.set(state.dismissed, forKey: Key.onboardingHintDismissed)
-        defaults.set(state.hasCreatedFirstNote, forKey: Key.hasCreatedFirstNote)
-    }
-
-    /// Marks the onboarding hint as seen (shown at least once).
-    public func markOnboardingHintSeen() {
-        defaults.set(true, forKey: Key.onboardingHintSeen)
-    }
-
-    /// Marks the onboarding hint as dismissed (never shown again).
+    }    /// Marks the onboarding hint as dismissed (never shown again).
     public func dismissOnboardingHint() {
         defaults.set(true, forKey: Key.onboardingHintDismissed)
     }
@@ -76,14 +62,6 @@ public final class LocalPreferences: @unchecked Sendable {    private let defaul
     public func markFirstNoteCreated() {
         defaults.set(true, forKey: Key.hasCreatedFirstNote)
     }
-
-    /// Resets all first-launch state (for tests / fresh-launch scenarios).
-    public func resetFirstLaunchState() {
-        defaults.removeObject(forKey: Key.onboardingHintSeen)
-        defaults.removeObject(forKey: Key.onboardingHintDismissed)
-        defaults.removeObject(forKey: Key.hasCreatedFirstNote)
-    }
-
     // MARK: - Auto-sync preference (FR-152/FR-152a, T285 + clarified 2026-08-08)
 
     /// Whether automatic synchronization is enabled (device-local).

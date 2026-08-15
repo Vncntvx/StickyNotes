@@ -738,13 +738,9 @@ struct ContextualFormatBar: View {
     /// surface visible over light note paper (2026-08-14 verified).
     @ViewBuilder
     private var formatBarMaterial: some View {
-        if #available(macOS 26.0, *) {
-            Capsule()
-                .fill(.regularMaterial)
-                .glassEffect(.regular, in: Capsule())
-        } else {
-            Capsule().fill(.regularMaterial)
-        }
+        Capsule()
+            .fill(.regularMaterial)
+            .glassEffect(.regular, in: Capsule())
     }
 
     private func formatButton(_ systemImage: String, mark: RichTextMark?, help: String) -> some View {

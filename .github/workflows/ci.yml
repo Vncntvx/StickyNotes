@@ -90,6 +90,8 @@ jobs:
         run: ./scripts/check-empty-assertions.sh
       - name: G3 — no temp-file debug artifacts
         run: ./scripts/check-debug-artifacts.sh
+      - name: G2 — no references to audited dead symbols (R3.2)
+        run: ./scripts/check-dead-symbols.sh
 
   # Roadmap G4 (remediation-phase1 T004): AppTests 全量并行复跑 2 轮 + zh-Hans
   # locale job（拦截负载相关竞态与 locale 硬编码断言）。

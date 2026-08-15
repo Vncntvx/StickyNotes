@@ -16,24 +16,13 @@ public enum AppMetrics {
     public static let contentInset: CGFloat = 12
 
     /// Standard inter-control spacing within a row.
-    public static let rowSpacing: CGFloat = 8
-
-    /// Tight spacing for compact clusters (card metadata rows).
-    public static let tightSpacing: CGFloat = 4
-
-    /// Group spacing between logical sections.
-    public static let sectionSpacing: CGFloat = 16
-
-    // MARK: Corner radii
+    public static let rowSpacing: CGFloat = 8    // MARK: Corner radii
 
     /// Standard surface corner radius (cards, panels) — restrained, macOS
     /// system-like (cards: 10 pt; note surfaces keep their 8 pt per 001).
     public static let surfaceRadius: CGFloat = 10
 
     // MARK: Typography
-
-    /// Card title size.
-    public static let cardTitleSize: CGFloat = 13
     /// Card preview / metadata size.
     public static let cardPreviewSize: CGFloat = 11
     /// Banner text size (sync attention banner).

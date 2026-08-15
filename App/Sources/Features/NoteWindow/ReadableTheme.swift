@@ -14,25 +14,6 @@ import Domain
 /// Renders the note appearance as SwiftUI colors + fonts.
 public enum ReadableTheme {
 
-    /// The note background color (LEGACY — unused since 004 T072: the
-    /// window background `windowBackground(for:)` is the single source of
-    /// the note surface; the SwiftUI paper layer no longer fills). Kept for
-    /// API stability; text/content never use this (Q9: text stays opaque).
-    public static func background(for note: Note) -> Color {
-        if let paletteKey = NotePalette.paletteKey(for: note.colorKey) {
-            // Dynamic per-appearance palette background; apply the note's
-            // opacity on top (FR-041a).
-            return NotePalette.dynamicColor(for: paletteKey).opacity(note.transparency)
-        }
-        let appearance = NoteAppearance.projecting(from: note)
-        return Color(
-            red: appearance.background.red,
-            green: appearance.background.green,
-            blue: appearance.background.blue,
-            opacity: appearance.opacity
-        )
-    }
-
     /// The note color as a dynamic NSColor for the window background, with
     /// the note's transparency applied (004 T014, FR-018/FR-025). The
     /// transparent titlebar shows this color, so the whole window —

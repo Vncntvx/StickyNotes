@@ -76,12 +76,12 @@ final class OverlayWindow: NSWindow {
         ignoresMouseEvents = false
         acceptsMouseMovedEvents = true
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        setupLayer(screen: screen)
+        setupLayer()
     }
 
     private var hasNoDisplay = false
 
-    private func setupLayer(screen: NSScreen) {
+    private func setupLayer() {
         guard let contentView = contentView else { return }
         let dim = CALayer()
         dim.frame = contentView.bounds
@@ -93,7 +93,6 @@ final class OverlayWindow: NSWindow {
         selectionLayer.strokeColor = NSColor.systemBlue.cgColor
         selectionLayer.lineWidth = 1.5
         contentView.layer?.addSublayer(selectionLayer)
-        _ = screen
     }
 
     func show() {

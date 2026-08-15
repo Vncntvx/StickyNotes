@@ -123,7 +123,6 @@ public enum CrossBlockSelectionCore {
         rtf += "\\{\\colortbl;\\red0\\green0\\blue0;}"
         // Bold/italic/underline/strikethrough commands per selected marks.
         var segments: [String] = []
-        for paragraph in 0..<0 { _ = paragraph }  // plain-segment fallback below
         // Build per-block segments with marks from the canonical runs.
         for (index, block) in blocks.enumerated() {
             if isTrailingPaddingParagraph(blocks: blocks, index: index) { continue }

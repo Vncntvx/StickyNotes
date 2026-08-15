@@ -133,14 +133,6 @@ public enum NotePalette {
         }
     }
 
-    /// The palette background color for a key in the given appearance
-    /// (deterministic static resolution — used by tests and explicit
-    /// appearance paths).
-    public static func color(for key: NotePaletteKey, appearanceName: NSAppearance.Name) -> Color {
-        let entry = entry(for: key)
-        return appearanceName == .darkAqua ? entry.darkColor : entry.lightColor
-    }
-
     /// The palette background as a DYNAMIC color (auto-switches light/dark
     /// with the system appearance) — the rendering path used by views.
     public static func dynamicColor(for key: NotePaletteKey) -> Color {

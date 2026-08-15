@@ -54,8 +54,4 @@ public enum DisplayFormatters {
         ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
     }
 
-    /// Locale-aware date-time for file cards ("Aug 1, 2026 at 9:10 AM").
-    public static func dateTime(_ date: Date) -> String {
-        date.formatted(date: .abbreviated, time: .shortened)
-    }
 }

@@ -37,18 +37,3 @@ public extension View {
     /// (FR-132/FR-180b).
 }
 
-// MARK: - AccessibilityAdaptations (T172, Increased Contrast / Reduce Motion)
-
-/// Dynamic accessibility adaptations (FR-044/FR-046): Increased Contrast,
-/// Reduce Motion, dynamic readable foreground.
-public enum AccessibilityAdaptations {
-    /// Whether Reduce Motion is enabled (FR-046).
-    public static var reduceMotionEnabled: Bool {
-        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-    }
-
-    /// Whether Increased Contrast is enabled (FR-044).
-    public static var increasedContrastEnabled: Bool {
-        NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
-    }
-}

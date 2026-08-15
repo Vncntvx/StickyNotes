@@ -123,13 +123,9 @@ public struct BlockInsertionControl: View {
     /// visible while glassEffect adds the Liquid Glass finish.
     @ViewBuilder
     private var glassBackground: some View {
-        if #available(macOS 26.0, *) {
-            Circle()
-                .fill(.regularMaterial)
-                .glassEffect(.regular, in: Circle())
-        } else {
-            Circle().fill(.regularMaterial)
-        }
+        Circle()
+            .fill(.regularMaterial)
+            .glassEffect(.regular, in: Circle())
     }
 
     private var circleBackground: some View {

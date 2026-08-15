@@ -1,5 +1,4 @@
 import SwiftUI
-import AppKit
 
 // MARK: - MenuCommandCatalog (003 T011, SC-017/FR-072)
 //

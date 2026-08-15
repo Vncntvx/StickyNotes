@@ -141,7 +141,6 @@ public enum ManualSortKeys {
     /// - Parameter sortedKeys: The current sort keys in their desired order.
     /// - Returns: A new array of evenly-spaced sort keys, one per input.
     public static func normalize(_ sortedKeys: [Int]) -> [Int] {
-        precondition(sortedKeys.allSatisfy { _ in true })
         var result: [Int] = []
         result.reserveCapacity(sortedKeys.count)
         var current = initialSortKey
