@@ -17,6 +17,7 @@ import SwiftUI
 
 @Suite struct BlockPresentationConsistencyTests {
     @Test
+    @MainActor
     func unifiedContainerAppliedToAllBlockKinds() {
         // RichTextBlockView wraps every special block in BlockContainer
         // (FR-050b); the container is the single shared style component.

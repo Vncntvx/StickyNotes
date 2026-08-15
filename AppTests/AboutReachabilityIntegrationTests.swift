@@ -13,6 +13,10 @@ import SwiftUI
 // access).
 
 @Suite struct AboutReachabilityIntegrationTests {
+    // @MainActor: the assertion renders AboutView through an NSHostingView —
+    // SwiftUI View.body is main-actor-isolated, and rendering from a
+    // background test thread crashes (actor assertion, 2026-08-15).
+    @MainActor
     @Test
     func aboutViewRendersReachableContent() {
         // AboutView is a pure SwiftUI view — instantiable and renderable
